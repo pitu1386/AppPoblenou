@@ -70,7 +70,11 @@ public class TeamDataService : ITeamDataService
                 await SaveClubSettingsAsync(_clubSettings);
             }
 
-            if (!string.IsNullOrEmpty(jsonProfiles)) _profiles = JsonSerializer.Deserialize<List<UserProfile>>(jsonProfiles) ?? GetInitialProfiles();
+            if (!string.IsNullOrEmpty(jsonProfiles))
+            {
+                _profiles = JsonSerializer.Deserialize<List<UserProfile>>(jsonProfiles) ?? GetInitialProfiles();
+                EnsureOwnerAdminProtected();
+            }
 
             if (!string.IsNullOrEmpty(jsonTeams))
             {
@@ -111,6 +115,7 @@ public class TeamDataService : ITeamDataService
                     if (sbProfiles.Count > 0)
                     {
                         _profiles = sbProfiles;
+                        EnsureOwnerAdminProtected();
                         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
                     }
                     else
@@ -219,11 +224,47 @@ public class TeamDataService : ITeamDataService
         _matchEvents = GetInitialMatchEvents();
     }
 
+    public bool IsOwnerAdmin(UserProfile? p)
+    {
+        if (p == null) return false;
+        var nick = p.Nickname?.Trim().ToLowerInvariant() ?? "";
+        var email = p.Email?.Trim().ToLowerInvariant() ?? "";
+        var name = p.FullName?.Trim().ToLowerInvariant() ?? "";
+        var id = p.Id?.Trim().ToLowerInvariant() ?? "";
+
+        return id == "user-1" 
+            || nick == "pitu1386" 
+            || nick == "pitu" 
+            || email.Contains("pitu1386")
+            || name == "pitu"
+            || name.Contains("pitu");
+    }
+
+    private void EnsureOwnerAdminProtected()
+    {
+        foreach (var p in _profiles.Where(IsOwnerAdmin))
+        {
+            p.Role = UserRole.Admin;
+            p.IsCaptain = true;
+            p.IsActive = true;
+        }
+    }
+
     public UserProfile GetCurrentUser()
     {
-        return _profiles.FirstOrDefault(p => p.Id == _currentUserId) 
+        var user = _profiles.FirstOrDefault(p => p.Id == _currentUserId) 
+            ?? _profiles.FirstOrDefault(IsOwnerAdmin)
             ?? _profiles.FirstOrDefault() 
-            ?? new UserProfile { FullName = "Pitu", Nickname = "pitu1386", Role = UserRole.Admin, IsCaptain = true, Position = Position.Centrocampista };
+            ?? new UserProfile { Id = "user-1", FullName = "Sergio \"Pitu\"", Nickname = "pitu1386", Email = "pitu1386@gmail.com", Role = UserRole.Admin, IsCaptain = true, Position = Position.Centrocampista };
+
+        if (IsOwnerAdmin(user))
+        {
+            user.Role = UserRole.Admin;
+            user.IsCaptain = true;
+            user.IsActive = true;
+        }
+
+        return user;
     }
 
     public async Task SetCurrentUserIdAsync(string userId)
@@ -354,6 +395,13 @@ public class TeamDataService : ITeamDataService
 
     public async Task SaveProfileAsync(UserProfile profile)
     {
+        if (IsOwnerAdmin(profile))
+        {
+            profile.Role = UserRole.Admin;
+            profile.IsCaptain = true;
+            profile.IsActive = true;
+        }
+
         var existingIndex = _profiles.FindIndex(p => p.Id == profile.Id);
         if (existingIndex >= 0)
         {
@@ -370,7 +418,14 @@ public class TeamDataService : ITeamDataService
 
     public async Task DeleteProfileAsync(string profileId)
     {
-        _profiles.RemoveAll(p => p.Id == profileId);
+        var target = _profiles.FirstOrDefault(p => p.Id == profileId);
+        if (target != null && IsOwnerAdmin(target))
+        {
+            // El administrador principal del club nunca puede ser eliminado
+            return;
+        }
+
+        _profiles.RemoveAll(p => p.Id == profileId && !IsOwnerAdmin(p));
         await SaveProfilesAsync();
         NotifyStateChanged();
     }
@@ -851,6 +906,7 @@ public class TeamDataService : ITeamDataService
 
     private async Task SaveProfilesAsync()
     {
+        EnsureOwnerAdminProtected();
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
         _ = _supabase.UpsertProfilesBatchAsync(_profiles);
     }
@@ -983,6 +1039,12 @@ public class TeamDataService : ITeamDataService
         var player = _profiles.FirstOrDefault(p => p.Id == playerId);
         if (player != null)
         {
+            if (IsOwnerAdmin(player))
+            {
+                // El administrador principal del club nunca puede ser dado de baja
+                return;
+            }
+
             player.IsActive = false;
             await SaveProfilesAsync();
 

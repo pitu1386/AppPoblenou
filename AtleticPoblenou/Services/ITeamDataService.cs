@@ -9,6 +9,7 @@ public interface ITeamDataService
     Task InitializeAsync();
     bool IsAuthenticated { get; }
     UserProfile GetCurrentUser();
+    bool IsOwnerAdmin(UserProfile? p);
     Task SetCurrentUserIdAsync(string userId);
     Task<(bool Success, string ErrorMessage)> LoginAsync(string emailOrNickname, string password);
     Task<(bool Success, string ErrorMessage)> RegisterAsync(RegisterModel model);

@@ -245,24 +245,39 @@
 
                     @if (currentUser.Role == UserRole.Admin)
                     {
-                        <div class="space-y-2.5 bg-well p-3 rounded-lg border border-line">
-                            <div>
-                                <label class="font-bold text-warntext block mb-1">Rol en el Sistema (Permisos)</label>
-                                <select @bind="_editModel.Role" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
-                                    <option value="@UserRole.Player">⚽ Jugador</option>
-                                    <option value="@UserRole.Coach">📋 Director Técnico (DT) / Entrenador</option>
-                                    <option value="@UserRole.FieldManager">📍 Delegado (Canchas y Planillas)</option>
-                                    <option value="@UserRole.Treasurer">💶 Tesorero (Cobros y Gastos)</option>
-                                    <option value="@UserRole.Admin">🛡️ Administrador del Club</option>
-                                </select>
+                        @if (TeamService.IsOwnerAdmin(TargetProfile))
+                        {
+                            <div class="space-y-1.5 bg-amber-500/10 border border-amber-500/30 p-3 rounded-lg">
+                                <div class="flex items-center gap-2 text-amber-400 font-extrabold text-xs">
+                                    <span>👑</span>
+                                    <span>Administrador Principal y Capitán Permanente</span>
+                                </div>
+                                <p class="text-[11px] text-muted m-0 leading-relaxed">
+                                    Este perfil corresponde al creador y administrador del Atletic Poblenou. El rol de Administrador y el brazalete de capitán están blindados permanentemente.
+                                </p>
                             </div>
-                            <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
-                                <input type="checkbox" @bind="_editModel.IsCaptain" class="w-4 h-4 accent-amber-500 rounded cursor-pointer" />
-                                <span class="text-xs font-bold text-amber-500 flex items-center gap-1">
-                                    🟡 Es Capitán del Equipo (Brazalete C)
-                                </span>
-                            </label>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="space-y-2.5 bg-well p-3 rounded-lg border border-line">
+                                <div>
+                                    <label class="font-bold text-warntext block mb-1">Rol en el Sistema (Permisos)</label>
+                                    <select @bind="_editModel.Role" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                                        <option value="@UserRole.Player">⚽ Jugador</option>
+                                        <option value="@UserRole.Coach">📋 Director Técnico (DT) / Entrenador</option>
+                                        <option value="@UserRole.FieldManager">📍 Delegado (Canchas y Planillas)</option>
+                                        <option value="@UserRole.Treasurer">💶 Tesorero (Cobros y Gastos)</option>
+                                        <option value="@UserRole.Admin">🛡️ Administrador del Club</option>
+                                    </select>
+                                </div>
+                                <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                                    <input type="checkbox" @bind="_editModel.IsCaptain" class="w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                                    <span class="text-xs font-bold text-amber-500 flex items-center gap-1">
+                                        🟡 Es Capitán del Equipo (Brazalete C)
+                                    </span>
+                                </label>
+                            </div>
+                        }
                     }
 
                     <div>
@@ -289,7 +304,7 @@
                         }
                     </div>
 
-                    @if (currentUser.Role == UserRole.Admin && currentUser.Id != TargetProfile.Id)
+                    @if (currentUser.Role == UserRole.Admin && currentUser.Id != TargetProfile.Id && !TeamService.IsOwnerAdmin(TargetProfile))
                     {
                         @if (TargetProfile.IsActive)
                         {
@@ -412,8 +427,19 @@
         TargetProfile.JerseyNumber = _editModel.JerseyNumber;
         TargetProfile.Position = _editModel.Position;
         TargetProfile.Foot = _editModel.Foot;
-        TargetProfile.Role = _editModel.Role;
-        TargetProfile.IsCaptain = _editModel.IsCaptain;
+
+        if (TeamService.IsOwnerAdmin(TargetProfile))
+        {
+            TargetProfile.Role = UserRole.Admin;
+            TargetProfile.IsCaptain = true;
+            TargetProfile.IsActive = true;
+        }
+        else
+        {
+            TargetProfile.Role = _editModel.Role;
+            TargetProfile.IsCaptain = _editModel.IsCaptain;
+        }
+
         TargetProfile.IsSubCaptain = _editModel.IsSubCaptain;
         TargetProfile.BirthDate = _editModel.BirthDate;
         TargetProfile.Dni = _editModel.Dni;
@@ -427,7 +453,7 @@
 
     private async Task ConfirmDeactivatePlayer()
     {
-        if (TargetProfile == null) return;
+        if (TargetProfile == null || TeamService.IsOwnerAdmin(TargetProfile)) return;
         await TeamService.DeactivatePlayerAsync(TargetProfile.Id);
         _showConfirmDeactivate = false;
         await Close();

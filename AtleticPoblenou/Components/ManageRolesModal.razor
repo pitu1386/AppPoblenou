@@ -100,51 +100,75 @@
                             </div>
 
                             <!-- Captain Armband Toggle Button -->
-                            <button type="button" @onclick="() => ToggleCaptain(player)"
-                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shrink-0 flex items-center gap-1.5 @(player.IsCaptain ? "bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm" : "bg-surface text-muted border-line hover:border-amber-500/40 hover:text-amber-500")"
-                                    title="@(player.IsCaptain ? "Quitar brazalete de capitán" : "Nombrar capitán")">
-                                <span>🟡</span>
-                                <span>@(player.IsCaptain ? "Capitán (C) ✓" : "+ Capitán")</span>
-                            </button>
+                            @if (TeamService.IsOwnerAdmin(player))
+                            {
+                                <div class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold border bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm shrink-0 flex items-center gap-1.5"
+                                     title="Capitán permanente del club">
+                                    <span>👑</span>
+                                    <span>Capitán (C) 🔒</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <button type="button" @onclick="() => ToggleCaptain(player)"
+                                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shrink-0 flex items-center gap-1.5 @(player.IsCaptain ? "bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm" : "bg-surface text-muted border-line hover:border-amber-500/40 hover:text-amber-500")"
+                                        title="@(player.IsCaptain ? "Quitar brazalete de capitán" : "Nombrar capitán")">
+                                    <span>🟡</span>
+                                    <span>@(player.IsCaptain ? "Capitán (C) ✓" : "+ Capitán")</span>
+                                </button>
+                            }
                         </div>
 
-                        <!-- Bottom line: Modern 5-Segmented Role Switcher -->
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-surface rounded-lg border border-line">
-                            <!-- Jugador -->
-                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Player)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Player ? "bg-well2 text-ink shadow-sm" : "text-muted hover:text-ink")"
-                                    title="Rol: Jugador de campo">
-                                ⚽ Jugador
-                            </button>
+                        <!-- Bottom line: Modern 5-Segmented Role Switcher or Protected Banner -->
+                        @if (TeamService.IsOwnerAdmin(player))
+                        {
+                            <div class="flex items-center justify-between px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                                <div class="flex items-center gap-2 text-amber-400 font-extrabold text-xs">
+                                    <span>🛡️</span>
+                                    <span>ADMINISTRADOR PRINCIPAL DEL CLUB</span>
+                                </div>
+                                <span class="text-[11px] text-amber-500/90 font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">🔒 Rol Blindado Fijo</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-surface rounded-lg border border-line">
+                                <!-- Jugador -->
+                                <button type="button" @onclick="() => ChangeRole(player, UserRole.Player)"
+                                        class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Player ? "bg-well2 text-ink shadow-sm" : "text-muted hover:text-ink")"
+                                        title="Rol: Jugador de campo">
+                                    ⚽ Jugador
+                                </button>
 
-                            <!-- DT -->
-                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Coach)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Coach ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-muted hover:text-purple-400")"
-                                    title="Rol: Director Técnico (DT) / Entrenador">
-                                📋 DT
-                            </button>
+                                <!-- DT -->
+                                <button type="button" @onclick="() => ChangeRole(player, UserRole.Coach)"
+                                        class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Coach ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-muted hover:text-purple-400")"
+                                        title="Rol: Director Técnico (DT) / Entrenador">
+                                    📋 DT
+                                </button>
 
-                            <!-- Delegado -->
-                            <button type="button" @onclick="() => ChangeRole(player, UserRole.FieldManager)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.FieldManager ? "bg-info text-white shadow-sm font-extrabold" : "text-muted hover:text-infotext")"
-                                    title="Rol: Delegado de equipo / Canchas">
-                                📍 Delegado
-                            </button>
+                                <!-- Delegado -->
+                                <button type="button" @onclick="() => ChangeRole(player, UserRole.FieldManager)"
+                                        class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.FieldManager ? "bg-info text-white shadow-sm font-extrabold" : "text-muted hover:text-infotext")"
+                                        title="Rol: Delegado de equipo / Canchas">
+                                    📍 Delegado
+                                </button>
 
-                            <!-- Tesorero -->
-                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Treasurer)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Treasurer ? "bg-ok text-white shadow-sm font-extrabold" : "text-muted hover:text-oktext")"
-                                    title="Rol: Tesorero de caja">
-                                💶 Tesorero
-                            </button>
+                                <!-- Tesorero -->
+                                <button type="button" @onclick="() => ChangeRole(player, UserRole.Treasurer)"
+                                        class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Treasurer ? "bg-ok text-white shadow-sm font-extrabold" : "text-muted hover:text-oktext")"
+                                        title="Rol: Tesorero de caja">
+                                    💶 Tesorero
+                                </button>
 
-                            <!-- Admin -->
-                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Admin)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Admin ? "bg-warn text-black shadow-sm font-extrabold" : "text-muted hover:text-warntext")"
-                                    title="Control total de la app">
-                                🛡️ Admin
-                            </button>
-                        </div>
+                                <!-- Admin -->
+                                <button type="button" @onclick="() => ChangeRole(player, UserRole.Admin)"
+                                        class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Admin ? "bg-warn text-black shadow-sm font-extrabold" : "text-muted hover:text-warntext")"
+                                        title="Control total de la app">
+                                    🛡️ Admin
+                                </button>
+                            </div>
+                        }
 
                     </div>
                 }
@@ -170,12 +194,15 @@
 
     private async Task ToggleCaptain(UserProfile player)
     {
+        if (TeamService.IsOwnerAdmin(player)) return;
+
         player.IsCaptain = !player.IsCaptain;
         await TeamService.SaveProfileAsync(player);
     }
 
     private async Task ChangeRole(UserProfile player, UserRole newRole)
     {
+        if (TeamService.IsOwnerAdmin(player)) return;
         if (player.Role == newRole) return;
 
         player.Role = newRole;
