@@ -1,0 +1,337 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen && TeamService.GetCurrentUser().Role == UserRole.Admin)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-lg rounded-xl p-5 shadow-xl space-y-4 max-h-[92vh] overflow-y-auto">
+
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">⚡</span>
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">Carga Rápida de Resultados</h3>
+                        <p class="text-xs text-muted">Ingresa los marcadores de toda la jornada para la tabla</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <!-- JORNADA SELECTOR BAR -->
+            <div class="flex items-center justify-between bg-well p-3 rounded-xl border border-line">
+                <button type="button" @onclick="PrevRound" disabled="@(_currentRound <= 1)"
+                        class="px-3 py-1.5 rounded-lg bg-surface border border-line2 text-xs font-bold text-ink hover:bg-well2 disabled:opacity-30 transition">
+                    ‹ Anterior
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-muted font-bold uppercase">Jornada</span>
+                    <select @bind="_currentRound" @bind:after="OnRoundChanged"
+                            class="bg-surface border border-line2 rounded-lg px-2.5 py-1 text-sm font-cond font-extrabold text-ink">
+                        @for (int r = 1; r <= 38; r++)
+                        {
+                            <option value="@r">Jornada @r</option>
+                        }
+                    </select>
+                </div>
+
+                <button type="button" @onclick="NextRound" disabled="@(_currentRound >= 38)"
+                        class="px-3 py-1.5 rounded-lg bg-surface border border-line2 text-xs font-bold text-ink hover:bg-well2 disabled:opacity-30 transition">
+                    Siguiente ›
+                </button>
+            </div>
+
+            <!-- ROUND MATCHES LIST -->
+            <div class="space-y-2.5">
+                <div class="flex items-center justify-between px-1 text-xs text-muted font-bold uppercase tracking-wider">
+                    <span>Partidos de la Jornada @_currentRound (@_roundMatches.Count)</span>
+                    <span>Marcador</span>
+                </div>
+
+                @if (!_roundMatches.Any())
+                {
+                    <div class="p-6 bg-well rounded-xl border border-line text-center text-xs text-muted space-y-2">
+                        <div class="text-2xl">📋</div>
+                        <div class="font-bold text-ink">No hay partidos cargados para la Jornada @_currentRound</div>
+                        <p class="text-[11px] text-faint">Usa el formulario de abajo para añadir los enfrentamientos de esta fecha.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="space-y-2">
+                        @foreach (var m in _roundMatches)
+                        {
+                            var homeColor = GetTeamPrimaryColor(m.HomeTeamId, m.HomeTeamName);
+                            var awayColor = GetTeamPrimaryColor(m.AwayTeamId, m.AwayTeamName);
+                            var isOur = m.IsOurMatch;
+
+                            <div class="p-3 bg-well rounded-xl border @(isOur ? "border-club/40 bg-clubbg/10" : "border-line") space-y-2">
+                                <div class="flex items-center justify-between gap-2 text-xs">
+                                    <!-- Local Team -->
+                                    <div class="flex-1 flex items-center gap-2 min-w-0">
+                                        <div class="w-3.5 h-3.5 rounded-full shrink-0 border border-line2" style="background-color: @homeColor"></div>
+                                        <span class="font-bold text-ink truncate @(isOur && m.IsHome ? "text-clubtext font-extrabold" : "")">
+                                            @m.HomeTeamName
+                                        </span>
+                                    </div>
+
+                                    <!-- Score Inputs -->
+                                    <div class="flex items-center gap-1.5 shrink-0 px-1">
+                                        <input type="number" min="0" max="99" @bind="m.HomeScore"
+                                               placeholder="-"
+                                               class="w-10 h-8 bg-surface border border-line2 rounded-lg text-center font-cond font-extrabold text-sm text-ink focus:border-club focus:outline-none" />
+                                        <span class="text-faint font-bold text-xs">-</span>
+                                        <input type="number" min="0" max="99" @bind="m.AwayScore"
+                                               placeholder="-"
+                                               class="w-10 h-8 bg-surface border border-line2 rounded-lg text-center font-cond font-extrabold text-sm text-ink focus:border-club focus:outline-none" />
+                                    </div>
+
+                                    <!-- Away Team -->
+                                    <div class="flex-1 flex items-center justify-end gap-2 min-w-0 text-right">
+                                        <span class="font-bold text-ink truncate @(isOur && !m.IsHome ? "text-clubtext font-extrabold" : "")">
+                                            @m.AwayTeamName
+                                        </span>
+                                        <div class="w-3.5 h-3.5 rounded-full shrink-0 border border-line2" style="background-color: @awayColor"></div>
+
+                                        <!-- Delete match button -->
+                                        <button type="button" @onclick="() => RemoveMatchFromRound(m)"
+                                                class="text-faint hover:text-club text-xs ml-1" title="Eliminar partido de la jornada">
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Our match special badge and full report trigger -->
+                                @if (isOur)
+                                {
+                                    <div class="pt-1.5 border-t border-line/60 flex items-center justify-between text-[11px]">
+                                        <span class="font-extrabold text-clubtext flex items-center gap-1">
+                                            ⭐ Partido del Atlètic Poblenou
+                                        </span>
+                                        <button type="button" @onclick="() => TriggerDetailedReport(m)"
+                                                class="px-2 py-0.5 rounded bg-club hover:bg-clubdeep text-white font-extrabold transition">
+                                            Cargar Acta Completa (Goles/Asistencias) ›
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- ADD NEW MATCH TO THIS ROUND SECTION -->
+            <div class="p-3.5 bg-well rounded-xl border border-line space-y-2.5 text-xs">
+                <div class="flex items-center justify-between font-bold text-ink2">
+                    <span class="flex items-center gap-1">
+                        <span>➕</span> Añadir Partido a la Jornada @_currentRound
+                    </span>
+                    <span class="text-[11px] text-faint">Local vs Visitante</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[11px] text-muted block mb-1">Equipo Local</label>
+                        <select @bind="_newHomeTeamName" class="w-full bg-surface border border-line2 rounded-lg p-2 text-xs text-ink font-medium">
+                            <option value="">-- Elige Local --</option>
+                            <option value="@_ourClubName">@_ourClubName (Nosotros)</option>
+                            @foreach (var t in TeamService.GetRivalTeams())
+                            {
+                                <option value="@t.Name">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-[11px] text-muted block mb-1">Equipo Visitante</label>
+                        <select @bind="_newAwayTeamName" class="w-full bg-surface border border-line2 rounded-lg p-2 text-xs text-ink font-medium">
+                            <option value="">-- Elige Visitante --</option>
+                            <option value="@_ourClubName">@_ourClubName (Nosotros)</option>
+                            @foreach (var t in TeamService.GetRivalTeams())
+                            {
+                                <option value="@t.Name">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_addError))
+                {
+                    <div class="text-[11px] text-red-500 font-bold">@_addError</div>
+                }
+
+                <button type="button" @onclick="AddMatchToRound"
+                        class="w-full py-2 bg-surface hover:bg-well2 border border-line2 text-ink font-bold rounded-lg transition flex items-center justify-center gap-1">
+                    <span>+</span> Añadir enfrentamiento a esta fecha
+                </button>
+            </div>
+
+            <!-- MODAL ACTIONS -->
+            <div class="flex gap-2 pt-2 border-t border-line">
+                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                    Cancelar
+                </button>
+                <button @onclick="SaveAllResults"
+                        class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5">
+                    <span>💾</span> Guardar Resultados
+                </button>
+            </div>
+
+            @if (_savedSuccess)
+            {
+                <div class="p-2.5 rounded-lg bg-okbg border border-ok/30 text-oktext font-bold text-xs text-center animate-in fade-in">
+                    ✓ ¡Resultados guardados y tabla de posiciones actualizada!
+                </div>
+            }
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public EventCallback<Match> OnOpenDetailedReport { get; set; }
+
+    private int _currentRound = 1;
+    private List<Match> _roundMatches = new();
+    private string _ourClubName = "Atletic Poblenou";
+
+    private string _newHomeTeamName = "";
+    private string _newAwayTeamName = "";
+    private string _addError = "";
+    private bool _savedSuccess = false;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen)
+        {
+            _ourClubName = !string.IsNullOrEmpty(TeamService.GetClubSettings().ShortName) 
+                ? TeamService.GetClubSettings().ShortName 
+                : TeamService.GetClubSettings().ClubName;
+
+            LoadRoundMatches();
+            _savedSuccess = false;
+            _addError = "";
+        }
+    }
+
+    private void LoadRoundMatches()
+    {
+        var all = TeamService.GetMatches();
+        _roundMatches = all.Where(m => m.Round == _currentRound).ToList();
+    }
+
+    private void OnRoundChanged()
+    {
+        LoadRoundMatches();
+        _addError = "";
+    }
+
+    private void PrevRound()
+    {
+        if (_currentRound > 1)
+        {
+            _currentRound--;
+            LoadRoundMatches();
+            _addError = "";
+        }
+    }
+
+    private void NextRound()
+    {
+        if (_currentRound < 38)
+        {
+            _currentRound++;
+            LoadRoundMatches();
+            _addError = "";
+        }
+    }
+
+    private string GetTeamPrimaryColor(string? teamId, string teamName)
+    {
+        if (teamId == "apn" || teamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase))
+        {
+            return TeamService.GetClubSettings().PrimaryColorHex;
+        }
+
+        var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == teamId || r.Name.Equals(teamName, StringComparison.OrdinalIgnoreCase));
+        return rival?.PrimaryColorHex ?? "#6B7280";
+    }
+
+    private void AddMatchToRound()
+    {
+        _addError = "";
+        if (string.IsNullOrWhiteSpace(_newHomeTeamName) || string.IsNullOrWhiteSpace(_newAwayTeamName))
+        {
+            _addError = "Debes seleccionar tanto el equipo local como el visitante.";
+            return;
+        }
+
+        if (string.Equals(_newHomeTeamName, _newAwayTeamName, StringComparison.OrdinalIgnoreCase))
+        {
+            _addError = "El equipo local y el visitante no pueden ser el mismo.";
+            return;
+        }
+
+        // Verificar que no exista ya en esta jornada
+        var exists = _roundMatches.Any(m => 
+            (string.Equals(m.HomeTeamName, _newHomeTeamName, StringComparison.OrdinalIgnoreCase) && string.Equals(m.AwayTeamName, _newAwayTeamName, StringComparison.OrdinalIgnoreCase)) ||
+            (string.Equals(m.HomeTeamName, _newAwayTeamName, StringComparison.OrdinalIgnoreCase) && string.Equals(m.AwayTeamName, _newHomeTeamName, StringComparison.OrdinalIgnoreCase)));
+
+        if (exists)
+        {
+            _addError = "Ese enfrentamiento ya existe en esta jornada.";
+            return;
+        }
+
+        var rivals = TeamService.GetRivalTeams();
+        var homeRival = rivals.FirstOrDefault(r => r.Name.Equals(_newHomeTeamName, StringComparison.OrdinalIgnoreCase));
+        var awayRival = rivals.FirstOrDefault(r => r.Name.Equals(_newAwayTeamName, StringComparison.OrdinalIgnoreCase));
+
+        var m = new Match
+        {
+            Round = _currentRound,
+            HomeTeamName = _newHomeTeamName,
+            HomeTeamId = homeRival?.Id ?? (_newHomeTeamName.Contains("Poblenou") ? "apn" : ""),
+            AwayTeamName = _newAwayTeamName,
+            AwayTeamId = awayRival?.Id ?? (_newAwayTeamName.Contains("Poblenou") ? "apn" : ""),
+            MatchDate = DateTime.UtcNow,
+            Competition = TeamService.GetClubSettings().LeagueName,
+            Status = MatchStatus.Upcoming
+        };
+
+        _roundMatches.Add(m);
+        _newHomeTeamName = "";
+        _newAwayTeamName = "";
+    }
+
+    private async Task RemoveMatchFromRound(Match m)
+    {
+        _roundMatches.Remove(m);
+        await TeamService.DeleteMatchAsync(m.Id);
+    }
+
+    private async Task TriggerDetailedReport(Match m)
+    {
+        await OnOpenDetailedReport.InvokeAsync(m);
+    }
+
+    private async Task SaveAllResults()
+    {
+        await TeamService.SaveBatchRoundResultsAsync(_currentRound, _roundMatches);
+        _savedSuccess = true;
+        StateHasChanged();
+        await Task.Delay(600);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
+

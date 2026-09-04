@@ -482,6 +482,20 @@ public class SupabaseClientService
         }
     }
 
+    public async Task<bool> DeleteRowsWhereAsync(string table, string column, string value)
+    {
+        try
+        {
+            using var req = CreateRequest(HttpMethod.Delete, $"{table}?{column}=eq.{value}");
+            using var resp = await _http.SendAsync(req);
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ==========================================
     // DTO MAPPERS
     // ==========================================
@@ -529,37 +543,72 @@ public class SupabaseClientService
         CreatedAt = d.created_at ?? DateTime.UtcNow
     };
 
-    private static SupabaseMatchDto ToDto(Match m) => new()
+    private static SupabaseMatchDto ToDto(Match m)
     {
-        id = m.Id,
-        match_date = m.MatchDate,
-        opponent = m.Opponent,
-        rival_team_id = m.RivalTeamId,
-        competition = m.Competition,
-        location_name = m.LocationName,
-        location_url = m.LocationUrl,
-        is_home = m.IsHome,
-        our_score = m.OurScore,
-        rival_score = m.RivalScore,
-        status = (int)m.Status,
-        notes = m.Notes
-    };
+        var isOur = m.IsOurMatch;
+        return new SupabaseMatchDto
+        {
+            id = m.Id,
+            round = m.Round,
+            match_date = m.MatchDate,
+            opponent = isOur ? m.Opponent : $"{m.HomeTeamName} vs {m.AwayTeamName}",
+            rival_team_id = isOur ? m.RivalTeamId : m.HomeTeamId,
+            competition = m.Competition,
+            location_name = m.LocationName,
+            location_url = m.LocationUrl,
+            is_home = isOur ? m.IsHome : false,
+            our_score = isOur ? m.OurScore : m.HomeScore,
+            rival_score = isOur ? m.RivalScore : m.AwayScore,
+            status = (int)m.Status,
+            notes = isOur ? m.Notes : $"LM|{m.HomeTeamId}|{m.HomeTeamName}|{m.AwayTeamId}|{m.AwayTeamName}"
+        };
+    }
 
-    private static Match FromDto(SupabaseMatchDto d) => new()
+    private static Match FromDto(SupabaseMatchDto d)
     {
-        Id = d.id,
-        MatchDate = d.match_date,
-        Opponent = d.opponent,
-        RivalTeamId = d.rival_team_id,
-        Competition = d.competition ?? "Liga Veteranos Barcelona",
-        LocationName = d.location_name,
-        LocationUrl = d.location_url ?? "",
-        IsHome = d.is_home,
-        OurScore = d.our_score,
-        RivalScore = d.rival_score,
-        Status = (MatchStatus)d.status,
-        Notes = d.notes ?? ""
-    };
+        var m = new Match
+        {
+            Id = d.id,
+            Round = d.round > 0 ? d.round : 1,
+            MatchDate = d.match_date,
+            Competition = d.competition ?? "Sábados División Honor (Temp. 26/27)",
+            LocationName = d.location_name,
+            LocationUrl = d.location_url ?? "",
+            Status = (MatchStatus)d.status
+        };
+
+        if (!string.IsNullOrEmpty(d.notes) && d.notes.StartsWith("LM|"))
+        {
+            var parts = d.notes.Split('|');
+            m.HomeTeamId = parts.Length > 1 ? parts[1] : "";
+            m.HomeTeamName = parts.Length > 2 ? parts[2] : "";
+            m.AwayTeamId = parts.Length > 3 ? parts[3] : "";
+            m.AwayTeamName = parts.Length > 4 ? parts[4] : "";
+            m.HomeScore = d.our_score;
+            m.AwayScore = d.rival_score;
+        }
+        else if (d.opponent.Contains(" vs "))
+        {
+            var parts = d.opponent.Split(" vs ");
+            m.HomeTeamName = parts[0].Trim();
+            m.AwayTeamName = parts.Length > 1 ? parts[1].Trim() : "";
+            m.HomeTeamId = d.rival_team_id ?? "";
+            m.HomeScore = d.our_score;
+            m.AwayScore = d.rival_score;
+        }
+        else
+        {
+            // APN Match
+            m.IsHome = d.is_home;
+            m.Opponent = d.opponent;
+            m.RivalTeamId = d.rival_team_id;
+            m.OurScore = d.our_score;
+            m.RivalScore = d.rival_score;
+            m.Notes = d.notes ?? "";
+        }
+
+        return m;
+    }
 
     private static SupabaseRivalTeamDto ToDto(RivalTeam t) => new()
     {
@@ -759,6 +808,7 @@ public class SupabaseProfileDto
 public class SupabaseMatchDto
 {
     public string id { get; set; } = "";
+    public int round { get; set; } = 1;
     public DateTime match_date { get; set; }
     public string opponent { get; set; } = "";
     public string? rival_team_id { get; set; }

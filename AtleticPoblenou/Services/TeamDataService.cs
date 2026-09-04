@@ -168,19 +168,12 @@ public class TeamDataService : ITeamDataService
                 var sbPayments = await _supabase.FetchPaymentsAsync();
                 if (sbPayments != null)
                 {
-                    if (sbPayments.Count > 0)
-                    {
-                        _payments = sbPayments;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
-                    }
-                    else if (_payments.Count > 0)
-                    {
-                        _ = _supabase.UpsertPaymentsBatchAsync(_payments);
-                    }
+                    _payments = sbPayments;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
                 }
 
                 var sbExpenses = await _supabase.FetchExpensesAsync();
-                if (sbExpenses != null && sbExpenses.Count > 0)
+                if (sbExpenses != null)
                 {
                     _expenses = sbExpenses;
                     await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_expenses", JsonSerializer.Serialize(_expenses));
@@ -189,15 +182,8 @@ public class TeamDataService : ITeamDataService
                 var sbEvents = await _supabase.FetchMatchEventsAsync();
                 if (sbEvents != null)
                 {
-                    if (sbEvents.Count > 0)
-                    {
-                        _matchEvents = sbEvents;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
-                    }
-                    else if (_matchEvents.Count > 0)
-                    {
-                        _ = _supabase.UpsertMatchEventsBatchAsync(_matchEvents);
-                    }
+                    _matchEvents = sbEvents;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
                 }
 
                 var sbAnnouncements = await _supabase.FetchAnnouncementsAsync();
@@ -449,78 +435,121 @@ public class TeamDataService : ITeamDataService
             IsOurTeam = true
         };
 
-        // Partidos jugados y goles reales del ATºPOBLENOU
-        foreach (var m in _matches.Where(m => m.Status == MatchStatus.Finished && m.OurScore.HasValue && m.RivalScore.HasValue))
+        // 3. Procesar resultados de TODOS los partidos terminados de la liga
+        foreach (var m in _matches.Where(m => m.Status == MatchStatus.Finished))
         {
-            var ourSc = m.OurScore ?? 0;
-            var rivSc = m.RivalScore ?? 0;
+            int hScore = 0;
+            int aScore = 0;
 
-            ourRow.Played++;
-            ourRow.GoalsFor += ourSc;
-            ourRow.GoalsAgainst += rivSc;
-
-            if (ourSc > rivSc) ourRow.Won++;
-            else if (ourSc == rivSc) ourRow.Drawn++;
-            else ourRow.Lost++;
-        }
-        standings.Add(ourRow);
-
-        // Rendimiento base de la liga para los 14 rivales del grupo
-        var baseline = new Dictionary<string, (int P, int W, int D, int L, int GF, int GA)>
-        {
-            { "FONTETAS", (3, 3, 0, 0, 9, 2) },
-            { "LA PEÑA", (3, 2, 1, 0, 7, 3) },
-            { "ARISTOI B", (3, 2, 0, 1, 6, 4) },
-            { "LA PLANADA A", (3, 2, 0, 1, 5, 3) },
-            { "LLANO", (3, 1, 1, 1, 5, 5) },
-            { "CAN ROCA74", (3, 1, 1, 1, 4, 4) },
-            { "LA PLANADA B", (3, 1, 0, 2, 4, 6) },
-            { "LLIÇA D’AVALL", (3, 1, 0, 2, 3, 5) },
-            { "ATºBADIENSE", (3, 1, 0, 2, 3, 6) },
-            { "CDPV BADIA", (3, 0, 2, 1, 2, 4) },
-            { "ATºLA CELESTE", (3, 0, 2, 1, 3, 6) },
-            { "STA PERPETUA", (3, 0, 1, 2, 2, 6) },
-            { "PUEBLO NUEVO 2002", (3, 0, 1, 2, 1, 7) },
-            { "ARISTOI A", (3, 0, 1, 2, 2, 8) }
-        };
-
-        foreach (var rival in _rivalTeams)
-        {
-            var row = new StandingRow
+            if (m.IsOurMatch)
             {
-                TeamId = rival.Id,
-                TeamName = rival.Name,
-                PrimaryColorHex = rival.PrimaryColorHex,
-                SecondaryColorHex = rival.SecondaryColorHex,
-                IsOurTeam = false
-            };
-
-            if (baseline.TryGetValue(rival.Name, out var b))
-            {
-                row.Played = b.P;
-                row.Won = b.W;
-                row.Drawn = b.D;
-                row.Lost = b.L;
-                row.GoalsFor = b.GF;
-                row.GoalsAgainst = b.GA;
+                if (!m.OurScore.HasValue || !m.RivalScore.HasValue) continue;
+                hScore = m.IsHome ? m.OurScore.Value : m.RivalScore.Value;
+                aScore = m.IsHome ? m.RivalScore.Value : m.OurScore.Value;
             }
             else
             {
-                row.Played = 2;
-                row.Won = 1;
-                row.Drawn = 0;
-                row.Lost = 1;
-                row.GoalsFor = 3;
-                row.GoalsAgainst = 3;
+                if (!m.HomeScore.HasValue || !m.AwayScore.HasValue) continue;
+                hScore = m.HomeScore.Value;
+                aScore = m.AwayScore.Value;
             }
 
-            standings.Add(row);
+            // Buscar fila local
+            StandingRow? homeRow = null;
+            if (m.IsOurMatch && m.IsHome)
+            {
+                homeRow = ourRow;
+            }
+            else
+            {
+                homeRow = standings.FirstOrDefault(s => (!string.IsNullOrEmpty(m.HomeTeamId) && s.TeamId == m.HomeTeamId) ||
+                                                        string.Equals(s.TeamName, m.HomeTeamName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Buscar fila visitante
+            StandingRow? awayRow = null;
+            if (m.IsOurMatch && !m.IsHome)
+            {
+                awayRow = ourRow;
+            }
+            else
+            {
+                awayRow = standings.FirstOrDefault(s => (!string.IsNullOrEmpty(m.AwayTeamId) && s.TeamId == m.AwayTeamId) ||
+                                                        string.Equals(s.TeamName, m.AwayTeamName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (homeRow != null)
+            {
+                homeRow.Played++;
+                homeRow.GoalsFor += hScore;
+                homeRow.GoalsAgainst += aScore;
+                if (hScore > aScore) homeRow.Won++;
+                else if (hScore == aScore) homeRow.Drawn++;
+                else homeRow.Lost++;
+            }
+
+            if (awayRow != null)
+            {
+                awayRow.Played++;
+                awayRow.GoalsFor += aScore;
+                awayRow.GoalsAgainst += hScore;
+                if (aScore > hScore) awayRow.Won++;
+                else if (aScore == hScore) awayRow.Drawn++;
+                else awayRow.Lost++;
+            }
         }
 
         return standings.OrderByDescending(s => s.Points)
                         .ThenByDescending(s => s.GoalDifference)
                         .ThenByDescending(s => s.GoalsFor)
+                        .ThenBy(s => s.TeamName)
                         .ToList();
+    }
+
+    public async Task SaveBatchRoundResultsAsync(int round, List<Match> matches)
+    {
+        foreach (var m in matches)
+        {
+            var existing = _matches.FirstOrDefault(x => x.Id == m.Id);
+            if (existing != null)
+            {
+                existing.HomeScore = m.HomeScore;
+                existing.AwayScore = m.AwayScore;
+                existing.HomeTeamName = m.HomeTeamName;
+                existing.AwayTeamName = m.AwayTeamName;
+                existing.HomeTeamId = m.HomeTeamId;
+                existing.AwayTeamId = m.AwayTeamId;
+                existing.Round = m.Round;
+                existing.MatchDate = m.MatchDate;
+
+                if (existing.HomeScore.HasValue && existing.AwayScore.HasValue)
+                {
+                    existing.Status = MatchStatus.Finished;
+                }
+            }
+            else
+            {
+                if (m.HomeScore.HasValue && m.AwayScore.HasValue)
+                {
+                    m.Status = MatchStatus.Finished;
+                }
+                _matches.Add(m);
+            }
+        }
+
+        await SaveMatchesAsync();
+        NotifyStateChanged();
+    }
+
+    public async Task AddLeagueMatchAsync(Match match)
+    {
+        if (match.HomeScore.HasValue && match.AwayScore.HasValue)
+        {
+            match.Status = MatchStatus.Finished;
+        }
+        _matches.Add(match);
+        await SaveMatchesAsync();
+        NotifyStateChanged();
     }
 
     // Announcements & Polls
@@ -624,6 +653,23 @@ public class TeamDataService : ITeamDataService
             await _js.InvokeVoidAsync("triggerConfetti");
             NotifyStateChanged();
         }
+    }
+
+    public async Task DeleteMatchAsync(string matchId)
+    {
+        _matches.RemoveAll(m => m.Id == matchId);
+        _attendance.RemoveAll(a => a.MatchId == matchId);
+        _matchEvents.RemoveAll(e => e.MatchId == matchId);
+
+        await SaveMatchesAsync();
+        await SaveAttendanceAsync();
+        await SaveEventsAsync();
+
+        _ = _supabase.DeleteRowAsync("matches", matchId);
+        _ = _supabase.DeleteRowsWhereAsync("attendance", "match_id", matchId);
+        _ = _supabase.DeleteRowsWhereAsync("match_events", "match_id", matchId);
+
+        NotifyStateChanged();
     }
 
     public List<Attendance> GetAttendanceForMatch(string matchId)
@@ -747,6 +793,15 @@ public class TeamDataService : ITeamDataService
     {
         _expenses.Insert(0, expense);
         await SaveExpensesAsync();
+        _ = _supabase.UpsertExpenseAsync(expense);
+        NotifyStateChanged();
+    }
+
+    public async Task DeleteExpenseAsync(string expenseId)
+    {
+        _expenses.RemoveAll(e => e.Id == expenseId);
+        await SaveExpensesAsync();
+        _ = _supabase.DeleteRowAsync("team_expenses", expenseId);
         NotifyStateChanged();
     }
 
@@ -960,20 +1015,6 @@ public class TeamDataService : ITeamDataService
                 IsHome = false,
                 Status = MatchStatus.Upcoming,
                 Notes = "Llevar camiseta suplente por si coinciden colores. Confirmar asistencia."
-            },
-            new Match
-            {
-                Id = "match-past",
-                MatchDate = nextSat.AddDays(-7),
-                Opponent = "CAN ROCA74",
-                Competition = "Sábados División Honor - Amistoso Pretemporada",
-                LocationName = "Camp Agapito Fernández (Poblenou)",
-                LocationUrl = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona",
-                IsHome = true,
-                OurScore = 4,
-                RivalScore = 2,
-                Status = MatchStatus.Finished,
-                Notes = "¡Gran remontada en el segundo tiempo y partidazo en el tercer tiempo!"
             }
         };
     }
@@ -992,38 +1033,11 @@ public class TeamDataService : ITeamDataService
         new Attendance { Id = "att-10", MatchId = "match-1", PlayerId = "user-10", Status = AttendanceStatus.NotGoing, Note = "Sobrecarga muscular en el gemelo" }
     };
 
-    private List<Payment> GetInitialPayments() => new()
-    {
-        new Payment { Id = "pay-1", PlayerId = "user-1", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Bizum, PaidAt = DateTime.UtcNow.AddDays(-2) },
-        new Payment { Id = "pay-2", PlayerId = "user-2", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Bizum, PaidAt = DateTime.UtcNow.AddDays(-3) },
-        new Payment { Id = "pay-3", PlayerId = "user-3", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Transfer, PaidAt = DateTime.UtcNow.AddDays(-1) },
-        new Payment { Id = "pay-4", PlayerId = "user-4", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Pending, DueDate = DateTime.UtcNow.AddDays(10) },
-        new Payment { Id = "pay-5", PlayerId = "user-5", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Bizum, PaidAt = DateTime.UtcNow.AddDays(-1) },
-        new Payment { Id = "pay-6", PlayerId = "user-6", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Pending, DueDate = DateTime.UtcNow.AddDays(10) },
-        new Payment { Id = "pay-7", PlayerId = "user-7", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Cash, PaidAt = DateTime.UtcNow.AddDays(-4) },
-        new Payment { Id = "pay-8", PlayerId = "user-8", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Pending, DueDate = DateTime.UtcNow.AddDays(10) },
-        new Payment { Id = "pay-9", PlayerId = "user-9", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Bizum, PaidAt = DateTime.UtcNow.AddDays(-2) },
-        new Payment { Id = "pay-10", PlayerId = "user-10", Concept = "Cuota Mensual Octubre", Amount = 20, Status = PaymentStatus.Paid, Method = PaymentMethod.Bizum, PaidAt = DateTime.UtcNow.AddDays(-1) }
-    };
+    private List<Payment> GetInitialPayments() => new();
 
-    private List<TeamExpense> GetInitialExpenses() => new()
-    {
-        new TeamExpense { Id = "exp-1", Concept = "Arbitraje J3 vs La Mina", Amount = 45, ExpenseDate = DateTime.UtcNow.AddDays(-7), Category = "Árbitros" },
-        new TeamExpense { Id = "exp-2", Concept = "Pack 2 balones oficiales de Liga", Amount = 65, ExpenseDate = DateTime.UtcNow.AddDays(-12), Category = "Material" },
-        new TeamExpense { Id = "exp-3", Concept = "Alquiler campo J3", Amount = 50, ExpenseDate = DateTime.UtcNow.AddDays(-7), Category = "Campos" }
-    };
+    private List<TeamExpense> GetInitialExpenses() => new();
 
-    private List<MatchEvent> GetInitialMatchEvents() => new()
-    {
-        new MatchEvent { Id = "me-1", MatchId = "match-past", PlayerId = "user-8", EventType = EventType.Goal, Minute = 22 },
-        new MatchEvent { Id = "me-2", MatchId = "match-past", PlayerId = "user-8", EventType = EventType.Goal, Minute = 58 },
-        new MatchEvent { Id = "me-3", MatchId = "match-past", PlayerId = "user-9", EventType = EventType.Goal, Minute = 41 },
-        new MatchEvent { Id = "me-4", MatchId = "match-past", PlayerId = "user-1", EventType = EventType.Goal, Minute = 73 },
-        new MatchEvent { Id = "me-5", MatchId = "match-past", PlayerId = "user-1", EventType = EventType.Assist, Minute = 22 },
-        new MatchEvent { Id = "me-6", MatchId = "match-past", PlayerId = "user-6", EventType = EventType.Assist, Minute = 41 },
-        new MatchEvent { Id = "me-7", MatchId = "match-past", PlayerId = "user-2", EventType = EventType.YellowCard, Minute = 34, Notes = "Falta táctica en el medio campo" },
-        new MatchEvent { Id = "me-8", MatchId = "match-past", PlayerId = "user-1", EventType = EventType.Mvp, Minute = 80, Notes = "Partidazo con 1 gol y 1 asistencia" }
-    };
+    private List<MatchEvent> GetInitialMatchEvents() => new();
 
     // ==========================================
     // DEACTIVATION & SECURITY CODE REACTIVATION

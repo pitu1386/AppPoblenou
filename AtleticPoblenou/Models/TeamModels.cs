@@ -123,17 +123,81 @@ public class Match
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public int Round { get; set; } = 1;
-    public string? RivalTeamId { get; set; }
-    public DateTime MatchDate { get; set; }
-    public string Opponent { get; set; } = string.Empty;
-    public string Competition { get; set; } = "Liga Veteranos Barcelona";
+    public DateTime MatchDate { get; set; } = DateTime.UtcNow;
+    public string Competition { get; set; } = "Sábados División Honor (Temp. 26/27)";
+
+    // Equipos
+    public string HomeTeamId { get; set; } = "apn";
+    public string HomeTeamName { get; set; } = "Atletic Poblenou";
+    public string AwayTeamId { get; set; } = "";
+    public string AwayTeamName { get; set; } = "";
+
+    // Marcador
+    public int? HomeScore { get; set; }
+    public int? AwayScore { get; set; }
+    public MatchStatus Status { get; set; } = MatchStatus.Upcoming;
+
+    // Cancha y notas
     public string LocationName { get; set; } = "Camp Agapito Fernández (Poblenou)";
     public string LocationUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
-    public bool IsHome { get; set; } = true;
-    public int? OurScore { get; set; }
-    public int? RivalScore { get; set; }
-    public MatchStatus Status { get; set; } = MatchStatus.Upcoming;
     public string Notes { get; set; } = string.Empty;
+
+    // Propiedades de conveniencia (100% retrocompatibles con el código de nuestro equipo)
+    public bool IsOurMatch =>
+        HomeTeamId == "apn" || AwayTeamId == "apn" ||
+        HomeTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase) ||
+        AwayTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase) ||
+        (!string.IsNullOrEmpty(Opponent) && !Opponent.Contains(" vs ") && string.IsNullOrEmpty(HomeTeamName));
+
+    public bool IsHome
+    {
+        get => HomeTeamId == "apn" || HomeTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                HomeTeamId = "apn";
+                HomeTeamName = "Atletic Poblenou";
+            }
+            else
+            {
+                AwayTeamId = "apn";
+                AwayTeamName = "Atletic Poblenou";
+            }
+        }
+    }
+
+    public string Opponent
+    {
+        get => IsHome ? AwayTeamName : HomeTeamName;
+        set
+        {
+            if (IsHome) AwayTeamName = value ?? "";
+            else HomeTeamName = value ?? "";
+        }
+    }
+
+    public string? RivalTeamId
+    {
+        get => IsHome ? AwayTeamId : HomeTeamId;
+        set
+        {
+            if (IsHome) AwayTeamId = value ?? "";
+            else HomeTeamId = value ?? "";
+        }
+    }
+
+    public int? OurScore
+    {
+        get => IsHome ? HomeScore : AwayScore;
+        set { if (IsHome) HomeScore = value; else AwayScore = value; }
+    }
+
+    public int? RivalScore
+    {
+        get => IsHome ? AwayScore : HomeScore;
+        set { if (IsHome) AwayScore = value; else HomeScore = value; }
+    }
 }
 
 public enum AttendanceStatus

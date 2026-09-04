@@ -332,30 +332,88 @@
     <!-- TAB 2: FIXTURE COMPLETO (TODAS LAS JORNADAS) -->
     @if (_subTab == "fixture")
     {
-        var allMatches = TeamService.GetMatches().OrderBy(m => m.MatchDate).ToList();
+        var rawMatches = TeamService.GetMatches();
+        var distinctRounds = rawMatches.Select(m => m.Round).Where(r => r > 0).Distinct().OrderBy(r => r).ToList();
+        var allMatches = rawMatches
+            .Where(m => _fixtureFilter == "all" || m.IsOurMatch)
+            .Where(m => _fixtureRoundFilter == 0 || m.Round == _fixtureRoundFilter)
+            .OrderBy(m => m.Round)
+            .ThenBy(m => m.MatchDate)
+            .ToList();
 
         <div class="space-y-3">
-            <div class="flex items-center justify-between px-1">
+            <div class="flex items-center justify-between px-1 flex-wrap gap-2">
                 <div>
                     <h2 class="text-sm font-extrabold text-ink tracking-wide uppercase">
                         Fixture de la Liga
                     </h2>
                     <p class="text-xs text-muted">Calendario oficial de partidos</p>
                 </div>
-                @if (CanManageMatches)
-                {
-                    <button @onclick="() => OnEditMatch.InvokeAsync(null)"
-                            class="text-xs font-bold text-clubtext hover:text-club flex items-center gap-1 bg-surface px-2.5 py-1.5 rounded-lg border border-line">
-                        <span>+</span> Nuevo Partido
+                <div class="flex items-center gap-2">
+                    @if (IsAdmin)
+                    {
+                        <button type="button" @onclick="() => OnOpenRoundResults.InvokeAsync()"
+                                class="text-xs font-bold text-amber-500 hover:text-amber-400 flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1.5 rounded-lg transition shadow-xs"
+                                title="Cargar resultados de la jornada">
+                            <span>⚡</span> Cargar Jornada
+                        </button>
+                    }
+                    @if (CanManageMatches)
+                    {
+                        <button @onclick="() => OnEditMatch.InvokeAsync(null)"
+                                class="text-xs font-bold text-clubtext hover:text-club flex items-center gap-1 bg-surface px-2.5 py-1.5 rounded-lg border border-line">
+                            <span>+</span> Nuevo Partido
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- FILTERS BAR -->
+            <div class="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
+                <div class="flex items-center gap-1 bg-well p-1 rounded-xl border border-line shrink-0">
+                    <button type="button" @onclick='() => _fixtureFilter = "all"'
+                            class="px-2.5 py-1 rounded-lg font-bold transition @(_fixtureFilter == "all" ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink")">
+                        Todos (@rawMatches.Count)
                     </button>
+                    <button type="button" @onclick='() => _fixtureFilter = "apn"'
+                            class="px-2.5 py-1 rounded-lg font-bold transition @(_fixtureFilter == "apn" ? "bg-club text-white shadow-xs" : "text-muted hover:text-ink")">
+                        Solo APN (@rawMatches.Count(m => m.IsOurMatch))
+                    </button>
+                </div>
+
+                @if (distinctRounds.Any())
+                {
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-xs text-muted font-bold">Jornada:</span>
+                        <select @bind="_fixtureRoundFilter"
+                                class="bg-surface border border-line2 rounded-lg px-2 py-1 text-xs font-bold text-ink">
+                            <option value="0">Todas las jornadas</option>
+                            @foreach (var r in distinctRounds)
+                            {
+                                <option value="@r">Jornada @r</option>
+                            }
+                        </select>
+                    </div>
                 }
             </div>
 
+            @if (!allMatches.Any())
+            {
+                <div class="bg-surface border border-line rounded-xl p-8 text-center space-y-2">
+                    <div class="text-3xl">⚽</div>
+                    <div class="font-extrabold text-ink text-sm">No hay partidos en el fixture para este filtro</div>
+                    <p class="text-xs text-muted">Añade nuevos partidos o carga los resultados de las jornadas de la liga.</p>
+                </div>
+            }
+
             @foreach (var match in allMatches)
             {
-                <div class="bg-surface border border-line rounded-xl p-4 transition hover:border-line2">
+                var isHomeWinner = match.HomeScore.HasValue && match.AwayScore.HasValue && match.HomeScore > match.AwayScore;
+                var isAwayWinner = match.HomeScore.HasValue && match.AwayScore.HasValue && match.AwayScore > match.HomeScore;
+
+                <div class="bg-surface border border-line rounded-xl p-4 transition hover:border-line2 @(match.IsOurMatch ? "border-l-4 border-l-club" : "")">
                     <div class="flex items-center justify-between text-xs text-muted mb-2">
-                        <span class="font-bold text-clubtext">@match.Competition</span>
+                        <span class="font-bold text-clubtext">Jornada @match.Round · @match.Competition</span>
                         <span class="px-2 py-0.5 rounded text-xs font-bold @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
                             @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
                         </span>
@@ -363,55 +421,91 @@
 
                     <!-- Teams & Score -->
                     <div class="flex items-center justify-between my-2">
-                        <div class="flex-1 font-bold text-sm @(match.OurScore > match.RivalScore ? "text-oktext font-extrabold" : "text-ink")">
-                            Atletic Poblenou
+                        <div class="flex-1 font-bold text-sm truncate @(isHomeWinner ? "text-oktext font-extrabold" : "text-ink")">
+                            @match.HomeTeamName
+                            @if (match.HomeTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="text-[10px] bg-club text-white px-1 py-0.2 rounded font-extrabold ml-1">APN</span>
+                            }
                         </div>
 
-                        @if (match.Status == MatchStatus.Finished)
+                        @if (match.Status == MatchStatus.Finished && match.HomeScore.HasValue && match.AwayScore.HasValue)
                         {
-                            <div class="px-3 py-1 bg-well rounded-lg border border-line font-cond font-extrabold text-base mx-3 text-ink">
-                                @match.OurScore - @match.RivalScore
+                            <div class="px-3 py-1 bg-well rounded-lg border border-line font-cond font-extrabold text-base mx-3 text-ink shrink-0">
+                                @match.HomeScore - @match.AwayScore
                             </div>
                         }
                         else
                         {
-                            <div class="px-2.5 py-1 bg-well2 rounded-lg text-xs font-bold text-muted mx-3">
+                            <div class="px-2.5 py-1 bg-well2 rounded-lg text-xs font-bold text-muted mx-3 shrink-0">
                                 VS
                             </div>
                         }
 
-                        <div class="flex-1 text-right font-bold text-sm @(match.RivalScore > match.OurScore ? "text-clubtext font-extrabold" : "text-ink2")">
-                            @match.Opponent
+                        <div class="flex-1 text-right font-bold text-sm truncate @(isAwayWinner ? "text-oktext font-extrabold" : "text-ink2")">
+                            @if (match.AwayTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="text-[10px] bg-club text-white px-1 py-0.2 rounded font-extrabold mr-1">APN</span>
+                            }
+                            @match.AwayTeamName
                         </div>
                     </div>
 
                     <div class="text-xs text-muted flex items-center justify-between mt-2 pt-2 border-t border-line">
                         <span>@match.LocationName</span>
-                        <span>@(match.IsHome ? "Local" : "Visitante")</span>
+                        <span>@(match.IsOurMatch ? (match.IsHome ? "Local" : "Visitante") : "Liga")</span>
                     </div>
 
                     <!-- Match actions: Canchas / Admin -->
                     @if (CanManageMatches || IsAdmin)
                     {
                         <div class="mt-2 pt-2 border-t border-line flex items-center justify-between">
-                            @if (CanManageMatches && match.Status == MatchStatus.Upcoming)
-                            {
-                                <button @onclick="() => OnEditMatch.InvokeAsync(match)"
-                                        class="text-xs font-bold text-infotext hover:text-info flex items-center gap-1">
-                                    Editar Cancha / Hora
-                                </button>
-                            }
-                            else
-                            {
-                                <span></span>
-                            }
+                            <div class="flex items-center gap-3">
+                                @if (CanManageMatches && match.Status == MatchStatus.Upcoming && match.IsOurMatch)
+                                {
+                                    <button @onclick="() => OnEditMatch.InvokeAsync(match)"
+                                            class="text-xs font-bold text-infotext hover:text-info flex items-center gap-1">
+                                        Editar Cancha / Hora
+                                    </button>
+                                }
+
+                                @if (IsAdmin)
+                                {
+                                    @if (_confirmDeleteMatchId == match.Id)
+                                    {
+                                        <div class="flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-lg text-xs">
+                                            <span class="text-red-500 font-bold text-[11px]">¿Eliminar?</span>
+                                            <button @onclick="() => DeleteMatchConfirmed(match.Id)" class="px-2 py-0.5 bg-red-600 text-white font-bold rounded text-[10px] hover:bg-red-700">Sí</button>
+                                            <button @onclick="() => _confirmDeleteMatchId = null" class="px-2 py-0.5 bg-well2 text-ink rounded text-[10px]">No</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button @onclick="() => _confirmDeleteMatchId = match.Id"
+                                                class="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                                                title="Eliminar partido del fixture">
+                                            🗑️ Eliminar
+                                        </button>
+                                    }
+                                }
+                            </div>
 
                             @if (IsAdmin)
                             {
-                                <button @onclick="() => OnRecordResult.InvokeAsync(match)"
-                                        class="text-xs font-bold text-warntext hover:text-warn">
-                                     Cargar/Editar Acta ›
-                                </button>
+                                @if (match.IsOurMatch)
+                                {
+                                    <button @onclick="() => OnRecordResult.InvokeAsync(match)"
+                                            class="text-xs font-bold text-warntext hover:text-warn">
+                                         Cargar/Editar Acta ›
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button @onclick="() => OnOpenRoundResults.InvokeAsync()"
+                                            class="text-xs font-bold text-amber-500 hover:text-amber-400">
+                                         Editar Marcador ›
+                                    </button>
+                                }
                             }
                         </div>
                     }
@@ -434,8 +528,18 @@
                     </h2>
                     <p class="text-xs text-muted font-semibold">@TeamService.GetClubSettings().LeagueName</p>
                 </div>
-                <div class="text-xs text-faint font-cond">
-                    PTS / PJ / DG
+                <div class="flex items-center gap-2">
+                    @if (IsAdmin)
+                    {
+                        <button type="button" @onclick="() => OnOpenRoundResults.InvokeAsync()"
+                                class="text-xs font-bold text-amber-500 hover:text-amber-400 flex items-center gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1.5 rounded-lg transition shadow-xs"
+                                title="Cargar resultados de la jornada">
+                            <span>⚡</span> Cargar Resultados
+                        </button>
+                    }
+                    <div class="text-xs text-faint font-cond">
+                        PTS / PJ / DG
+                    </div>
                 </div>
             </div>
 
@@ -579,12 +683,22 @@
     [Parameter] public EventCallback<Match?> OnEditMatch { get; set; }
     [Parameter] public EventCallback OnOpenCreateTeam { get; set; }
     [Parameter] public EventCallback OnOpenCreateAnnouncement { get; set; }
+    [Parameter] public EventCallback OnOpenRoundResults { get; set; }
 
     private string _subTab = "next"; // "next", "fixture", "table", "rivals"
     private string _rsvpFilter = "all"; // "all", "going", "maybe", "notgoing", "unanswered"
+    private string _fixtureFilter = "all"; // "all", "apn"
+    private int _fixtureRoundFilter = 0; // 0 = all rounds
     private bool _showTacticalModal = false;
     private MatchWeatherInfo? _matchWeather;
     private string _lastLoadedMatchId = "";
+    private string? _confirmDeleteMatchId = null;
+
+    private async Task DeleteMatchConfirmed(string matchId)
+    {
+        await TeamService.DeleteMatchAsync(matchId);
+        _confirmDeleteMatchId = null;
+    }
 
     protected override async Task OnParametersSetAsync()
     {

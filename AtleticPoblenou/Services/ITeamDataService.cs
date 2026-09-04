@@ -49,6 +49,9 @@ public interface ITeamDataService
     Task AddMatchAsync(Match match);
     Task UpdateMatchDetailsAsync(Match match);
     Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events);
+    Task DeleteMatchAsync(string matchId);
+    Task SaveBatchRoundResultsAsync(int round, List<Match> matches);
+    Task AddLeagueMatchAsync(Match match);
     List<Attendance> GetAttendanceForMatch(string matchId);
     Attendance? GetUserAttendance(string matchId, string playerId);
     Task SetAttendanceAsync(string matchId, string playerId, AttendanceStatus status, string? note = null);
@@ -66,6 +69,7 @@ public interface ITeamDataService
     // Expenses
     List<TeamExpense> GetExpenses();
     Task AddExpenseAsync(TeamExpense expense);
+    Task DeleteExpenseAsync(string expenseId);
 
     // Stats & Events
     List<MatchEvent> GetMatchEvents();

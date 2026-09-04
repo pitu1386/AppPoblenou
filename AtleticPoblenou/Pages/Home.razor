@@ -34,7 +34,8 @@ else
                             OnEditMatch="OpenMatchModal"
                             OnRecordResult="OpenRecordResult"
                             OnOpenCreateTeam="() => _showCreateTeamModal = true"
-                            OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true" />
+                            OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
+                            OnOpenRoundResults="() => _showRoundResultsModal = true" />
                 break;
 
             case "payments":
@@ -57,6 +58,7 @@ else
                           OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
                           OnAddExpense="() => _showAddExpenseModal = true"
                           OnOpenDbModal="() => _showDbModal = true"
+                          OnOpenRoundResults="() => _showRoundResultsModal = true"
                           OnOpenPlayerSheet="OpenPlayerSheet" />
                 break;
         }
@@ -68,6 +70,7 @@ else
     <!-- All Interactive Modals -->
     <CreateMatchModal @bind-IsOpen="_showCreateMatchModal" TargetMatch="_selectedMatchForEdit" />
     <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
+    <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
     <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="_selectedPlayerForPayment" />
     <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
     <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" />
@@ -83,6 +86,7 @@ else
 
     private bool _showCreateMatchModal = false;
     private bool _showRecordResultModal = false;
+    private bool _showRoundResultsModal = false;
     private bool _showDirectPaymentModal = false;
     private bool _showPlayerSheetModal = false;
     private bool _showCreateTeamModal = false;

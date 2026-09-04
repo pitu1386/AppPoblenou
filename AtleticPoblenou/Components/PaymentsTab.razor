@@ -274,28 +274,46 @@
                 <span class="font-bold text-ink">@expenses.Count gastos</span>
             </div>
 
-            <div class="space-y-2">
-                @foreach (var exp in expenses)
-                {
-                    <div class="bg-surface border border-line rounded-xl p-3.5 flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-lg bg-well2 border border-line2 flex items-center justify-center text-sm shrink-0">
-                                @(exp.Category == "Árbitros"? "": exp.Category == "Material"? "": "")
-                            </div>
-                            <div>
-                                <div class="font-bold text-sm text-ink">@exp.Concept</div>
-                                <div class="text-xs text-muted">
-                                    @exp.ExpenseDate.ToString("dd/MM/yyyy") • @exp.Category
+            @if (!expenses.Any())
+            {
+                <div class="p-6 bg-surface border border-line rounded-xl text-center text-faint text-xs">
+                    No hay gastos registrados todavía en la caja del club.
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2">
+                    @foreach (var exp in expenses)
+                    {
+                        <div class="bg-surface border border-line rounded-xl p-3.5 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-well2 border border-line2 flex items-center justify-center text-sm shrink-0">
+                                    🧾
+                                </div>
+                                <div>
+                                    <div class="font-bold text-sm text-ink">@exp.Concept</div>
+                                    <div class="text-xs text-muted">
+                                        @exp.ExpenseDate.ToString("dd/MM/yyyy") • @exp.Category
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="font-extrabold text-sm font-cond text-clubtext">
-                            -@exp.Amount.ToString("N2") €
+                            <div class="flex items-center gap-2.5">
+                                <div class="font-extrabold text-sm font-cond text-clubtext">
+                                    -@exp.Amount.ToString("N2") €
+                                </div>
+                                @if (IsAdmin)
+                                {
+                                    <button type="button" @onclick="() => TeamService.DeleteExpenseAsync(exp.Id)"
+                                            class="text-faint hover:text-club text-xs p-1" title="Eliminar gasto">
+                                        ✕
+                                    </button>
+                                }
+                            </div>
                         </div>
-                    </div>
-                }
-            </div>
+                    }
+                </div>
+            }
         </div>
     }
 
