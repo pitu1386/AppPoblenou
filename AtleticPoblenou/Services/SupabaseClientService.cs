@@ -770,7 +770,7 @@ public class SupabaseClientService
         home_venue_name = s.HomeVenueName,
         home_venue_maps_url = s.HomeVenueMapsUrl,
         season_fee_per_player = s.SeasonFeePerPlayer,
-        team_secret_code = "APN1929",
+        team_secret_code = !string.IsNullOrWhiteSpace(s.TeamSecretCode) ? s.TeamSecretCode : "APN1929",
         season_history = s.SeasonHistory
     };
 
@@ -786,6 +786,7 @@ public class SupabaseClientService
         HomeVenueName = d.home_venue_name ?? "Camp Municipal Agapito Fernández",
         HomeVenueMapsUrl = d.home_venue_maps_url ?? "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona",
         SeasonFeePerPlayer = d.season_fee_per_player > 0 ? d.season_fee_per_player : 200,
+        TeamSecretCode = !string.IsNullOrWhiteSpace(d.team_secret_code) ? d.team_secret_code : "APN1929",
         ShowDemoShortcuts = false,
         SeasonHistory = d.season_history ?? new()
     };

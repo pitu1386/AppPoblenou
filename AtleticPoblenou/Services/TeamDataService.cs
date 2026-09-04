@@ -50,8 +50,19 @@ public class TeamDataService : ITeamDataService
             
             if (!string.IsNullOrEmpty(savedUser)) _currentUserId = savedUser;
             if (isAuth == "true" && !string.IsNullOrEmpty(savedUser)) _isAuthenticated = true;
-            if (!string.IsNullOrEmpty(savedCode)) _teamSecretCode = savedCode;
-            if (!string.IsNullOrEmpty(savedClub)) _clubSettings = JsonSerializer.Deserialize<ClubSettings>(savedClub) ?? new ClubSettings();
+            if (!string.IsNullOrEmpty(savedClub))
+            {
+                _clubSettings = JsonSerializer.Deserialize<ClubSettings>(savedClub) ?? new ClubSettings();
+                if (!string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode))
+                {
+                    _teamSecretCode = _clubSettings.TeamSecretCode;
+                }
+            }
+            if (!string.IsNullOrEmpty(savedCode))
+            {
+                _teamSecretCode = savedCode;
+                _clubSettings.TeamSecretCode = savedCode;
+            }
 
             var jsonProfiles = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_profiles");
             var jsonTeams = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_rival_teams");
@@ -197,6 +208,11 @@ public class TeamDataService : ITeamDataService
                 if (sbClub != null && !string.IsNullOrEmpty(sbClub.ClubName))
                 {
                     _clubSettings = sbClub;
+                    if (!string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode))
+                    {
+                        _teamSecretCode = _clubSettings.TeamSecretCode;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
+                    }
                     await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
                 }
                 else
@@ -312,7 +328,7 @@ public class TeamDataService : ITeamDataService
     public async Task<(bool Success, string ErrorMessage)> RegisterAsync(RegisterModel model)
     {
         var cleanInputCode = model.TeamCode?.Trim().Replace("-", "").ToUpperInvariant();
-        var cleanActualCode = _teamSecretCode.Trim().Replace("-", "").ToUpperInvariant();
+        var cleanActualCode = GetTeamSecretCode().Trim().Replace("-", "").ToUpperInvariant();
 
         if (string.IsNullOrWhiteSpace(cleanInputCode) || cleanInputCode != cleanActualCode)
         {
@@ -373,13 +389,16 @@ public class TeamDataService : ITeamDataService
         NotifyStateChanged();
     }
 
-    public string GetTeamSecretCode() => _teamSecretCode;
+    public string GetTeamSecretCode() => 
+        !string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode) ? _clubSettings.TeamSecretCode : _teamSecretCode;
 
     public async Task<string> GenerateNewTeamCodeAsync()
     {
         var randomCode = $"APN-{Random.Shared.Next(1000, 9999)}";
         _teamSecretCode = randomCode;
+        _clubSettings.TeamSecretCode = randomCode;
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
+        await SaveClubSettingsAsync(_clubSettings);
         NotifyStateChanged();
         return _teamSecretCode;
     }
@@ -388,9 +407,29 @@ public class TeamDataService : ITeamDataService
 
     public async Task SaveClubSettingsAsync(ClubSettings settings)
     {
+        if (string.IsNullOrWhiteSpace(settings.TeamSecretCode))
+        {
+            settings.TeamSecretCode = !string.IsNullOrWhiteSpace(_teamSecretCode) ? _teamSecretCode : "APN1929";
+        }
+        if (string.IsNullOrWhiteSpace(settings.LeagueName) && !string.IsNullOrWhiteSpace(_clubSettings.LeagueName))
+        {
+            settings.LeagueName = _clubSettings.LeagueName;
+        }
+        if (string.IsNullOrWhiteSpace(settings.SeasonName) && !string.IsNullOrWhiteSpace(_clubSettings.SeasonName))
+        {
+            settings.SeasonName = _clubSettings.SeasonName;
+        }
+        if ((settings.SeasonHistory == null || settings.SeasonHistory.Count == 0) && _clubSettings.SeasonHistory != null && _clubSettings.SeasonHistory.Count > 0)
+        {
+            settings.SeasonHistory = _clubSettings.SeasonHistory;
+        }
+
         _clubSettings = settings;
+        _teamSecretCode = _clubSettings.TeamSecretCode;
+
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
-        _ = _supabase.UpsertClubSettingsAsync(_clubSettings);
+        await _supabase.UpsertClubSettingsAsync(_clubSettings);
         NotifyStateChanged();
     }
 
@@ -1121,7 +1160,7 @@ public class TeamDataService : ITeamDataService
             return (false, "Ingresa tu email o apodo.");
 
         var cleanCode = securityCode?.Trim().Replace("-", "").ToUpperInvariant();
-        var currentCode = _teamSecretCode.Trim().Replace("-", "").ToUpperInvariant();
+        var currentCode = GetTeamSecretCode().Trim().Replace("-", "").ToUpperInvariant();
 
         if (string.IsNullOrWhiteSpace(cleanCode) || cleanCode != currentCode)
         {

@@ -214,11 +214,17 @@
             {
                 ClubName = current.ClubName,
                 ShortName = current.ShortName,
+                LeagueName = current.LeagueName,
+                SeasonName = current.SeasonName,
                 PrimaryColorHex = current.PrimaryColorHex,
                 SecondaryColorHex = current.SecondaryColorHex,
                 KitDescription = current.KitDescription,
                 HomeVenueName = current.HomeVenueName,
-                HomeVenueMapsUrl = current.HomeVenueMapsUrl
+                HomeVenueMapsUrl = current.HomeVenueMapsUrl,
+                SeasonFeePerPlayer = current.SeasonFeePerPlayer,
+                TeamSecretCode = current.TeamSecretCode,
+                ShowDemoShortcuts = current.ShowDemoShortcuts,
+                SeasonHistory = new List<SeasonArchive>(current.SeasonHistory ?? new())
             };
             _savedSuccessfully = false;
         }
