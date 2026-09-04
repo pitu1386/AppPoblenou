@@ -27,10 +27,13 @@ public class TeamDataService : ITeamDataService
 
     public bool IsAuthenticated => _isAuthenticated;
 
-    public TeamDataService(IJSRuntime js, HttpClient http)
+    private readonly SupabaseClientService _supabase;
+
+    public TeamDataService(IJSRuntime js, HttpClient http, SupabaseClientService supabase)
     {
         _js = js;
         _http = http;
+        _supabase = supabase;
         LoadDefaults();
     }
 
@@ -102,6 +105,130 @@ public class TeamDataService : ITeamDataService
             if (!string.IsNullOrEmpty(jsonExpenses)) _expenses = JsonSerializer.Deserialize<List<TeamExpense>>(jsonExpenses) ?? GetInitialExpenses();
 
             if (!string.IsNullOrEmpty(jsonEvents)) _matchEvents = JsonSerializer.Deserialize<List<MatchEvent>>(jsonEvents) ?? GetInitialMatchEvents();
+
+            // Cloud sync from Supabase (shared real-time backend)
+            try
+            {
+                var sbProfiles = await _supabase.FetchProfilesAsync();
+                if (sbProfiles != null)
+                {
+                    if (sbProfiles.Count > 0)
+                    {
+                        _profiles = sbProfiles;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
+                    }
+                    else
+                    {
+                        _ = _supabase.UpsertProfilesBatchAsync(_profiles);
+                    }
+                }
+
+                var sbTeams = await _supabase.FetchRivalTeamsAsync();
+                if (sbTeams != null)
+                {
+                    if (sbTeams.Count > 0)
+                    {
+                        _rivalTeams = sbTeams;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_rival_teams", JsonSerializer.Serialize(_rivalTeams));
+                    }
+                    else
+                    {
+                        _ = _supabase.UpsertRivalTeamsBatchAsync(_rivalTeams);
+                    }
+                }
+
+                var sbMatches = await _supabase.FetchMatchesAsync();
+                if (sbMatches != null)
+                {
+                    if (sbMatches.Count > 0)
+                    {
+                        _matches = sbMatches;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
+                    }
+                    else
+                    {
+                        _ = _supabase.UpsertMatchesBatchAsync(_matches);
+                    }
+                }
+
+                var sbAttendance = await _supabase.FetchAttendanceAsync();
+                if (sbAttendance != null)
+                {
+                    if (sbAttendance.Count > 0)
+                    {
+                        _attendance = sbAttendance;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
+                    }
+                    else if (_attendance.Count > 0)
+                    {
+                        _ = _supabase.UpsertAttendanceBatchAsync(_attendance);
+                    }
+                }
+
+                var sbPayments = await _supabase.FetchPaymentsAsync();
+                if (sbPayments != null)
+                {
+                    if (sbPayments.Count > 0)
+                    {
+                        _payments = sbPayments;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
+                    }
+                    else if (_payments.Count > 0)
+                    {
+                        _ = _supabase.UpsertPaymentsBatchAsync(_payments);
+                    }
+                }
+
+                var sbExpenses = await _supabase.FetchExpensesAsync();
+                if (sbExpenses != null && sbExpenses.Count > 0)
+                {
+                    _expenses = sbExpenses;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_expenses", JsonSerializer.Serialize(_expenses));
+                }
+
+                var sbEvents = await _supabase.FetchMatchEventsAsync();
+                if (sbEvents != null)
+                {
+                    if (sbEvents.Count > 0)
+                    {
+                        _matchEvents = sbEvents;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
+                    }
+                    else if (_matchEvents.Count > 0)
+                    {
+                        _ = _supabase.UpsertMatchEventsBatchAsync(_matchEvents);
+                    }
+                }
+
+                var sbAnnouncements = await _supabase.FetchAnnouncementsAsync();
+                if (sbAnnouncements != null)
+                {
+                    if (sbAnnouncements.Count > 0)
+                    {
+                        _announcements = sbAnnouncements;
+                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_announcements", JsonSerializer.Serialize(_announcements));
+                    }
+                    else
+                    {
+                        _ = _supabase.UpsertAnnouncementsBatchAsync(_announcements);
+                    }
+                }
+
+                var sbClub = await _supabase.FetchClubSettingsAsync();
+                if (sbClub != null && !string.IsNullOrEmpty(sbClub.ClubName))
+                {
+                    _clubSettings = sbClub;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
+                }
+                else
+                {
+                    _ = _supabase.UpsertClubSettingsAsync(_clubSettings);
+                }
+            }
+            catch
+            {
+                // Fallback seamless a almacenamiento local en caso de error de red
+            }
         }
         catch
         {
@@ -250,6 +377,7 @@ public class TeamDataService : ITeamDataService
     {
         _clubSettings = settings;
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
+        _ = _supabase.UpsertClubSettingsAsync(_clubSettings);
         NotifyStateChanged();
     }
 
@@ -303,6 +431,7 @@ public class TeamDataService : ITeamDataService
     {
         _rivalTeams.RemoveAll(t => t.Id == teamId);
         await SaveRivalTeamsAsync();
+        _ = _supabase.DeleteRowAsync("rival_teams", teamId);
         NotifyStateChanged();
     }
 
@@ -445,6 +574,7 @@ public class TeamDataService : ITeamDataService
     {
         _announcements.RemoveAll(a => a.Id == announcementId);
         await SaveAnnouncementsAsync();
+        _ = _supabase.DeleteRowAsync("announcements", announcementId);
         NotifyStateChanged();
     }
 
@@ -682,29 +812,52 @@ public class TeamDataService : ITeamDataService
         NotifyStateChanged();
     }
 
-    private async Task SaveProfilesAsync() =>
+    private async Task SaveProfilesAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
+        _ = _supabase.UpsertProfilesBatchAsync(_profiles);
+    }
 
-    private async Task SaveRivalTeamsAsync() =>
+    private async Task SaveRivalTeamsAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_rival_teams", JsonSerializer.Serialize(_rivalTeams));
+        _ = _supabase.UpsertRivalTeamsBatchAsync(_rivalTeams);
+    }
 
-    private async Task SaveAnnouncementsAsync() =>
+    private async Task SaveAnnouncementsAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_announcements", JsonSerializer.Serialize(_announcements));
+        _ = _supabase.UpsertAnnouncementsBatchAsync(_announcements);
+    }
 
-    private async Task SaveMatchesAsync() =>
+    private async Task SaveMatchesAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
+        _ = _supabase.UpsertMatchesBatchAsync(_matches);
+    }
 
-    private async Task SaveAttendanceAsync() =>
+    private async Task SaveAttendanceAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
+        _ = _supabase.UpsertAttendanceBatchAsync(_attendance);
+    }
 
-    private async Task SavePaymentsAsync() =>
+    private async Task SavePaymentsAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
+        _ = _supabase.UpsertPaymentsBatchAsync(_payments);
+    }
 
-    private async Task SaveExpensesAsync() =>
+    private async Task SaveExpensesAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_expenses", JsonSerializer.Serialize(_expenses));
+    }
 
-    private async Task SaveEventsAsync() =>
+    private async Task SaveEventsAsync()
+    {
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
+        _ = _supabase.UpsertMatchEventsBatchAsync(_matchEvents);
+    }
 
     private List<TeamAnnouncement> GetInitialAnnouncements() => new()
     {
