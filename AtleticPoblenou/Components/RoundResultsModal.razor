@@ -2,7 +2,7 @@
 
 @if (IsOpen && TeamService.GetCurrentUser().Role == UserRole.Admin)
 {
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
         <div class="bg-surface border border-line2 w-full max-w-lg rounded-xl p-5 shadow-xl space-y-4 max-h-[92vh] overflow-y-auto">
 
             <!-- Modal Header -->
@@ -181,7 +181,7 @@
 
             @if (_savedSuccess)
             {
-                <div class="p-2.5 rounded-lg bg-okbg border border-ok/30 text-oktext font-bold text-xs text-center animate-in fade-in">
+                <div class="p-2.5 rounded-lg bg-okbg border border-ok/30 text-oktext font-bold text-xs text-center animate-in">
                     ✓ ¡Resultados guardados y tabla de posiciones actualizada!
                 </div>
             }

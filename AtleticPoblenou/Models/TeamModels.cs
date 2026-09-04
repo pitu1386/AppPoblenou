@@ -12,7 +12,7 @@ public class ClubSettings
     public string HomeVenueName { get; set; } = "Camp Municipal Agapito Fernández";
     public string HomeVenueMapsUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
     public decimal SeasonFeePerPlayer { get; set; } = 200;
-    public string TeamSecretCode { get; set; } = "APN1929";
+    public string TeamSecretCode { get; set; } = "";
     public bool ShowDemoShortcuts { get; set; } = false;
     public List<SeasonArchive> SeasonHistory { get; set; } = new();
 }
@@ -44,9 +44,11 @@ public enum DominantFoot
 
 public class UserProfile
 {
+    /// <summary>Id del perfil. Para cuentas nuevas coincide con el UID de Supabase Auth. El admin principal es "user-1".</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
+    /// <summary>UID de la cuenta en Supabase Auth. Null si el perfil aún no tiene cuenta vinculada.</summary>
+    public string? AuthUid { get; set; }
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = "1234";
     public string FullName { get; set; } = string.Empty;
     public string Nickname { get; set; } = string.Empty;
     public int? JerseyNumber { get; set; }
@@ -63,9 +65,11 @@ public class UserProfile
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
 
-    public int? Age => BirthDate.HasValue 
+    public int? Age => BirthDate.HasValue
         ? DateTime.Today.Year - BirthDate.Value.Year - (DateTime.Today.DayOfYear < BirthDate.Value.DayOfYear ? 1 : 0)
         : null;
+
+    public UserProfile Clone() => (UserProfile)MemberwiseClone();
 }
 
 public class LoginModel
@@ -252,7 +256,7 @@ public class TeamExpense
     public string Concept { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public DateTime ExpenseDate { get; set; } = DateTime.UtcNow;
-    public string Category { get; set; } = "Àrbitres"; // Àrbitres, Pistes, Material, Tercer Temps, Altres
+    public string Category { get; set; } = "Otros"; // Árbitros, Campos, Material, Tercer Tiempo, Inscripción, Otros
     public string? PaidBy { get; set; }
     public string Notes { get; set; } = string.Empty;
 }
@@ -311,13 +315,14 @@ public class SeasonArchive
 
 public class MatchWeatherInfo
 {
-    public double Temperature { get; set; } = 22.0;
-    public int PrecipitationProbability { get; set; } = 0;
-    public double WindSpeed { get; set; } = 9.0;
-    public int Humidity { get; set; } = 54;
-    public string ConditionText { get; set; } = "Cielo Despejado";
-    public string Icon { get; set; } = "☀️";
-    public string LocationName { get; set; } = "Camp Municipal Agapito Fernández";
-    public bool IsOptimal { get; set; } = true;
+    /// <summary>False cuando no se pudo obtener la previsión. En ese caso el resto de campos no son datos reales.</summary>
+    public bool IsAvailable { get; set; } = false;
+    public double Temperature { get; set; }
+    public int PrecipitationProbability { get; set; }
+    public double WindSpeed { get; set; }
+    public int Humidity { get; set; }
+    public string ConditionText { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public string LocationName { get; set; } = string.Empty;
+    public bool IsOptimal { get; set; }
 }
-

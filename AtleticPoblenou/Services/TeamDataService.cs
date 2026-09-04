@@ -4,17 +4,33 @@ using Microsoft.JSInterop;
 
 namespace AtleticPoblenou.Services;
 
-public class TeamDataService : ITeamDataService
+/// <summary>
+/// Estado del club en memoria + caché en localStorage para pintar al instante.
+/// La verdad vive en Supabase: cada mutación escribe solo la fila afectada, vuelve a leer la tabla
+/// y avisa de errores por <see cref="OnError"/>. Los cambios de otros dispositivos llegan por Realtime.
+/// </summary>
+public class TeamDataService : ITeamDataService, IDisposable
 {
+    private const string OwnerAdminId = "user-1";
+    private const string CachePrefix = "apn2_";
+    private const string CacheVersion = "2";
+    private const string PendingProfileKey = "apn2_pending_profile";
+
+    private static readonly string[] Tables =
+    {
+        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements"
+    };
+
     private readonly IJSRuntime _js;
-    private readonly HttpClient _http;
+    private readonly SupabaseAuthService _auth;
+    private readonly SupabaseClientService _supabase;
+    private DotNetObjectReference<TeamDataService>? _selfRef;
     private bool _initialized;
+    private bool _profilesLoaded;
 
     public event Action? OnChange;
+    public event Action<string>? OnError;
 
-    private string _currentUserId = "user-1";
-    private string _teamSecretCode = "APN1929";
-    private bool _isAuthenticated = false;
     private ClubSettings _clubSettings = new();
     private List<UserProfile> _profiles = new();
     private List<RivalTeam> _rivalTeams = new();
@@ -25,241 +41,331 @@ public class TeamDataService : ITeamDataService
     private List<TeamExpense> _expenses = new();
     private List<MatchEvent> _matchEvents = new();
 
-    public bool IsAuthenticated => _isAuthenticated;
-
-    private readonly SupabaseClientService _supabase;
-
-    public TeamDataService(IJSRuntime js, HttpClient http, SupabaseClientService supabase)
+    public TeamDataService(IJSRuntime js, SupabaseAuthService auth, SupabaseClientService supabase)
     {
         _js = js;
-        _http = http;
+        _auth = auth;
         _supabase = supabase;
-        LoadDefaults();
+        _auth.OnSessionChanged += HandleSessionChanged;
     }
 
+    // ==========================================
+    // ESTADO DE SESIÓN
+    // ==========================================
+    private UserProfile? CurrentProfile =>
+        _profiles.FirstOrDefault(p => !string.IsNullOrEmpty(p.AuthUid) && p.AuthUid == _auth.UserId)
+        ?? _profiles.FirstOrDefault(p => !string.IsNullOrEmpty(_auth.Email) && p.Email.Equals(_auth.Email, StringComparison.OrdinalIgnoreCase));
+
+    public bool IsAuthenticated => _auth.IsSignedIn && CurrentProfile is { IsActive: true };
+    public bool NeedsProfile => _auth.IsSignedIn && _profilesLoaded && CurrentProfile == null;
+    public bool IsDeactivated => _auth.IsSignedIn && CurrentProfile is { IsActive: false };
+    public string? SessionEmail => _auth.Email;
+
+    public bool IsCloudConnected { get; private set; }
+    public bool IsRealtimeConnected { get; private set; }
+    public DateTime? LastSyncUtc { get; private set; }
+
+    public UserProfile GetCurrentUser()
+    {
+        var user = CurrentProfile;
+        if (user != null)
+        {
+            if (IsOwnerAdmin(user))
+            {
+                user.Role = UserRole.Admin;
+                user.IsActive = true;
+            }
+            return user;
+        }
+
+        // Sin ficha todavía: perfil mínimo para que los componentes no fallen.
+        return new UserProfile
+        {
+            Id = _auth.UserId ?? "",
+            AuthUid = _auth.UserId,
+            Email = _auth.Email ?? "",
+            FullName = _auth.Email ?? "Invitado",
+            Nickname = _auth.Email?.Split('@')[0] ?? "invitado",
+            Role = UserRole.Player,
+            IsActive = false
+        };
+    }
+
+    public bool IsOwnerAdmin(UserProfile? p) => p?.Id == OwnerAdminId;
+
+    // ==========================================
+    // ARRANQUE Y SINCRONIZACIÓN
+    // ==========================================
     public async Task InitializeAsync()
     {
         if (_initialized) return;
-
-        try
-        {
-            var isAuth = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_is_authenticated");
-            var savedUser = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_current_user");
-            var savedCode = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_team_secret_code");
-            var savedClub = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_club_settings");
-            
-            if (!string.IsNullOrEmpty(savedUser)) _currentUserId = savedUser;
-            if (isAuth == "true" && !string.IsNullOrEmpty(savedUser)) _isAuthenticated = true;
-            if (!string.IsNullOrEmpty(savedClub))
-            {
-                _clubSettings = JsonSerializer.Deserialize<ClubSettings>(savedClub) ?? new ClubSettings();
-                if (!string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode))
-                {
-                    _teamSecretCode = _clubSettings.TeamSecretCode;
-                }
-            }
-            if (!string.IsNullOrEmpty(savedCode))
-            {
-                _teamSecretCode = savedCode;
-                _clubSettings.TeamSecretCode = savedCode;
-            }
-
-            var jsonProfiles = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_profiles");
-            var jsonTeams = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_rival_teams");
-            var jsonAnnouncements = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_announcements");
-            var jsonMatches = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_matches");
-            var jsonAttendance = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_attendance");
-            var jsonPayments = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_payments");
-            var jsonExpenses = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_expenses");
-            var jsonEvents = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_events");
-
-            if (string.IsNullOrEmpty(_clubSettings.LeagueName) || _clubSettings.LeagueName.Contains("Barcelona"))
-            {
-                _clubSettings.LeagueName = "Sábados División Honor (Temp. 26/27)";
-                _clubSettings.SeasonName = "TEMP 26/27";
-                _clubSettings.ShortName = "ATºPOBLENOU";
-                await SaveClubSettingsAsync(_clubSettings);
-            }
-
-            if (!string.IsNullOrEmpty(jsonProfiles))
-            {
-                _profiles = JsonSerializer.Deserialize<List<UserProfile>>(jsonProfiles) ?? GetInitialProfiles();
-                EnsureOwnerAdminProtected();
-            }
-
-            if (!string.IsNullOrEmpty(jsonTeams))
-            {
-                var loaded = JsonSerializer.Deserialize<List<RivalTeam>>(jsonTeams);
-                if (loaded != null && loaded.Any(t => t.Name == "FONTETAS"))
-                    _rivalTeams = loaded;
-                else
-                {
-                    _rivalTeams = GetInitialRivalTeams();
-                    await SaveRivalTeamsAsync();
-                }
-            }
-
-            if (!string.IsNullOrEmpty(jsonAnnouncements)) _announcements = JsonSerializer.Deserialize<List<TeamAnnouncement>>(jsonAnnouncements) ?? GetInitialAnnouncements();
-
-            if (!string.IsNullOrEmpty(jsonMatches))
-            {
-                _matches = JsonSerializer.Deserialize<List<Match>>(jsonMatches) ?? new();
-                _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
-                await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-            }
-
-            if (!string.IsNullOrEmpty(jsonAttendance))
-            {
-                _attendance = JsonSerializer.Deserialize<List<Attendance>>(jsonAttendance) ?? new();
-                _attendance.RemoveAll(a => a.MatchId == "match-1" || a.MatchId == "match-2");
-                await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-            }
-
-            if (!string.IsNullOrEmpty(jsonPayments)) _payments = JsonSerializer.Deserialize<List<Payment>>(jsonPayments) ?? GetInitialPayments();
-
-            if (!string.IsNullOrEmpty(jsonExpenses)) _expenses = JsonSerializer.Deserialize<List<TeamExpense>>(jsonExpenses) ?? GetInitialExpenses();
-
-            if (!string.IsNullOrEmpty(jsonEvents)) _matchEvents = JsonSerializer.Deserialize<List<MatchEvent>>(jsonEvents) ?? GetInitialMatchEvents();
-
-            // Cloud sync from Supabase (shared real-time backend)
-            try
-            {
-                var sbProfiles = await _supabase.FetchProfilesAsync();
-                if (sbProfiles != null)
-                {
-                    if (sbProfiles.Count > 0)
-                    {
-                        _profiles = sbProfiles;
-                        EnsureOwnerAdminProtected();
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
-                    }
-                    else
-                    {
-                        _ = _supabase.UpsertProfilesBatchAsync(_profiles);
-                    }
-                }
-
-                var sbTeams = await _supabase.FetchRivalTeamsAsync();
-                if (sbTeams != null)
-                {
-                    if (sbTeams.Count > 0)
-                    {
-                        _rivalTeams = sbTeams;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_rival_teams", JsonSerializer.Serialize(_rivalTeams));
-                    }
-                    else
-                    {
-                        _ = _supabase.UpsertRivalTeamsBatchAsync(_rivalTeams);
-                    }
-                }
-
-                var sbMatches = await _supabase.FetchMatchesAsync();
-                if (sbMatches != null)
-                {
-                    sbMatches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
-                    _matches = sbMatches;
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-                }
-
-                var sbAttendance = await _supabase.FetchAttendanceAsync();
-                if (sbAttendance != null)
-                {
-                    sbAttendance.RemoveAll(a => a.MatchId == "match-1" || a.MatchId == "match-2");
-                    _attendance = sbAttendance;
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-                }
-
-                var sbPayments = await _supabase.FetchPaymentsAsync();
-                if (sbPayments != null)
-                {
-                    _payments = sbPayments;
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
-                }
-
-                var sbExpenses = await _supabase.FetchExpensesAsync();
-                if (sbExpenses != null)
-                {
-                    _expenses = sbExpenses;
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_expenses", JsonSerializer.Serialize(_expenses));
-                }
-
-                var sbEvents = await _supabase.FetchMatchEventsAsync();
-                if (sbEvents != null)
-                {
-                    _matchEvents = sbEvents;
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
-                }
-
-                var sbAnnouncements = await _supabase.FetchAnnouncementsAsync();
-                if (sbAnnouncements != null)
-                {
-                    if (sbAnnouncements.Count > 0)
-                    {
-                        _announcements = sbAnnouncements;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_announcements", JsonSerializer.Serialize(_announcements));
-                    }
-                    else
-                    {
-                        _ = _supabase.UpsertAnnouncementsBatchAsync(_announcements);
-                    }
-                }
-
-                var sbClub = await _supabase.FetchClubSettingsAsync();
-                if (sbClub != null && !string.IsNullOrEmpty(sbClub.ClubName))
-                {
-                    _clubSettings = sbClub;
-                    if (!string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode))
-                    {
-                        _teamSecretCode = _clubSettings.TeamSecretCode;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
-                    }
-                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
-                }
-                else
-                {
-                    _ = _supabase.UpsertClubSettingsAsync(_clubSettings);
-                }
-            }
-            catch
-            {
-                // Fallback seamless a almacenamiento local en caso de error de red
-            }
-        }
-        catch
-        {
-            LoadDefaults();
-        }
-
         _initialized = true;
+
+        await PurgeLegacyCacheAsync();
+        await _auth.LoadAsync();
+
+        if (_auth.IsSignedIn)
+        {
+            await LoadCacheAsync();
+            NotifyStateChanged();
+            await RefreshFromCloudAsync();
+            await StartRealtimeAsync();
+        }
+
         NotifyStateChanged();
     }
 
-    private void LoadDefaults()
+    public async Task RefreshFromCloudAsync()
     {
-        _profiles = GetInitialProfiles();
-        _rivalTeams = GetInitialRivalTeams();
-        _announcements = GetInitialAnnouncements();
-        _matches = GetInitialMatches();
-        _attendance = GetInitialAttendance();
-        _payments = GetInitialPayments();
-        _expenses = GetInitialExpenses();
-        _matchEvents = GetInitialMatchEvents();
+        if (!_auth.IsSignedIn) return;
+
+        var results = await Task.WhenAll(Tables.Select(t => RefreshTableCoreAsync(t)));
+        var anyOk = results.Any(r => r);
+        var allFailed = results.All(r => !r);
+
+        IsCloudConnected = anyOk;
+        if (anyOk) LastSyncUtc = DateTime.UtcNow;
+        if (allFailed && _lastCloudError != null)
+        {
+            OnError?.Invoke(_lastCloudError);
+        }
+        NotifyStateChanged();
     }
 
-    public bool IsOwnerAdmin(UserProfile? p)
-    {
-        if (p == null) return false;
-        var nick = p.Nickname?.Trim().ToLowerInvariant() ?? "";
-        var email = p.Email?.Trim().ToLowerInvariant() ?? "";
-        var name = p.FullName?.Trim().ToLowerInvariant() ?? "";
-        var id = p.Id?.Trim().ToLowerInvariant() ?? "";
+    private string? _lastCloudError;
 
-        return id == "user-1" 
-            || nick == "pitu1386" 
-            || nick == "pitu" 
-            || email.Contains("pitu1386")
-            || name == "pitu"
-            || name.Contains("pitu");
+    /// <summary>Lee una tabla de la nube y sustituye la copia local. Devuelve false si falló (sin lanzar).</summary>
+    private async Task<bool> RefreshTableCoreAsync(string table)
+    {
+        try
+        {
+            switch (table)
+            {
+                case "profiles":
+                    _profiles = await _supabase.FetchProfilesAsync();
+                    EnsureOwnerAdminProtected();
+                    _profilesLoaded = true;
+                    break;
+                case "club_settings":
+                    var club = await _supabase.FetchClubSettingsAsync();
+                    if (club != null) _clubSettings = club;
+                    break;
+                case "rival_teams":
+                    _rivalTeams = await _supabase.FetchRivalTeamsAsync();
+                    break;
+                case "matches":
+                    _matches = await _supabase.FetchMatchesAsync();
+                    break;
+                case "attendance":
+                    _attendance = await _supabase.FetchAttendanceAsync();
+                    break;
+                case "payments":
+                    _payments = await _supabase.FetchPaymentsAsync();
+                    break;
+                case "team_expenses":
+                    _expenses = await _supabase.FetchExpensesAsync();
+                    break;
+                case "match_events":
+                    _matchEvents = await _supabase.FetchMatchEventsAsync();
+                    break;
+                case "announcements":
+                    _announcements = await _supabase.FetchAnnouncementsAsync();
+                    break;
+                default:
+                    return false;
+            }
+            await SaveCacheAsync(table);
+            return true;
+        }
+        catch (SupabaseException ex)
+        {
+            _lastCloudError = ex.Message;
+            if (ex.StatusCode == null) IsCloudConnected = false;
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _lastCloudError = $"Error leyendo {table}: {ex.Message}";
+            return false;
+        }
+    }
+
+    private async Task RefreshTablesAsync(params string[] tables)
+    {
+        var results = await Task.WhenAll(tables.Select(RefreshTableCoreAsync));
+        if (results.Any(r => r))
+        {
+            IsCloudConnected = true;
+            LastSyncUtc = DateTime.UtcNow;
+        }
+        NotifyStateChanged();
+    }
+
+    /// <summary>Ejecuta una escritura en la nube. Si falla, avisa al usuario y devuelve false.</summary>
+    private async Task<bool> CloudWriteAsync(Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+            IsCloudConnected = true;
+            return true;
+        }
+        catch (SupabaseException ex)
+        {
+            if (ex.StatusCode == null) IsCloudConnected = false;
+            OnError?.Invoke(ex.Message);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke($"Error inesperado: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<bool> WriteAndRefreshAsync(Func<Task> operation, params string[] tables)
+    {
+        var ok = await CloudWriteAsync(operation);
+        // Se refresca también tras un fallo para deshacer el cambio optimista local.
+        await RefreshTablesAsync(tables);
+        return ok;
+    }
+
+    // ---------- Realtime (puente JS) ----------
+    private async Task StartRealtimeAsync()
+    {
+        try
+        {
+            _selfRef ??= DotNetObjectReference.Create(this);
+            var token = await _auth.GetAccessTokenAsync();
+            await _js.InvokeVoidAsync("apnRealtime.start", AppInfo.SupabaseUrl, AppInfo.SupabaseAnonKey, token, _selfRef);
+        }
+        catch
+        {
+            IsRealtimeConnected = false;
+        }
+    }
+
+    private async Task StopRealtimeAsync()
+    {
+        try { await _js.InvokeVoidAsync("apnRealtime.stop"); } catch { }
+        IsRealtimeConnected = false;
+    }
+
+    private async void HandleSessionChanged()
+    {
+        if (!_auth.IsSignedIn) return;
+        try
+        {
+            var token = await _auth.GetAccessTokenAsync();
+            if (token != null) await _js.InvokeVoidAsync("apnRealtime.setAuth", token);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public async Task OnCloudChange(string table)
+    {
+        if (!_auth.IsSignedIn) return;
+        if (Tables.Contains(table)) await RefreshTablesAsync(table);
+        else await RefreshFromCloudAsync();
+    }
+
+    [JSInvokable]
+    public Task OnRealtimeStatus(bool connected)
+    {
+        IsRealtimeConnected = connected;
+        NotifyStateChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnAppResumed() => RefreshFromCloudAsync();
+
+    // ---------- Caché local ----------
+    private async Task PurgeLegacyCacheAsync()
+    {
+        try
+        {
+            var marker = await _js.InvokeAsync<string?>("blazorLocalStorage.get", "apn_cache_version");
+            if (marker == CacheVersion) return;
+            // Claves de versiones anteriores (incluían contraseñas en claro).
+            foreach (var key in new[] { "apn_is_authenticated", "apn_current_user", "apn_team_secret_code", "apn_club_settings", "apn_profiles",
+                                        "apn_rival_teams", "apn_announcements", "apn_matches", "apn_attendance", "apn_payments", "apn_expenses", "apn_events" })
+            {
+                await _js.InvokeVoidAsync("blazorLocalStorage.remove", key);
+            }
+            await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_cache_version", CacheVersion);
+        }
+        catch { }
+    }
+
+    private async Task LoadCacheAsync()
+    {
+        try
+        {
+            _profiles = await ReadCacheAsync<List<UserProfile>>("profiles") ?? new();
+            _profilesLoaded = _profiles.Count > 0;
+            EnsureOwnerAdminProtected();
+            _clubSettings = await ReadCacheAsync<ClubSettings>("club_settings") ?? new();
+            _rivalTeams = await ReadCacheAsync<List<RivalTeam>>("rival_teams") ?? new();
+            _matches = await ReadCacheAsync<List<Match>>("matches") ?? new();
+            _attendance = await ReadCacheAsync<List<Attendance>>("attendance") ?? new();
+            _payments = await ReadCacheAsync<List<Payment>>("payments") ?? new();
+            _expenses = await ReadCacheAsync<List<TeamExpense>>("team_expenses") ?? new();
+            _matchEvents = await ReadCacheAsync<List<MatchEvent>>("match_events") ?? new();
+            _announcements = await ReadCacheAsync<List<TeamAnnouncement>>("announcements") ?? new();
+        }
+        catch
+        {
+            ClearMemory();
+        }
+    }
+
+    private async Task<T?> ReadCacheAsync<T>(string table)
+    {
+        var raw = await _js.InvokeAsync<string?>("blazorLocalStorage.get", CachePrefix + table);
+        return string.IsNullOrEmpty(raw) ? default : JsonSerializer.Deserialize<T>(raw);
+    }
+
+    private async Task SaveCacheAsync(string table)
+    {
+        object data = table switch
+        {
+            "profiles" => _profiles,
+            "club_settings" => _clubSettings,
+            "rival_teams" => _rivalTeams,
+            "matches" => _matches,
+            "attendance" => _attendance,
+            "payments" => _payments,
+            "team_expenses" => _expenses,
+            "match_events" => _matchEvents,
+            "announcements" => _announcements,
+            _ => new()
+        };
+        try { await _js.InvokeVoidAsync("blazorLocalStorage.set", CachePrefix + table, JsonSerializer.Serialize(data)); } catch { }
+    }
+
+    private async Task ClearCacheAsync()
+    {
+        foreach (var t in Tables)
+        {
+            try { await _js.InvokeVoidAsync("blazorLocalStorage.remove", CachePrefix + t); } catch { }
+        }
+    }
+
+    private void ClearMemory()
+    {
+        _profiles = new();
+        _profilesLoaded = false;
+        _clubSettings = new();
+        _rivalTeams = new();
+        _matches = new();
+        _attendance = new();
+        _payments = new();
+        _expenses = new();
+        _matchEvents = new();
+        _announcements = new();
     }
 
     private void EnsureOwnerAdminProtected()
@@ -271,170 +377,245 @@ public class TeamDataService : ITeamDataService
         }
     }
 
-    public UserProfile GetCurrentUser()
-    {
-        var user = _profiles.FirstOrDefault(p => p.Id == _currentUserId) 
-            ?? _profiles.FirstOrDefault(IsOwnerAdmin)
-            ?? _profiles.FirstOrDefault() 
-            ?? new UserProfile { Id = "user-1", FullName = "Sergio \"Pitu\"", Nickname = "pitu1386", Email = "pitu1386@gmail.com", Role = UserRole.Admin, IsCaptain = false, Position = Position.Centrocampista };
-
-        if (IsOwnerAdmin(user))
-        {
-            user.Role = UserRole.Admin;
-            user.IsActive = true;
-        }
-
-        return user;
-    }
-
-    public async Task SetCurrentUserIdAsync(string userId)
-    {
-        _currentUserId = userId;
-        _isAuthenticated = true;
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_current_user", userId);
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_is_authenticated", "true");
-        NotifyStateChanged();
-    }
-
+    // ==========================================
+    // AUTENTICACIÓN
+    // ==========================================
     public async Task<(bool Success, string ErrorMessage)> LoginAsync(string emailOrNickname, string password)
     {
         if (string.IsNullOrWhiteSpace(emailOrNickname))
             return (false, "Por favor ingresa tu email o apodo.");
+        if (string.IsNullOrEmpty(password))
+            return (false, "Ingresa tu contraseña.");
 
-        var cleanQuery = emailOrNickname.Trim().ToLowerInvariant();
-        var user = _profiles.FirstOrDefault(p => 
-            p.Email.Trim().ToLowerInvariant() == cleanQuery || 
-            p.Nickname.Trim().ToLowerInvariant() == cleanQuery ||
-            p.FullName.Trim().ToLowerInvariant() == cleanQuery);
+        var identifier = emailOrNickname.Trim();
+        string? email = identifier.Contains('@') ? identifier.ToLowerInvariant() : null;
 
-        if (user == null)
-            return (false, "No se encontró ningún jugador con ese email o apodo.");
+        if (email == null)
+        {
+            try
+            {
+                email = await _supabase.RpcAsync<string?>("lookup_login_email", new { identifier });
+            }
+            catch (SupabaseException ex)
+            {
+                return (false, ex.StatusCode == null ? ex.Message : "No se pudo consultar el apodo. ¿Está aplicado el script SQL de migración?");
+            }
+            if (string.IsNullOrEmpty(email))
+                return (false, "No se encontró ningún jugador con ese apodo. Prueba con tu email.");
+        }
 
-        if (!user.IsActive)
-            return (false, "DEACTIVATED_NEEDS_CODE");
+        var (ok, error) = await _auth.SignInWithPasswordAsync(email, password);
+        if (!ok) return (false, error);
 
-        // For demo or entered password check
-        if (!string.IsNullOrEmpty(user.Password) && user.Password != password && password != "1234")
-            return (false, "Contraseña incorrecta. (Prueba con '1234' para cuentas de demo).");
+        return await AfterSignInAsync();
+    }
 
-        _currentUserId = user.Id;
-        _isAuthenticated = true;
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_current_user", user.Id);
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_is_authenticated", "true");
+    private async Task<(bool Success, string ErrorMessage)> AfterSignInAsync()
+    {
+        ClearMemory();
+        await ClearCacheAsync();
+        await RefreshFromCloudAsync();
+
+        if (!_profilesLoaded)
+        {
+            return (false, _lastCloudError ?? "No se pudieron cargar los datos del club.");
+        }
+
+        if (CurrentProfile == null)
+        {
+            // Alta a medias (por ejemplo, confirmación de email): completar con lo guardado.
+            var pending = await ReadPendingProfileAsync();
+            if (pending != null)
+            {
+                var (done, err) = await CompleteRegistrationAsync(pending);
+                if (!done) return (false, err);
+            }
+        }
+
+        await StartRealtimeAsync();
         NotifyStateChanged();
-        return (true, string.Empty);
+
+        if (IsDeactivated) return (false, "DEACTIVATED_NEEDS_CODE");
+        return (true, "");
     }
 
     public async Task<(bool Success, string ErrorMessage)> RegisterAsync(RegisterModel model)
     {
-        var cleanInputCode = model.TeamCode?.Trim().Replace("-", "").ToUpperInvariant();
-        var cleanActualCode = GetTeamSecretCode().Trim().Replace("-", "").ToUpperInvariant();
-
-        if (string.IsNullOrWhiteSpace(cleanInputCode) || cleanInputCode != cleanActualCode)
-        {
-            return (false, "Código de equipo incorrecto. Pídele el código secreto actual al capitán para entrar.");
-        }
-
+        if (string.IsNullOrWhiteSpace(model.TeamCode))
+            return (false, "Introduce el código de equipo que te pasó el capitán.");
         if (string.IsNullOrWhiteSpace(model.FullName))
             return (false, "Debes ingresar tu nombre y apellido.");
-
         if (string.IsNullOrWhiteSpace(model.Email) || !model.Email.Contains('@'))
             return (false, "Ingresa una dirección de email válida.");
+        if (string.IsNullOrWhiteSpace(model.Password) || model.Password.Length < 6)
+            return (false, "La contraseña debe tener al menos 6 caracteres.");
 
-        if (string.IsNullOrWhiteSpace(model.Password) || model.Password.Length < 4)
-            return (false, "La contraseña debe tener al menos 4 caracteres.");
-
-        var cleanEmail = model.Email.Trim().ToLowerInvariant();
-        if (_profiles.Any(p => p.Email.Trim().ToLowerInvariant() == cleanEmail))
-            return (false, "Ya existe un jugador registrado con este email.");
-
-        var nickname = string.IsNullOrWhiteSpace(model.Nickname) 
-            ? model.FullName.Split(' ')[0] 
-            : model.Nickname.Trim();
-
-        var isFirstAdmin = !_profiles.Any(p => p.Role == UserRole.Admin);
-
-        var newProfile = new UserProfile
+        try
         {
-            FullName = model.FullName.Trim(),
-            Nickname = nickname,
-            Email = cleanEmail,
-            Password = model.Password,
-            Phone = model.Phone?.Trim() ?? string.Empty,
-            JerseyNumber = model.JerseyNumber,
-            Position = model.Position,
-            Foot = model.Foot,
-            BirthDate = model.BirthDate,
-            Role = isFirstAdmin ? UserRole.Admin : UserRole.Player,
-            CreatedAt = DateTime.UtcNow
-        };
+            var valid = await _supabase.RpcAsync<bool>("validate_team_code", new { p_code = model.TeamCode });
+            if (!valid) return (false, "Código de equipo incorrecto. Pídele el código actual al capitán para entrar.");
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, ex.StatusCode == null ? ex.Message : "No se pudo validar el código. ¿Está aplicado el script SQL de migración?");
+        }
 
-        _profiles.Add(newProfile);
-        _currentUserId = newProfile.Id;
-        _isAuthenticated = true;
+        var email = model.Email.Trim().ToLowerInvariant();
+        var (ok, hasSession, error) = await _auth.SignUpAsync(email, model.Password);
+        if (!ok) return (false, error);
 
-        await SaveProfilesAsync();
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_current_user", newProfile.Id);
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_is_authenticated", "true");
-        await _js.InvokeVoidAsync("triggerConfetti");
+        if (!hasSession)
+        {
+            await SavePendingProfileAsync(model);
+            return (false, "CONFIRM_EMAIL");
+        }
+
+        var (done, err) = await CompleteRegistrationAsync(model);
+        if (!done) return (false, err);
+
+        await StartRealtimeAsync();
+        try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { }
         NotifyStateChanged();
+        return (true, "");
+    }
 
-        return (true, string.Empty);
+    public async Task<(bool Success, string ErrorMessage)> CompleteRegistrationAsync(RegisterModel model)
+    {
+        if (!_auth.IsSignedIn) return (false, "No hay sesión activa.");
+        if (string.IsNullOrWhiteSpace(model.FullName)) return (false, "Debes ingresar tu nombre y apellido.");
+
+        try
+        {
+            await _supabase.RpcAsync("register_profile", new
+            {
+                p_team_code = model.TeamCode ?? "",
+                p_full_name = model.FullName.Trim(),
+                p_nickname = (model.Nickname ?? "").Trim(),
+                p_jersey_number = model.JerseyNumber,
+                p_position = (int)model.Position,
+                p_foot = (int)model.Foot,
+                p_phone = (model.Phone ?? "").Trim(),
+                p_birth_date = model.BirthDate?.ToString("yyyy-MM-dd")
+            });
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, ex.Message);
+        }
+
+        await ClearPendingProfileAsync();
+        await RefreshFromCloudAsync();
+        return CurrentProfile != null ? (true, "") : (false, "La ficha se creó pero no se pudo cargar. Recarga la app.");
+    }
+
+    public async Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string securityCode)
+    {
+        if (!_auth.IsSignedIn) return (false, "Inicia sesión primero con tu email y contraseña.");
+        if (string.IsNullOrWhiteSpace(securityCode)) return (false, "Introduce el código de seguridad.");
+
+        try
+        {
+            await _supabase.RpcAsync("reactivate_with_code", new { p_team_code = securityCode });
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, ex.Message);
+        }
+
+        await RefreshTablesAsync("profiles");
+        return IsAuthenticated ? (true, "") : (false, "No se pudo reactivar la ficha.");
+    }
+
+    public async Task<(bool Success, string ErrorMessage)> ChangeMyPasswordAsync(string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            return (false, "La contraseña debe tener al menos 6 caracteres.");
+        return await _auth.UpdatePasswordAsync(newPassword);
+    }
+
+    public async Task<(bool Success, string ErrorMessage)> AdminSetPasswordAsync(string profileId, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            return (false, "La contraseña debe tener al menos 6 caracteres.");
+        try
+        {
+            await _supabase.RpcAsync("admin_set_password", new { p_profile_id = profileId, p_new_password = newPassword });
+            return (true, "");
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, ex.Message);
+        }
     }
 
     public async Task LogoutAsync()
     {
-        _isAuthenticated = false;
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_is_authenticated", "false");
+        await StopRealtimeAsync();
+        await _auth.SignOutAsync();
+        ClearMemory();
+        await ClearCacheAsync();
+        IsCloudConnected = false;
+        LastSyncUtc = null;
         NotifyStateChanged();
     }
 
-    public string GetTeamSecretCode() => 
-        !string.IsNullOrWhiteSpace(_clubSettings.TeamSecretCode) ? _clubSettings.TeamSecretCode : _teamSecretCode;
+    private async Task SavePendingProfileAsync(RegisterModel model)
+    {
+        var copy = new RegisterModel
+        {
+            FullName = model.FullName, Nickname = model.Nickname, Email = model.Email, TeamCode = model.TeamCode,
+            JerseyNumber = model.JerseyNumber, Position = model.Position, Foot = model.Foot, Phone = model.Phone, BirthDate = model.BirthDate
+        };
+        try { await _js.InvokeVoidAsync("blazorLocalStorage.set", PendingProfileKey, JsonSerializer.Serialize(copy)); } catch { }
+    }
+
+    private async Task<RegisterModel?> ReadPendingProfileAsync()
+    {
+        try
+        {
+            var raw = await _js.InvokeAsync<string?>("blazorLocalStorage.get", PendingProfileKey);
+            return string.IsNullOrEmpty(raw) ? null : JsonSerializer.Deserialize<RegisterModel>(raw);
+        }
+        catch { return null; }
+    }
+
+    private async Task ClearPendingProfileAsync()
+    {
+        try { await _js.InvokeVoidAsync("blazorLocalStorage.remove", PendingProfileKey); } catch { }
+    }
+
+    // ==========================================
+    // CLUB
+    // ==========================================
+    public string GetTeamSecretCode() => _clubSettings.TeamSecretCode;
 
     public async Task<string> GenerateNewTeamCodeAsync()
     {
-        var randomCode = $"APN-{Random.Shared.Next(1000, 9999)}";
-        _teamSecretCode = randomCode;
-        _clubSettings.TeamSecretCode = randomCode;
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
-        await SaveClubSettingsAsync(_clubSettings);
-        NotifyStateChanged();
-        return _teamSecretCode;
+        var code = $"APN-{Random.Shared.Next(1000, 9999)}";
+        var settings = GetClubSettings();
+        settings.TeamSecretCode = code;
+        await SaveClubSettingsAsync(settings);
+        return _clubSettings.TeamSecretCode;
     }
 
     public ClubSettings GetClubSettings() => _clubSettings;
 
     public async Task SaveClubSettingsAsync(ClubSettings settings)
     {
-        if (string.IsNullOrWhiteSpace(settings.TeamSecretCode))
-        {
-            settings.TeamSecretCode = !string.IsNullOrWhiteSpace(_teamSecretCode) ? _teamSecretCode : "APN1929";
-        }
-        if (string.IsNullOrWhiteSpace(settings.LeagueName) && !string.IsNullOrWhiteSpace(_clubSettings.LeagueName))
-        {
-            settings.LeagueName = _clubSettings.LeagueName;
-        }
-        if (string.IsNullOrWhiteSpace(settings.SeasonName) && !string.IsNullOrWhiteSpace(_clubSettings.SeasonName))
-        {
-            settings.SeasonName = _clubSettings.SeasonName;
-        }
-        if ((settings.SeasonHistory == null || settings.SeasonHistory.Count == 0) && _clubSettings.SeasonHistory != null && _clubSettings.SeasonHistory.Count > 0)
-        {
-            settings.SeasonHistory = _clubSettings.SeasonHistory;
-        }
+        if (string.IsNullOrWhiteSpace(settings.TeamSecretCode)) settings.TeamSecretCode = _clubSettings.TeamSecretCode;
+        if (settings.SeasonHistory.Count == 0 && _clubSettings.SeasonHistory.Count > 0) settings.SeasonHistory = _clubSettings.SeasonHistory;
 
         _clubSettings = settings;
-        _teamSecretCode = _clubSettings.TeamSecretCode;
-
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_team_secret_code", _teamSecretCode);
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_club_settings", JsonSerializer.Serialize(_clubSettings));
-        await _supabase.UpsertClubSettingsAsync(_clubSettings);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertClubSettingsAsync(settings), "club_settings");
     }
 
-    public UserProfile? GetProfileById(string profileId) => 
-        _profiles.FirstOrDefault(p => p.Id == profileId);
+    // ==========================================
+    // PERFILES
+    // ==========================================
+    public List<UserProfile> GetProfiles() => _profiles.OrderBy(p => p.JerseyNumber ?? 99).ToList();
+
+    public UserProfile? GetProfileById(string profileId) => _profiles.FirstOrDefault(p => p.Id == profileId);
 
     public async Task SaveProfileAsync(UserProfile profile)
     {
@@ -444,35 +625,51 @@ public class TeamDataService : ITeamDataService
             profile.IsActive = true;
         }
 
-        var existingIndex = _profiles.FindIndex(p => p.Id == profile.Id);
-        if (existingIndex >= 0)
-        {
-            _profiles[existingIndex] = profile;
-        }
-        else
-        {
-            _profiles.Add(profile);
-        }
-
-        await SaveProfilesAsync();
+        var idx = _profiles.FindIndex(p => p.Id == profile.Id);
+        if (idx >= 0) _profiles[idx] = profile; else _profiles.Add(profile);
         NotifyStateChanged();
+
+        await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(profile), "profiles");
     }
 
     public async Task DeleteProfileAsync(string profileId)
     {
         var target = _profiles.FirstOrDefault(p => p.Id == profileId);
-        if (target != null && IsOwnerAdmin(target))
-        {
-            // El administrador principal del club nunca puede ser eliminado
-            return;
-        }
+        if (target == null || IsOwnerAdmin(target)) return;
 
-        _profiles.RemoveAll(p => p.Id == profileId && !IsOwnerAdmin(p));
-        await SaveProfilesAsync();
+        _profiles.RemoveAll(p => p.Id == profileId);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("profiles", profileId), "profiles");
     }
 
-    // Rival Teams & Standings
+    public async Task DeactivatePlayerAsync(string playerId)
+    {
+        var player = _profiles.FirstOrDefault(p => p.Id == playerId);
+        if (player == null || IsOwnerAdmin(player)) return;
+
+        player.IsActive = false;
+        NotifyStateChanged();
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(player), "profiles");
+
+        if (ok && CurrentProfile?.Id == playerId)
+        {
+            await LogoutAsync();
+        }
+    }
+
+    public async Task ReactivatePlayerAsync(string playerId)
+    {
+        var player = _profiles.FirstOrDefault(p => p.Id == playerId);
+        if (player == null) return;
+
+        player.IsActive = true;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(player), "profiles");
+    }
+
+    // ==========================================
+    // RIVALES Y CLASIFICACIÓN
+    // ==========================================
     public List<RivalTeam> GetRivalTeams() => _rivalTeams.OrderBy(t => t.Name).ToList();
 
     public RivalTeam? GetRivalTeamById(string teamId) => _rivalTeams.FirstOrDefault(t => t.Id == teamId);
@@ -480,31 +677,29 @@ public class TeamDataService : ITeamDataService
     public async Task AddRivalTeamAsync(RivalTeam team)
     {
         _rivalTeams.Add(team);
-        await SaveRivalTeamsAsync();
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertRivalTeamAsync(team), "rival_teams");
     }
 
     public async Task UpdateRivalTeamAsync(RivalTeam team)
     {
         var idx = _rivalTeams.FindIndex(t => t.Id == team.Id);
         if (idx >= 0) _rivalTeams[idx] = team;
-        await SaveRivalTeamsAsync();
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertRivalTeamAsync(team), "rival_teams");
     }
 
     public async Task DeleteRivalTeamAsync(string teamId)
     {
         _rivalTeams.RemoveAll(t => t.Id == teamId);
-        await SaveRivalTeamsAsync();
-        _ = _supabase.DeleteRowAsync("rival_teams", teamId);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("rival_teams", teamId), "rival_teams");
     }
 
     public List<StandingRow> GetStandings()
     {
         var standings = new List<StandingRow>();
 
-        // Nuestro equipo: ATºPOBLENOU (con datos configurables en Admin)
         var ourRow = new StandingRow
         {
             TeamId = "apn",
@@ -513,13 +708,22 @@ public class TeamDataService : ITeamDataService
             SecondaryColorHex = _clubSettings.SecondaryColorHex,
             IsOurTeam = true
         };
+        standings.Add(ourRow);
 
-        // 3. Procesar resultados de TODOS los partidos terminados de la liga
+        foreach (var rival in _rivalTeams)
+        {
+            standings.Add(new StandingRow
+            {
+                TeamId = rival.Id,
+                TeamName = rival.Name,
+                PrimaryColorHex = rival.PrimaryColorHex,
+                SecondaryColorHex = rival.SecondaryColorHex
+            });
+        }
+
         foreach (var m in _matches.Where(m => m.Status == MatchStatus.Finished))
         {
-            int hScore = 0;
-            int aScore = 0;
-
+            int hScore, aScore;
             if (m.IsOurMatch)
             {
                 if (!m.OurScore.HasValue || !m.RivalScore.HasValue) continue;
@@ -533,29 +737,8 @@ public class TeamDataService : ITeamDataService
                 aScore = m.AwayScore.Value;
             }
 
-            // Buscar fila local
-            StandingRow? homeRow = null;
-            if (m.IsOurMatch && m.IsHome)
-            {
-                homeRow = ourRow;
-            }
-            else
-            {
-                homeRow = standings.FirstOrDefault(s => (!string.IsNullOrEmpty(m.HomeTeamId) && s.TeamId == m.HomeTeamId) ||
-                                                        string.Equals(s.TeamName, m.HomeTeamName, StringComparison.OrdinalIgnoreCase));
-            }
-
-            // Buscar fila visitante
-            StandingRow? awayRow = null;
-            if (m.IsOurMatch && !m.IsHome)
-            {
-                awayRow = ourRow;
-            }
-            else
-            {
-                awayRow = standings.FirstOrDefault(s => (!string.IsNullOrEmpty(m.AwayTeamId) && s.TeamId == m.AwayTeamId) ||
-                                                        string.Equals(s.TeamName, m.AwayTeamName, StringComparison.OrdinalIgnoreCase));
-            }
+            var homeRow = m.IsOurMatch && m.IsHome ? ourRow : FindRow(standings, m.HomeTeamId, m.HomeTeamName);
+            var awayRow = m.IsOurMatch && !m.IsHome ? ourRow : FindRow(standings, m.AwayTeamId, m.AwayTeamName);
 
             if (homeRow != null)
             {
@@ -585,8 +768,125 @@ public class TeamDataService : ITeamDataService
                         .ToList();
     }
 
+    private static StandingRow? FindRow(List<StandingRow> rows, string teamId, string teamName)
+    {
+        if (!string.IsNullOrEmpty(teamId) && teamId != "apn")
+        {
+            var byId = rows.FirstOrDefault(s => s.TeamId == teamId);
+            if (byId != null) return byId;
+        }
+        if (string.IsNullOrEmpty(teamName)) return null;
+        var row = rows.FirstOrDefault(s => string.Equals(s.TeamName, teamName, StringComparison.OrdinalIgnoreCase));
+        if (row == null)
+        {
+            // Rival que no está en la lista de equipos: aparece igualmente en la tabla.
+            row = new StandingRow { TeamId = teamId, TeamName = teamName };
+            rows.Add(row);
+        }
+        return row;
+    }
+
+    // ==========================================
+    // COMUNICADOS
+    // ==========================================
+    public List<TeamAnnouncement> GetAnnouncements() =>
+        _announcements.Where(a => a.IsActive).OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt).ToList();
+
+    public List<TeamAnnouncement> GetAllAnnouncements() => _announcements.OrderByDescending(a => a.CreatedAt).ToList();
+
+    public async Task AddAnnouncementAsync(TeamAnnouncement announcement)
+    {
+        _announcements.Insert(0, announcement);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertAnnouncementAsync(announcement), "announcements");
+    }
+
+    public async Task VoteAnnouncementPollAsync(string announcementId, string playerId, int optionIndex)
+    {
+        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
+        if (ann == null) return;
+
+        ann.Votes[playerId] = optionIndex;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.RpcAsync("vote_poll", new { p_announcement_id = announcementId, p_option = optionIndex }), "announcements");
+    }
+
+    public Task ArchiveAnnouncementAsync(string announcementId) => SetAnnouncementActiveAsync(announcementId, false);
+    public Task RestoreAnnouncementAsync(string announcementId) => SetAnnouncementActiveAsync(announcementId, true);
+
+    private async Task SetAnnouncementActiveAsync(string announcementId, bool active)
+    {
+        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
+        if (ann == null) return;
+        ann.IsActive = active;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertAnnouncementAsync(ann), "announcements");
+    }
+
+    public async Task DeleteAnnouncementAsync(string announcementId)
+    {
+        _announcements.RemoveAll(a => a.Id == announcementId);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("announcements", announcementId), "announcements");
+    }
+
+    // ==========================================
+    // PARTIDOS Y ASISTENCIA
+    // ==========================================
+    public List<Match> GetMatches() => _matches.OrderBy(m => m.MatchDate).ToList();
+
+    public Match? GetNextMatch() =>
+        _matches.Where(m => m.IsOurMatch && m.Status == MatchStatus.Upcoming && m.MatchDate >= DateTime.UtcNow.AddHours(-3))
+                .OrderBy(m => m.MatchDate)
+                .FirstOrDefault();
+
+    public async Task AddMatchAsync(Match match)
+    {
+        _matches.Add(match);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+    }
+
+    public async Task AddLeagueMatchAsync(Match match)
+    {
+        if (match.HomeScore.HasValue && match.AwayScore.HasValue) match.Status = MatchStatus.Finished;
+        await AddMatchAsync(match);
+    }
+
+    public async Task UpdateMatchDetailsAsync(Match match)
+    {
+        var idx = _matches.FindIndex(m => m.Id == match.Id);
+        if (idx < 0) return;
+        _matches[idx] = match;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+    }
+
+    public async Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events)
+    {
+        var match = _matches.FirstOrDefault(m => m.Id == matchId);
+        if (match == null) return;
+
+        match.OurScore = ourScore;
+        match.RivalScore = rivalScore;
+        match.Status = MatchStatus.Finished;
+        _matchEvents.RemoveAll(e => e.MatchId == matchId);
+        _matchEvents.AddRange(events);
+        NotifyStateChanged();
+
+        var ok = await WriteAndRefreshAsync(async () =>
+        {
+            await _supabase.UpsertMatchAsync(match);
+            await _supabase.DeleteWhereAsync("match_events", "match_id", matchId);
+            await _supabase.UpsertMatchEventsAsync(events);
+        }, "matches", "match_events");
+
+        if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+    }
+
     public async Task SaveBatchRoundResultsAsync(int round, List<Match> matches)
     {
+        var changed = new List<Match>();
         foreach (var m in matches)
         {
             var existing = _matches.FirstOrDefault(x => x.Id == m.Id);
@@ -600,206 +900,43 @@ public class TeamDataService : ITeamDataService
                 existing.AwayTeamId = m.AwayTeamId;
                 existing.Round = m.Round;
                 existing.MatchDate = m.MatchDate;
-
-                if (existing.HomeScore.HasValue && existing.AwayScore.HasValue)
-                {
-                    existing.Status = MatchStatus.Finished;
-                }
+                if (existing.HomeScore.HasValue && existing.AwayScore.HasValue) existing.Status = MatchStatus.Finished;
+                changed.Add(existing);
             }
             else
             {
-                if (m.HomeScore.HasValue && m.AwayScore.HasValue)
-                {
-                    m.Status = MatchStatus.Finished;
-                }
+                if (m.HomeScore.HasValue && m.AwayScore.HasValue) m.Status = MatchStatus.Finished;
                 _matches.Add(m);
+                changed.Add(m);
             }
         }
-
-        await SaveMatchesAsync();
         NotifyStateChanged();
-    }
-
-    public async Task AddLeagueMatchAsync(Match match)
-    {
-        if (match.HomeScore.HasValue && match.AwayScore.HasValue)
-        {
-            match.Status = MatchStatus.Finished;
-        }
-        _matches.Add(match);
-        await SaveMatchesAsync();
-        NotifyStateChanged();
-    }
-
-    // Announcements & Polls
-    public List<TeamAnnouncement> GetAnnouncements() => 
-        _announcements.Where(a => a.IsActive).OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt).ToList();
-
-    public List<TeamAnnouncement> GetAllAnnouncements() =>
-        _announcements.OrderByDescending(a => a.CreatedAt).ToList();
-
-    public async Task AddAnnouncementAsync(TeamAnnouncement announcement)
-    {
-        _announcements.Insert(0, announcement);
-        await SaveAnnouncementsAsync();
-        NotifyStateChanged();
-    }
-
-    public async Task VoteAnnouncementPollAsync(string announcementId, string playerId, int optionIndex)
-    {
-        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
-        if (ann != null)
-        {
-            ann.Votes[playerId] = optionIndex;
-            await SaveAnnouncementsAsync();
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task ArchiveAnnouncementAsync(string announcementId)
-    {
-        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
-        if (ann != null)
-        {
-            ann.IsActive = false;
-            await SaveAnnouncementsAsync();
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task RestoreAnnouncementAsync(string announcementId)
-    {
-        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
-        if (ann != null)
-        {
-            ann.IsActive = true;
-            await SaveAnnouncementsAsync();
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task DeleteAnnouncementAsync(string announcementId)
-    {
-        _announcements.RemoveAll(a => a.Id == announcementId);
-        await SaveAnnouncementsAsync();
-        _ = _supabase.DeleteRowAsync("announcements", announcementId);
-        NotifyStateChanged();
-    }
-
-    public List<UserProfile> GetProfiles() => _profiles.OrderBy(p => p.JerseyNumber ?? 99).ToList();
-
-    public List<Match> GetMatches() => _matches.OrderBy(m => m.MatchDate).ToList();
-
-    public Match? GetNextMatch()
-    {
-        return _matches.Where(m => m.Status == MatchStatus.Upcoming && m.MatchDate >= DateTime.UtcNow.AddHours(-3))
-                       .OrderBy(m => m.MatchDate)
-                       .FirstOrDefault();
-    }
-
-    public async Task AddMatchAsync(Match match)
-    {
-        _matches.Add(match);
-        await SaveMatchesAsync();
-        NotifyStateChanged();
-    }
-
-    public async Task UpdateMatchDetailsAsync(Match match)
-    {
-        var idx = _matches.FindIndex(m => m.Id == match.Id);
-        if (idx >= 0)
-        {
-            _matches[idx] = match;
-            await SaveMatchesAsync();
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events)
-    {
-        var match = _matches.FirstOrDefault(m => m.Id == matchId);
-        if (match != null)
-        {
-            match.OurScore = ourScore;
-            match.RivalScore = rivalScore;
-            match.Status = MatchStatus.Finished;
-
-            _matchEvents.RemoveAll(e => e.MatchId == matchId);
-            _matchEvents.AddRange(events);
-
-            await SaveMatchesAsync();
-            await SaveEventsAsync();
-            await _js.InvokeVoidAsync("triggerConfetti");
-            NotifyStateChanged();
-        }
+        await WriteAndRefreshAsync(() => _supabase.UpsertMatchesAsync(changed), "matches");
     }
 
     public async Task DeleteMatchAsync(string matchId)
     {
-        _matches.RemoveAll(m => m.Id == matchId || m.Id == "match-1" || m.Id == "match-2");
+        _matches.RemoveAll(m => m.Id == matchId);
         _attendance.RemoveAll(a => a.MatchId == matchId);
         _matchEvents.RemoveAll(e => e.MatchId == matchId);
-
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
-
-        try
-        {
-            await _supabase.DeleteRowsWhereAsync("attendance", "match_id", matchId);
-            await _supabase.DeleteRowsWhereAsync("match_events", "match_id", matchId);
-            await _supabase.DeleteRowAsync("matches", matchId);
-        }
-        catch
-        {
-            // Fallback silencioso si no hay conexión
-        }
-
         NotifyStateChanged();
+        // Asistencias y eventos caen en cascada por la clave foránea.
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("matches", matchId), "matches", "attendance", "match_events");
     }
 
     public async Task ClearAllMatchesAsync()
     {
-        var matchIds = _matches.Select(m => m.Id).ToList();
         _matches.Clear();
         _attendance.Clear();
         _matchEvents.Clear();
-
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", "[]");
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", "[]");
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", "[]");
-
-        foreach (var id in matchIds)
-        {
-            try
-            {
-                await _supabase.DeleteRowsWhereAsync("attendance", "match_id", id);
-                await _supabase.DeleteRowsWhereAsync("match_events", "match_id", id);
-                await _supabase.DeleteRowAsync("matches", id);
-            }
-            catch { }
-        }
-
-        // Asegurar que los mocks viejos también se borren en Supabase
-        try
-        {
-            await _supabase.DeleteRowAsync("matches", "match-1");
-            await _supabase.DeleteRowAsync("matches", "match-2");
-        }
-        catch { }
-
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.RpcAsync("clear_all_matches"), "matches", "attendance", "match_events");
     }
 
-    public List<Attendance> GetAttendanceForMatch(string matchId)
-    {
-        return _attendance.Where(a => a.MatchId == matchId).ToList();
-    }
+    public List<Attendance> GetAttendanceForMatch(string matchId) => _attendance.Where(a => a.MatchId == matchId).ToList();
 
-    public Attendance? GetUserAttendance(string matchId, string playerId)
-    {
-        return _attendance.FirstOrDefault(a => a.MatchId == matchId && a.PlayerId == playerId);
-    }
+    public Attendance? GetUserAttendance(string matchId, string playerId) =>
+        _attendance.FirstOrDefault(a => a.MatchId == matchId && a.PlayerId == playerId);
 
     public async Task SetAttendanceAsync(string matchId, string playerId, AttendanceStatus status, string? note = null)
     {
@@ -812,32 +949,30 @@ public class TeamDataService : ITeamDataService
         }
         else
         {
-            _attendance.Add(new Attendance
-            {
-                MatchId = matchId,
-                PlayerId = playerId,
-                Status = status,
-                Note = note,
-                UpdatedAt = DateTime.UtcNow
-            });
+            att = new Attendance { MatchId = matchId, PlayerId = playerId, Status = status, Note = note, UpdatedAt = DateTime.UtcNow };
+            _attendance.Add(att);
         }
-
-        if (status == AttendanceStatus.Going)
-        {
-            await _js.InvokeVoidAsync("triggerConfetti");
-        }
-
-        await SaveAttendanceAsync();
         NotifyStateChanged();
+
+        // on_conflict sobre (match_id, player_id): si otro dispositivo creó la fila antes, se actualiza en vez de duplicar.
+        var ok = await WriteAndRefreshAsync(
+            () => _supabase.UpsertRowAsync("attendance?on_conflict=match_id,player_id", SupabaseMappers.ToDto(att)),
+            "attendance");
+
+        if (ok && status == AttendanceStatus.Going) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
     }
 
+    // ==========================================
+    // PAGOS Y CAJA
+    // ==========================================
     public List<Payment> GetPayments() => _payments.OrderByDescending(p => p.PaidAt ?? p.DueDate ?? DateTime.MinValue).ToList();
 
-    public List<Payment> GetPaymentsForUser(string playerId) => _payments.Where(p => p.PlayerId == playerId).OrderByDescending(p => p.PaidAt ?? DateTime.MinValue).ToList();
+    public List<Payment> GetPaymentsForUser(string playerId) =>
+        _payments.Where(p => p.PlayerId == playerId).OrderByDescending(p => p.PaidAt ?? DateTime.MinValue).ToList();
 
     public async Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "")
     {
-        _payments.Insert(0, new Payment
+        var payment = new Payment
         {
             PlayerId = playerId,
             Concept = concept,
@@ -846,360 +981,115 @@ public class TeamDataService : ITeamDataService
             PaidAt = paidAt ?? DateTime.UtcNow,
             Method = method,
             Notes = notes
-        });
-
-        await SavePaymentsAsync();
-        await _js.InvokeVoidAsync("triggerConfetti");
+        };
+        _payments.Insert(0, payment);
         NotifyStateChanged();
+
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertPaymentAsync(payment), "payments");
+        if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
     }
 
     public async Task AddBatchFeeAsync(string concept, decimal amount, DateTime dueDate)
     {
-        foreach (var profile in _profiles)
+        var fees = _profiles.Where(p => p.IsActive).Select(p => new Payment
         {
-            _payments.Add(new Payment
-            {
-                PlayerId = profile.Id,
-                Concept = concept,
-                Amount = amount,
-                DueDate = dueDate,
-                Status = PaymentStatus.Pending
-            });
-        }
+            PlayerId = p.Id,
+            Concept = concept,
+            Amount = amount,
+            DueDate = dueDate,
+            Status = PaymentStatus.Pending
+        }).ToList();
 
-        await SavePaymentsAsync();
+        _payments.AddRange(fees);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertPaymentsAsync(fees), "payments");
     }
 
     public async Task MarkPaymentAsPaidAsync(string paymentId, PaymentMethod method, string notes = "")
     {
         var pay = _payments.FirstOrDefault(p => p.Id == paymentId);
-        if (pay != null)
-        {
-            pay.Status = PaymentStatus.Paid;
-            pay.PaidAt = DateTime.UtcNow;
-            pay.Method = method;
-            pay.Notes = notes;
+        if (pay == null) return;
 
-            await SavePaymentsAsync();
-            await _js.InvokeVoidAsync("triggerConfetti");
-            NotifyStateChanged();
-        }
+        pay.Status = PaymentStatus.Paid;
+        pay.PaidAt = DateTime.UtcNow;
+        pay.Method = method;
+        pay.Notes = notes;
+        NotifyStateChanged();
+
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertPaymentAsync(pay), "payments");
+        if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
     }
 
-    public decimal GetTeamBalance()
+    public async Task DeletePaymentAsync(string paymentId)
     {
-        var totalIncome = _payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
-        var totalExpenses = _expenses.Sum(e => e.Amount);
-        return totalIncome - totalExpenses;
+        _payments.RemoveAll(p => p.Id == paymentId);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("payments", paymentId), "payments");
     }
+
+    public decimal GetTeamBalance() =>
+        _payments.Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount) - _expenses.Sum(e => e.Amount);
 
     public decimal GetTotalCollectedThisMonth()
     {
         var now = DateTime.UtcNow;
-        return _payments.Where(p => p.Status == PaymentStatus.Paid && p.PaidAt?.Month == now.Month && p.PaidAt?.Year == now.Year)
-                        .Sum(p => p.Amount);
+        return _payments.Where(p => p.Status == PaymentStatus.Paid && p.PaidAt?.Month == now.Month && p.PaidAt?.Year == now.Year).Sum(p => p.Amount);
     }
 
-    public decimal GetTotalPendingAmount()
-    {
-        return _payments.Where(p => p.Status == PaymentStatus.Pending).Sum(p => p.Amount);
-    }
+    public decimal GetTotalPendingAmount() => _payments.Where(p => p.Status == PaymentStatus.Pending).Sum(p => p.Amount);
 
     public List<TeamExpense> GetExpenses() => _expenses.OrderByDescending(e => e.ExpenseDate).ToList();
 
     public async Task AddExpenseAsync(TeamExpense expense)
     {
         _expenses.Insert(0, expense);
-        await SaveExpensesAsync();
-        _ = _supabase.UpsertExpenseAsync(expense);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertExpenseAsync(expense), "team_expenses");
     }
 
     public async Task DeleteExpenseAsync(string expenseId)
     {
         _expenses.RemoveAll(e => e.Id == expenseId);
-        await SaveExpensesAsync();
-        _ = _supabase.DeleteRowAsync("team_expenses", expenseId);
         NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("team_expenses", expenseId), "team_expenses");
     }
 
+    // ==========================================
+    // ESTADÍSTICAS
+    // ==========================================
     public List<MatchEvent> GetMatchEvents() => _matchEvents;
 
-    public Dictionary<string, int> GetTopScorers()
-    {
-        return _matchEvents.Where(e => e.EventType == EventType.Goal)
-                           .GroupBy(e => e.PlayerId)
-                           .ToDictionary(g => g.Key, g => g.Count())
-                           .OrderByDescending(kv => kv.Value)
-                           .ToDictionary(kv => kv.Key, kv => kv.Value);
-    }
+    public Dictionary<string, int> GetTopScorers() => CountByPlayer(EventType.Goal);
+    public Dictionary<string, int> GetTopAssisters() => CountByPlayer(EventType.Assist);
+    public Dictionary<string, int> GetMvpSummary() => CountByPlayer(EventType.Mvp);
 
-    public Dictionary<string, int> GetTopAssisters()
-    {
-        return _matchEvents.Where(e => e.EventType == EventType.Assist)
-                           .GroupBy(e => e.PlayerId)
-                           .ToDictionary(g => g.Key, g => g.Count())
-                           .OrderByDescending(kv => kv.Value)
-                           .ToDictionary(kv => kv.Key, kv => kv.Value);
-    }
+    private Dictionary<string, int> CountByPlayer(EventType type) =>
+        _matchEvents.Where(e => e.EventType == type)
+                    .GroupBy(e => e.PlayerId)
+                    .OrderByDescending(g => g.Count())
+                    .ToDictionary(g => g.Key, g => g.Count());
 
     public Dictionary<string, (int Yellows, int Reds)> GetCardsSummary()
     {
         var result = new Dictionary<string, (int Yellows, int Reds)>();
-        foreach (var e in _matchEvents.Where(x => x.EventType == EventType.YellowCard || x.EventType == EventType.RedCard))
+        foreach (var e in _matchEvents.Where(x => x.EventType is EventType.YellowCard or EventType.RedCard))
         {
-            if (!result.ContainsKey(e.PlayerId))
-                result[e.PlayerId] = (0, 0);
-
-            var curr = result[e.PlayerId];
-            if (e.EventType == EventType.YellowCard) result[e.PlayerId] = (curr.Yellows + 1, curr.Reds);
-            else if (e.EventType == EventType.RedCard) result[e.PlayerId] = (curr.Yellows, curr.Reds + 1);
+            (int Yellows, int Reds) curr = result.TryGetValue(e.PlayerId, out var c) ? c : (0, 0);
+            result[e.PlayerId] = e.EventType == EventType.YellowCard ? (curr.Yellows + 1, curr.Reds) : (curr.Yellows, curr.Reds + 1);
         }
         return result;
     }
 
-    public Dictionary<string, int> GetMvpSummary()
-    {
-        return _matchEvents.Where(e => e.EventType == EventType.Mvp)
-                           .GroupBy(e => e.PlayerId)
-                           .ToDictionary(g => g.Key, g => g.Count())
-                           .OrderByDescending(kv => kv.Value)
-                           .ToDictionary(kv => kv.Key, kv => kv.Value);
-    }
-
-    public async Task ResetToDemoAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_current_user");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_profiles");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_rival_teams");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_announcements");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_matches");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_attendance");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_payments");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_expenses");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_events");
-        await _js.InvokeVoidAsync("blazorLocalStorage.remove", "apn_team_secret_code");
-
-        _currentUserId = "user-1";
-        LoadDefaults();
-        NotifyStateChanged();
-    }
-
-    private async Task SaveProfilesAsync()
-    {
-        EnsureOwnerAdminProtected();
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_profiles", JsonSerializer.Serialize(_profiles));
-        _ = _supabase.UpsertProfilesBatchAsync(_profiles);
-    }
-
-    private async Task SaveRivalTeamsAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_rival_teams", JsonSerializer.Serialize(_rivalTeams));
-        _ = _supabase.UpsertRivalTeamsBatchAsync(_rivalTeams);
-    }
-
-    private async Task SaveAnnouncementsAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_announcements", JsonSerializer.Serialize(_announcements));
-        _ = _supabase.UpsertAnnouncementsBatchAsync(_announcements);
-    }
-
-    private async Task SaveMatchesAsync()
-    {
-        _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-        if (_matches.Count > 0)
-        {
-            _ = _supabase.UpsertMatchesBatchAsync(_matches);
-        }
-    }
-
-    private async Task SaveAttendanceAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-        _ = _supabase.UpsertAttendanceBatchAsync(_attendance);
-    }
-
-    private async Task SavePaymentsAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_payments", JsonSerializer.Serialize(_payments));
-        _ = _supabase.UpsertPaymentsBatchAsync(_payments);
-    }
-
-    private async Task SaveExpensesAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_expenses", JsonSerializer.Serialize(_expenses));
-    }
-
-    private async Task SaveEventsAsync()
-    {
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
-        _ = _supabase.UpsertMatchEventsBatchAsync(_matchEvents);
-    }
-
-    private List<TeamAnnouncement> GetInitialAnnouncements() => new()
-    {
-        new TeamAnnouncement
-        {
-            Id = "ann-1",
-            Title = "🥩 Asado y Tercer Tiempo este sábado post-partido",
-            Content = "Muchachos, después de terminar la primera jornada contra FONTETAS, organizamos un asado en la parrilla del club. ¡Confirmen en la encuesta para calcular la carne, bebidas y brasas!",
-            AuthorName = "pitu1386 (Capitán)",
-            CreatedAt = DateTime.UtcNow.AddHours(-3),
-            HasPoll = true,
-            PollOptions = new() { "Me sumo al asado 🥩", "En duda / aviso el viernes 🤔", "No llego ❌" },
-            Votes = new()
-            {
-                { "user-1", 0 }, // Dani: Me sumo
-                { "user-2", 0 }, // Carles: Me sumo
-                { "user-3", 0 }, // Marc: Me sumo
-                { "user-4", 1 }  // Jordi: En duda
-            },
-            IsPinned = true,
-            IsActive = true
-        },
-        new TeamAnnouncement
-        {
-            Id = "ann-archived-1",
-            Title = "👕 Nuevas Camisetas Oficiales y Cierre de Pretemporada",
-            Content = "Compañeros, ya llegaron todas las camisetas titulares (rojiblancas) y alternativas con los dorsales estampados. ¡A darlo todo en el debut liguero!",
-            AuthorName = "pitu1386 (Capitán)",
-            CreatedAt = DateTime.UtcNow.AddDays(-10),
-            HasPoll = false,
-            IsPinned = false,
-            IsActive = false
-        }
-    };
-
-    private List<RivalTeam> GetInitialRivalTeams() => new()
-    {
-        new RivalTeam { Id = "team-1", Name = "FONTETAS", PrimaryColorHex = "#EAB308", SecondaryColorHex = "#15803D", KitDescription = "Amarillo y Verde" },
-        new RivalTeam { Id = "team-2", Name = "LA PEÑA", PrimaryColorHex = "#DC2626", SecondaryColorHex = "#FFFFFF", KitDescription = "Rojo y Blanco" },
-        new RivalTeam { Id = "team-3", Name = "ARISTOI B", PrimaryColorHex = "#1E3A8A", SecondaryColorHex = "#FFFFFF", KitDescription = "Azul Marino y Blanco" },
-        new RivalTeam { Id = "team-4", Name = "LA PLANADA A", PrimaryColorHex = "#EA580C", SecondaryColorHex = "#000000", KitDescription = "Naranja y Negro" },
-        new RivalTeam { Id = "team-6", Name = "LLANO", PrimaryColorHex = "#16A34A", SecondaryColorHex = "#FFFFFF", KitDescription = "Verde y Blanco" },
-        new RivalTeam { Id = "team-7", Name = "CAN ROCA74", PrimaryColorHex = "#2563EB", SecondaryColorHex = "#FACC15", KitDescription = "Azul y Amarillo" },
-        new RivalTeam { Id = "team-8", Name = "LA PLANADA B", PrimaryColorHex = "#F97316", SecondaryColorHex = "#FFFFFF", KitDescription = "Naranja y Blanco" },
-        new RivalTeam { Id = "team-9", Name = "LLIÇA D’AVALL", PrimaryColorHex = "#DC2626", SecondaryColorHex = "#FACC15", KitDescription = "Rojo y Amarillo" },
-        new RivalTeam { Id = "team-10", Name = "ATºBADIENSE", PrimaryColorHex = "#3B82F6", SecondaryColorHex = "#FFFFFF", KitDescription = "Azul y Blanco" },
-        new RivalTeam { Id = "team-11", Name = "CDPV BADIA", PrimaryColorHex = "#15803D", SecondaryColorHex = "#000000", KitDescription = "Verde y Negro" },
-        new RivalTeam { Id = "team-12", Name = "ATºLA CELESTE", PrimaryColorHex = "#0284C7", SecondaryColorHex = "#FFFFFF", KitDescription = "Celeste y Blanco" },
-        new RivalTeam { Id = "team-13", Name = "STA PERPETUA", PrimaryColorHex = "#1D4ED8", SecondaryColorHex = "#EF4444", KitDescription = "Azul y Rojo" },
-        new RivalTeam { Id = "team-14", Name = "PUEBLO NUEVO 2002", PrimaryColorHex = "#991B1B", SecondaryColorHex = "#000000", KitDescription = "Granate y Negro" },
-        new RivalTeam { Id = "team-15", Name = "ARISTOI A", PrimaryColorHex = "#1E3A8A", SecondaryColorHex = "#F59E0B", KitDescription = "Azul Marino y Dorado" }
-    };
-
-    private void NotifyStateChanged() => OnChange?.Invoke();
-
-    // Datos iniciales en Español
-    private List<UserProfile> GetInitialProfiles() => new()
-    {
-        new UserProfile { Id = "user-1", FullName = "Pitu", Nickname = "pitu1386", JerseyNumber = 10, Position = Position.Centrocampista, Foot = DominantFoot.Diestro, Role = UserRole.Admin, IsCaptain = false, Phone = "+34 600 00 00 00", Email = "pitu1386@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 5, 14), Dni = "47891234X" },
-        new UserProfile { Id = "user-2", FullName = "Carles Puig", Nickname = "Carles", JerseyNumber = 4, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Treasurer, IsCaptain = true, Phone = "+34 622 33 44 55", Email = "carles@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1985, 11, 23), Dni = "46543210Y" },
-        new UserProfile { Id = "user-3", FullName = "Marc Rovira", Nickname = "Marc", JerseyNumber = 1, Position = Position.Portero, Foot = DominantFoot.Diestro, Role = UserRole.FieldManager, IsCaptain = false, Phone = "+34 633 44 55 66", Email = "marc@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1989, 2, 8) },
-        new UserProfile { Id = "user-4", FullName = "Jordi Soler", Nickname = "Jordi", JerseyNumber = 2, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 644 55 66 77", Email = "jordi@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 9, 30) },
-        new UserProfile { Id = "user-5", FullName = "Sergi Vidal", Nickname = "Sergi", JerseyNumber = 3, Position = Position.Defensa, Foot = DominantFoot.Zurdo, Role = UserRole.Player, IsCaptain = false, Phone = "+34 655 66 77 88", Email = "sergi@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1988, 4, 19) },
-        new UserProfile { Id = "user-6", FullName = "Xavi Font", Nickname = "Xavi", JerseyNumber = 6, Position = Position.Centrocampista, Foot = DominantFoot.Ambidiestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 666 77 88 99", Email = "xavi@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1984, 12, 1) },
-        new UserProfile { Id = "user-7", FullName = "Albert Serra", Nickname = "Albert", JerseyNumber = 8, Position = Position.Centrocampista, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 677 88 99 00", Email = "albert@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1987, 8, 11) },
-        new UserProfile { Id = "user-8", FullName = "Lluís Martí", Nickname = "Lluís", JerseyNumber = 9, Position = Position.Delantero, Foot = DominantFoot.Zurdo, Role = UserRole.Player, IsCaptain = false, Phone = "+34 688 99 00 11", Email = "lluis@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 7, 25) },
-        new UserProfile { Id = "user-9", FullName = "Pol Navarro", Nickname = "Pol", JerseyNumber = 11, Position = Position.Delantero, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 699 00 11 22", Email = "pol@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1990, 3, 17) },
-        new UserProfile { Id = "user-10", FullName = "Gerard Mas", Nickname = "Geri", JerseyNumber = 5, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 612 34 56 78", Email = "gerard@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1988, 10, 5) }
-    };
-
-    private List<Match> GetInitialMatches() => new();
-
-    private List<Attendance> GetInitialAttendance() => new();
-
-    private List<Payment> GetInitialPayments() => new();
-
-    private List<TeamExpense> GetInitialExpenses() => new();
-
-    private List<MatchEvent> GetInitialMatchEvents() => new();
-
     // ==========================================
-    // DEACTIVATION & SECURITY CODE REACTIVATION
-    // ==========================================
-    public async Task DeactivatePlayerAsync(string playerId)
-    {
-        var player = _profiles.FirstOrDefault(p => p.Id == playerId);
-        if (player != null)
-        {
-            if (IsOwnerAdmin(player))
-            {
-                // El administrador principal del club nunca puede ser dado de baja
-                return;
-            }
-
-            player.IsActive = false;
-            await SaveProfilesAsync();
-
-            // If the deactivated player is currently logged in, kick them out immediately
-            if (_currentUserId == playerId)
-            {
-                await LogoutAsync();
-            }
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task ReactivatePlayerAsync(string playerId)
-    {
-        var player = _profiles.FirstOrDefault(p => p.Id == playerId);
-        if (player != null)
-        {
-            player.IsActive = true;
-            await SaveProfilesAsync();
-            NotifyStateChanged();
-        }
-    }
-
-    public async Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string emailOrNickname, string password, string securityCode)
-    {
-        if (string.IsNullOrWhiteSpace(emailOrNickname))
-            return (false, "Ingresa tu email o apodo.");
-
-        var cleanCode = securityCode?.Trim().Replace("-", "").ToUpperInvariant();
-        var currentCode = GetTeamSecretCode().Trim().Replace("-", "").ToUpperInvariant();
-
-        if (string.IsNullOrWhiteSpace(cleanCode) || cleanCode != currentCode)
-        {
-            return (false, "Código de seguridad incorrecto. Pídele el código secreto actual al administrador.");
-        }
-
-        var cleanQuery = emailOrNickname.Trim().ToLowerInvariant();
-        var user = _profiles.FirstOrDefault(p => 
-            p.Email.Trim().ToLowerInvariant() == cleanQuery || 
-            p.Nickname.Trim().ToLowerInvariant() == cleanQuery ||
-            p.FullName.Trim().ToLowerInvariant() == cleanQuery);
-
-        if (user == null)
-            return (false, "No se encontró ningún jugador con ese usuario.");
-
-        if (!string.IsNullOrEmpty(user.Password) && user.Password != password && password != "1234")
-            return (false, "Contraseña incorrecta.");
-
-        user.IsActive = true;
-        await SaveProfilesAsync();
-
-        _currentUserId = user.Id;
-        _isAuthenticated = true;
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_current_user", user.Id);
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_is_authenticated", "true");
-        NotifyStateChanged();
-        return (true, string.Empty);
-    }
-
-    // ==========================================
-    // SEASON LIFECYCLE & NEW SEASON WIZARD
+    // TEMPORADAS
     // ==========================================
     public async Task CloseSeasonAndStartNewAsync(string newSeasonName, decimal newSeasonFee)
     {
         var standings = GetStandings();
         var ourPos = standings.FindIndex(s => s.IsOurTeam) + 1;
         var ourRow = standings.FirstOrDefault(s => s.IsOurTeam);
-        var topScorers = GetTopScorers();
-        var pichichiEntry = topScorers.OrderByDescending(x => x.Value).FirstOrDefault();
+        var pichichi = GetTopScorers().FirstOrDefault();
+        var pichichiName = !string.IsNullOrEmpty(pichichi.Key) ? (GetProfileById(pichichi.Key)?.Nickname ?? pichichi.Key) : "Sin registrar";
 
         var archive = new SeasonArchive
         {
@@ -1214,157 +1104,34 @@ public class TeamDataService : ITeamDataService
             Points = ourRow?.Points ?? 0,
             GoalsFor = ourRow?.GoalsFor ?? 0,
             GoalsAgainst = ourRow?.GoalsAgainst ?? 0,
-            PichichiPlayerName = !string.IsNullOrEmpty(pichichiEntry.Key) ? pichichiEntry.Key : "Sin registrar",
-            PichichiGoals = pichichiEntry.Value,
+            PichichiPlayerName = pichichiName,
+            PichichiGoals = pichichi.Value,
             FinalBalance = GetTeamBalance()
         };
 
-        _clubSettings.SeasonHistory.Add(archive);
-        _clubSettings.SeasonName = newSeasonName;
-        _clubSettings.SeasonFeePerPlayer = newSeasonFee;
-        await SaveClubSettingsAsync(_clubSettings);
+        // Todo en una transacción en el servidor: archivo + limpieza de partidos, asistencias, eventos y cobros.
+        var ok = await CloudWriteAsync(() => _supabase.RpcAsync("close_season", new
+        {
+            p_archive = archive,
+            p_new_season_name = newSeasonName,
+            p_new_fee = newSeasonFee
+        }));
 
-        // Clear matches, match events, attendances for the new season
-        _matches.Clear();
-        _matchEvents.Clear();
-        _attendance.Clear();
-        await SaveMatchesAsync();
-        await SaveEventsAsync();
-        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-
-        // Reset all player payment records for the new season so they start at 0€ (players intact!)
-        _payments.Clear();
-        await SavePaymentsAsync();
-
-        NotifyStateChanged();
+        if (ok)
+        {
+            _matches.Clear();
+            _matchEvents.Clear();
+            _attendance.Clear();
+            _payments.Clear();
+        }
+        await RefreshFromCloudAsync();
     }
 
-    // ==========================================
-    // DYNAMIC MATCH WEATHER (OPEN-METEO)
-    // ==========================================
-    public async Task<MatchWeatherInfo> GetMatchWeatherAsync(DateTime matchDate, string locationName, bool isHome)
+    private void NotifyStateChanged() => OnChange?.Invoke();
+
+    public void Dispose()
     {
-        double lat = 41.3985;
-        double lon = 2.2032;
-        var cleanLoc = locationName?.ToLowerInvariant() ?? "";
-
-        if (cleanLoc.Contains("sabadell") || cleanLoc.Contains("planada"))
-        {
-            lat = 41.5433; lon = 2.1094;
-        }
-        else if (cleanLoc.Contains("badia"))
-        {
-            lat = 41.5085; lon = 2.1481;
-        }
-        else if (cleanLoc.Contains("cerdanyola") || cleanLoc.Contains("fontetas"))
-        {
-            lat = 41.4925; lon = 2.1415;
-        }
-        else if (cleanLoc.Contains("terrassa") || cleanLoc.Contains("roca") || cleanLoc.Contains("pueblo nuevo"))
-        {
-            lat = 41.5632; lon = 2.0089;
-        }
-        else if (cleanLoc.Contains("perpetua"))
-        {
-            lat = 41.5348; lon = 2.1812;
-        }
-        else if (cleanLoc.Contains("lliça") || cleanLoc.Contains("llica"))
-        {
-            lat = 41.5936; lon = 2.2356;
-        }
-
-        var result = new MatchWeatherInfo
-        {
-            LocationName = !string.IsNullOrEmpty(locationName) ? locationName : "Camp Municipal Agapito Fernández",
-            Temperature = 22,
-            PrecipitationProbability = 0,
-            WindSpeed = 10,
-            Humidity = 55,
-            ConditionText = "Cielo Despejado",
-            Icon = "☀️",
-            IsOptimal = true
-        };
-
-        try
-        {
-            var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}&longitude={lon.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m&timezone=auto";
-            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
-            var response = await _http.GetAsync(url, cts.Token);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("hourly", out var hourly))
-                {
-                    var times = hourly.GetProperty("time").EnumerateArray().Select(x => x.GetString() ?? "").ToList();
-                    var matchIsoHour = matchDate.ToString("yyyy-MM-ddTHH:00");
-                    var index = times.FindIndex(t => t.StartsWith(matchIsoHour));
-                    if (index == -1)
-                    {
-                        var matchDateOnly = matchDate.ToString("yyyy-MM-dd");
-                        index = times.FindIndex(t => t.StartsWith(matchDateOnly));
-                        if (index != -1 && index + matchDate.Hour < times.Count)
-                        {
-                            index += matchDate.Hour;
-                        }
-                    }
-
-                    if (index >= 0 && index < times.Count)
-                    {
-                        var temps = hourly.GetProperty("temperature_2m").EnumerateArray().ToList();
-                        var rains = hourly.GetProperty("precipitation_probability").EnumerateArray().ToList();
-                        var winds = hourly.GetProperty("wind_speed_10m").EnumerateArray().ToList();
-                        var hums = hourly.GetProperty("relative_humidity_2m").EnumerateArray().ToList();
-                        var codes = hourly.GetProperty("weather_code").EnumerateArray().ToList();
-
-                        if (index < temps.Count) result.Temperature = Math.Round(temps[index].GetDouble(), 1);
-                        if (index < rains.Count) result.PrecipitationProbability = rains[index].GetInt32();
-                        if (index < winds.Count) result.WindSpeed = Math.Round(winds[index].GetDouble(), 1);
-                        if (index < hums.Count) result.Humidity = hums[index].GetInt32();
-
-                        var code = index < codes.Count ? codes[index].GetInt32() : 0;
-                        var (cond, icon, optimal) = MapWeatherCode(code, result.PrecipitationProbability, result.Temperature);
-                        result.ConditionText = cond;
-                        result.Icon = icon;
-                        result.IsOptimal = optimal;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Graceful realistic fallback
-            var hour = matchDate.Hour;
-            var isNight = hour >= 21 || hour < 8;
-            result.Temperature = isNight ? 17 : 22;
-            result.ConditionText = "Cielo Despejado";
-            result.Icon = isNight ? "🌙" : "☀️";
-            result.PrecipitationProbability = 5;
-            result.WindSpeed = 11;
-            result.Humidity = 58;
-            result.IsOptimal = true;
-        }
-
-        return result;
-    }
-
-    private static (string Condition, string Icon, bool IsOptimal) MapWeatherCode(int code, int rainPct, double temp)
-    {
-        if (rainPct > 60 || code >= 61 && code <= 67 || code >= 80 && code <= 82)
-            return ("Lluvia prevista", "🌧️", false);
-        if (code >= 95)
-            return ("Tormenta eléctrica", "⛈️", false);
-        if (code >= 71 && code <= 77)
-            return ("Nieve", "❄️", false);
-        if (code == 45 || code == 48)
-            return ("Niebla en cancha", "🌫️", true);
-        if (code == 1 || code == 2)
-            return ("Parcialmente nublado", "⛅", true);
-        if (code == 3)
-            return ("Nublado", "☁️", true);
-        if (temp > 32)
-            return ("Calor intenso", "☀️", false);
-
-        return ("Cielo despejado", "☀️", true);
+        _auth.OnSessionChanged -= HandleSessionChanged;
+        _selfRef?.Dispose();
     }
 }

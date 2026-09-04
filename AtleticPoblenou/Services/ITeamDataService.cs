@@ -4,15 +4,37 @@ namespace AtleticPoblenou.Services;
 
 public interface ITeamDataService
 {
+    /// <summary>Se dispara cuando cambian los datos en memoria (local o desde la nube).</summary>
     event Action? OnChange;
+    /// <summary>Se dispara cuando una operación contra la nube falla. El texto es apto para mostrar al usuario.</summary>
+    event Action<string>? OnError;
 
     Task InitializeAsync();
+
+    // Estado de sesión
+    /// <summary>Hay sesión, ficha y la ficha está activa: puede usar la app.</summary>
     bool IsAuthenticated { get; }
+    /// <summary>Hay sesión de Auth pero aún no existe ficha de jugador (alta a medias).</summary>
+    bool NeedsProfile { get; }
+    /// <summary>Hay sesión y ficha, pero la ficha está dada de baja: necesita el código del equipo.</summary>
+    bool IsDeactivated { get; }
+    string? SessionEmail { get; }
+
+    // Estado de sincronización
+    bool IsCloudConnected { get; }
+    bool IsRealtimeConnected { get; }
+    DateTime? LastSyncUtc { get; }
+    Task RefreshFromCloudAsync();
+
     UserProfile GetCurrentUser();
     bool IsOwnerAdmin(UserProfile? p);
-    Task SetCurrentUserIdAsync(string userId);
     Task<(bool Success, string ErrorMessage)> LoginAsync(string emailOrNickname, string password);
     Task<(bool Success, string ErrorMessage)> RegisterAsync(RegisterModel model);
+    /// <summary>Completa la ficha cuando ya existe la cuenta de Auth pero no el perfil.</summary>
+    Task<(bool Success, string ErrorMessage)> CompleteRegistrationAsync(RegisterModel model);
+    Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string securityCode);
+    Task<(bool Success, string ErrorMessage)> ChangeMyPasswordAsync(string newPassword);
+    Task<(bool Success, string ErrorMessage)> AdminSetPasswordAsync(string profileId, string newPassword);
     Task LogoutAsync();
     string GetTeamSecretCode();
     Task<string> GenerateNewTeamCodeAsync();
@@ -26,7 +48,7 @@ public interface ITeamDataService
     UserProfile? GetProfileById(string profileId);
     Task SaveProfileAsync(UserProfile profile);
     Task DeleteProfileAsync(string profileId);
-    
+
     // Rival Teams & Standings
     List<RivalTeam> GetRivalTeams();
     RivalTeam? GetRivalTeamById(string teamId);
@@ -64,6 +86,8 @@ public interface ITeamDataService
     Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "");
     Task AddBatchFeeAsync(string concept, decimal amount, DateTime dueDate);
     Task MarkPaymentAsPaidAsync(string paymentId, PaymentMethod method, string notes = "");
+    /// <summary>Elimina un cobro o cuota registrado por error. Solo admin o tesorero (lo aplica el servidor).</summary>
+    Task DeletePaymentAsync(string paymentId);
     decimal GetTeamBalance();
     decimal GetTotalCollectedThisMonth();
     decimal GetTotalPendingAmount();
@@ -80,17 +104,10 @@ public interface ITeamDataService
     Dictionary<string, (int Yellows, int Reds)> GetCardsSummary();
     Dictionary<string, int> GetMvpSummary();
 
-    // Player Deactivation & Security Reactivation
+    // Player Deactivation
     Task DeactivatePlayerAsync(string playerId);
     Task ReactivatePlayerAsync(string playerId);
-    Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string emailOrNickname, string password, string securityCode);
 
     // Season Lifecycle
     Task CloseSeasonAndStartNewAsync(string newSeasonName, decimal newSeasonFee);
-
-    // Dynamic Weather
-    Task<MatchWeatherInfo> GetMatchWeatherAsync(DateTime matchDate, string locationName, bool isHome);
-
-    Task ResetToDemoAsync();
 }
-

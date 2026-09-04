@@ -1,4 +1,5 @@
 @inject ITeamDataService TeamService
+@inject WeatherService Weather
 @inject IJSRuntime JS
 
 <div class="space-y-4 pb-20">
@@ -82,7 +83,7 @@
                 </div>
 
                 <!-- PRONÓSTICO DEL CLIMA DINÁMICO (FECHA, HORA Y CANCHA DEL PARTIDO) -->
-                @if (_matchWeather != null)
+                @if (_matchWeather != null && _matchWeather.IsAvailable)
                 {
                     <div class="flex items-center justify-between p-2.5 rounded-xl bg-infobg/40 border border-info/20 text-xs">
                         <div class="flex items-center gap-2.5">
@@ -116,11 +117,18 @@
                         </div>
                     </div>
                 }
-                else
+                else if (_matchWeather == null)
                 {
                     <div class="p-2 rounded-xl bg-well/60 border border-line text-[11px] text-muted flex items-center gap-2">
                         <span>⏳</span>
                         <span>Consultando pronóstico para la hora del partido...</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-2 rounded-xl bg-well/60 border border-line text-[11px] text-muted flex items-center gap-2">
+                        <span>🌡️</span>
+                        <span>Sin previsión meteorológica disponible para esa fecha.</span>
                     </div>
                 }
 
@@ -732,7 +740,8 @@
         if (NextMatch != null && NextMatch.Id != _lastLoadedMatchId)
         {
             _lastLoadedMatchId = NextMatch.Id;
-            _matchWeather = await TeamService.GetMatchWeatherAsync(NextMatch.MatchDate, NextMatch.LocationName, NextMatch.IsHome);
+            _matchWeather = null;
+            _matchWeather = await Weather.GetMatchWeatherAsync(NextMatch.MatchDate, NextMatch.LocationName);
         }
     }
 

@@ -1,8 +1,9 @@
 @inject ITeamDataService TeamService
 @inject IJSRuntime JS
+@implements IDisposable
 
 <div class="min-h-screen flex flex-col justify-center items-center p-4 bg-app text-ink">
-    <div class="w-full max-w-md bg-surface border border-line rounded-xl p-6 sm:p-8 shadow-xl  relative overflow-hidden">
+    <div class="w-full max-w-md bg-surface border border-line rounded-xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
 
         <!-- Red/White APN top bar -->
         <div class="absolute top-0 left-0 right-0 h-1.5 apn-stripes"></div>
@@ -16,30 +17,17 @@
             <p class="text-[13px] text-muted font-medium mt-1.5">Veteranos · Liga de Barcelona · desde 1929</p>
         </div>
 
-        <!-- Tabs: Iniciar Sesión / Registro -->
-        <div class="apn-tabs mb-5">
-            <button @onclick='() => _activeAuthTab = "login"' class="apn-tab @(_activeAuthTab == "login" ? "active" : "")">Iniciar sesión</button>
-            <button @onclick='() => _activeAuthTab = "register"' class="apn-tab @(_activeAuthTab == "register" ? "active" : "")">Nuevo jugador</button>
-        </div>
-
-        <!-- Error / Alert Message -->
-        @if (!string.IsNullOrEmpty(_errorMessage))
+        @if (TeamService.IsDeactivated)
         {
-            <div class="mb-4 p-3 bg-clubbg border border-club/40 rounded-xl text-xs text-clubtext flex items-center gap-2">
-                <span>@_errorMessage</span>
-            </div>
-        }
-
-        <!-- REACTIVATION BOX FOR DEACTIVATED PLAYERS -->
-        @if (_showReactivationBox)
-        {
-            <div class="mb-5 p-4 bg-red-500/10 border-2 border-red-500/40 rounded-xl space-y-3 animate-in fade-in text-xs">
+            <!-- CUENTA DADA DE BAJA: PIDE EL CÓDIGO DEL EQUIPO -->
+            <div class="mb-5 p-4 bg-red-500/10 border-2 border-red-500/40 rounded-xl space-y-3 animate-in text-xs">
                 <div class="flex items-center gap-2 text-red-500 font-bold text-sm">
                     <span>🚫</span>
-                    <span>Cuenta Desvinculada del Equipo</span>
+                    <span>Cuenta desvinculada del equipo</span>
                 </div>
                 <p class="text-muted leading-relaxed">
-                    Has sido dado de baja de la plantilla por el administrador. Para volver a ingresar y reactivar tu ficha, escribe el <strong>código de seguridad</strong> que te envió el capitán/admin:
+                    Sesión de <strong class="text-ink">@TeamService.SessionEmail</strong>. Has sido dado de baja de la plantilla por el administrador.
+                    Para reactivar tu ficha, escribe el <strong>código de seguridad</strong> que te envió el capitán/admin:
                 </p>
                 <div>
                     <label class="font-bold text-ink2 block mb-1">Código Secreto del Club</label>
@@ -51,133 +39,132 @@
                     <div class="text-xs text-club font-bold">@_reactivationError</div>
                 }
                 <div class="flex gap-2 pt-1">
-                    <button type="button" @onclick="() => _showReactivationBox = false"
+                    <button type="button" @onclick="HandleLogout" disabled="@_busy"
                             class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold rounded-lg transition">
-                        Volver
+                        Cerrar sesión
                     </button>
-                    <button type="button" @onclick="HandleReactivate"
-                            class="flex-1 py-2 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg transition flex items-center justify-center gap-1 shadow-sm">
+                    <button type="button" @onclick="HandleReactivate" disabled="@_busy"
+                            class="flex-1 py-2 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg transition flex items-center justify-center gap-1 shadow-sm disabled:opacity-60">
                         <span>✓</span>
                         <span>Reactivar y Entrar</span>
                     </button>
                 </div>
             </div>
         }
-
-        @if (_activeAuthTab == "login")
+        else if (TeamService.NeedsProfile)
         {
-            <!-- LOGIN FORM -->
-            <form @onsubmit="HandleLogin" class="space-y-3.5 text-xs">
-                <div>
-                    <label class="font-bold text-ink2 block mb-1">Email o Apodo</label>
-                    <input @bind="_loginModel.EmailOrNickname" type="text" placeholder="Ej: pitu1386 o tu@email.com"
-                           class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
-                </div>
+            <!-- CUENTA CREADA PERO SIN FICHA: COMPLETAR ALTA -->
+            <div class="mb-4 p-3 bg-infobg border border-info/40 rounded-xl text-xs text-infotext">
+                Tu cuenta <strong>@TeamService.SessionEmail</strong> ya existe. Completa tu ficha de jugador para entrar al club.
+            </div>
 
-                <div>
-                    <div class="flex items-center justify-between mb-1">
-                        <label class="font-bold text-ink2">Contraseña</label>
-                    </div>
-                    <input @bind="_loginModel.Password" type="password" placeholder="Tu contraseña"
-                           class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
-                </div>
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="mb-4 p-3 bg-clubbg border border-club/40 rounded-xl text-xs text-clubtext">@_errorMessage</div>
+            }
 
-                <button type="submit"
-                        class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-2">
-                    <span>Ingresar al Club</span>
-                    <span>→</span>
-                </button>
+            <form @onsubmit="HandleCompleteProfile" class="space-y-3 text-xs">
+                <div class="bg-warnbg border border-warn/40 p-3 rounded-xl">
+                    <label class="font-bold text-warntext block mb-0.5">Código Secreto de Registro</label>
+                    <input @bind="_registerModel.TeamCode" type="text" placeholder="Ej: APN-XXXX"
+                           class="w-full bg-well border border-warn/40 rounded-lg px-3 py-2 text-warntext font-cond font-extrabold uppercase tracking-wider focus:outline-none" />
+                </div>
+                @ProfileFields
+                <div class="flex gap-2 pt-1">
+                    <button type="button" @onclick="HandleLogout" disabled="@_busy"
+                            class="flex-1 py-3 bg-well hover:bg-well2 text-ink font-bold text-sm rounded-lg transition">
+                        Cerrar sesión
+                    </button>
+                    <button type="submit" disabled="@_busy"
+                            class="flex-1 py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition disabled:opacity-60">
+                        Crear Mi Ficha ✓
+                    </button>
+                </div>
             </form>
         }
         else
         {
-            <!-- REGISTER FORM (CON VALIDACIÓN DE CÓDIGO DE EQUIPO) -->
-            <form @onsubmit="HandleRegister" class="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
-
-                <!-- Anti-Intruder Team Secret Code -->
-                <div class="bg-warnbg border border-warn/40 p-3 rounded-xl">
-                    <label class="font-bold text-warntext block mb-0.5 flex items-center gap-1">
-                        Código Secreto de Registro
-                    </label>
-                    <p class="text-xs text-muted mb-2">Pídele el código actual al capitán/admin para validar tu ingreso al club.</p>
-                    <input @bind="_registerModel.TeamCode" type="text" placeholder="Ej: APN-XXXX"
-                           class="w-full bg-well border border-warn/40 rounded-lg px-3 py-2 text-warntext font-cond font-extrabold uppercase tracking-wider focus:outline-none" />
+            @if (!string.IsNullOrEmpty(TeamService.SessionEmail))
+            {
+                <!-- HAY SESIÓN PERO NO SE PUDIERON CARGAR LOS DATOS -->
+                <div class="mb-4 p-3 bg-warnbg border border-warn/40 rounded-xl text-xs text-warntext space-y-2">
+                    <div>Sesión de <strong>@TeamService.SessionEmail</strong>, pero no se pudieron cargar los datos del club. Comprueba tu conexión.</div>
+                    <div class="flex gap-2">
+                        <button type="button" @onclick="HandleRetry" disabled="@_busy" class="px-3 py-1.5 bg-surface border border-line rounded-lg font-bold text-ink">Reintentar</button>
+                        <button type="button" @onclick="HandleLogout" disabled="@_busy" class="px-3 py-1.5 bg-surface border border-line rounded-lg font-bold text-muted">Cerrar sesión</button>
+                    </div>
                 </div>
+            }
 
-                <div class="grid grid-cols-2 gap-2">
+            <!-- Tabs: Iniciar Sesión / Registro -->
+            <div class="apn-tabs mb-5">
+                <button type="button" @onclick='() => SetTab("login")' class="apn-tab @(_activeAuthTab == "login" ? "active" : "")">Iniciar sesión</button>
+                <button type="button" @onclick='() => SetTab("register")' class="apn-tab @(_activeAuthTab == "register" ? "active" : "")">Nuevo jugador</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="mb-4 p-3 bg-clubbg border border-club/40 rounded-xl text-xs text-clubtext">@_errorMessage</div>
+            }
+            @if (!string.IsNullOrEmpty(_infoMessage))
+            {
+                <div class="mb-4 p-3 bg-okbg border border-ok/40 rounded-xl text-xs text-oktext">@_infoMessage</div>
+            }
+
+            @if (_activeAuthTab == "login")
+            {
+                <form @onsubmit="HandleLogin" class="space-y-3.5 text-xs">
                     <div>
-                        <label class="font-bold text-ink2 block mb-1">Nombre y Apellido</label>
-                        <input @bind="_registerModel.FullName" type="text" placeholder="Ej: Lionel Messi"
+                        <label class="font-bold text-ink2 block mb-1">Email o Apodo</label>
+                        <input @bind="_loginModel.EmailOrNickname" type="text" autocomplete="username" placeholder="Ej: pitu1386 o tu@email.com"
+                               class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Contraseña</label>
+                        <input @bind="_loginModel.Password" type="password" autocomplete="current-password" placeholder="Tu contraseña"
+                               class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                    <button type="submit" disabled="@_busy"
+                            class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-2 disabled:opacity-60">
+                        <span>@(_busy ? "Entrando..." : "Ingresar al Club")</span>
+                        <span>→</span>
+                    </button>
+                </form>
+            }
+            else
+            {
+                <form @onsubmit="HandleRegister" class="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+                    <div class="bg-warnbg border border-warn/40 p-3 rounded-xl">
+                        <label class="font-bold text-warntext block mb-0.5">Código Secreto de Registro</label>
+                        <p class="text-xs text-muted mb-2">Pídele el código actual al capitán/admin para validar tu ingreso al club.</p>
+                        <input @bind="_registerModel.TeamCode" type="text" placeholder="Ej: APN-XXXX"
+                               class="w-full bg-well border border-warn/40 rounded-lg px-3 py-2 text-warntext font-cond font-extrabold uppercase tracking-wider focus:outline-none" />
+                    </div>
+
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Email</label>
+                        <input @bind="_registerModel.Email" type="email" autocomplete="email" placeholder="tu@email.com"
                                class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
                     </div>
                     <div>
-                        <label class="font-bold text-ink2 block mb-1">Apodo en el equipo</label>
-                        <input @bind="_registerModel.Nickname" type="text" placeholder="Ej: Leo"
+                        <label class="font-bold text-ink2 block mb-1">Contraseña</label>
+                        <input @bind="_registerModel.Password" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres"
                                class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
                     </div>
-                </div>
 
-                <div>
-                    <label class="font-bold text-ink2 block mb-1">Email</label>
-                    <input @bind="_registerModel.Email" type="email" placeholder="tu@email.com"
-                           class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
-                </div>
+                    @ProfileFields
 
-                <div>
-                    <label class="font-bold text-ink2 block mb-1">Contraseña</label>
-                    <input @bind="_registerModel.Password" type="password" placeholder="Mínimo 4 caracteres"
-                           class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
-                </div>
-
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Posición</label>
-                        <select @bind="_registerModel.Position" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
-                            <option value="@Position.Portero">Arquero / Portero</option>
-                            <option value="@Position.Defensa">Defensa</option>
-                            <option value="@Position.Centrocampista">Mediocampista</option>
-                            <option value="@Position.Delantero">Delantero</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Pie Hábil</label>
-                        <select @bind="_registerModel.Foot" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
-                            <option value="@DominantFoot.Diestro">Diestro</option>
-                            <option value="@DominantFoot.Zurdo">Zurdo</option>
-                            <option value="@DominantFoot.Ambidiestro">Ambidiestro</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Dorsal (#)</label>
-                        <input @bind="_registerModel.JerseyNumber" type="number" min="1" max="99" placeholder="Ej: 10"
-                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none" />
-                    </div>
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Teléfono (WhatsApp)</label>
-                        <input @bind="_registerModel.Phone" type="tel" placeholder="+34 600 00 00 00"
-                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
-                    </div>
-                </div>
-
-                <div>
-                    <label class="font-bold text-ink2 block mb-1">Fecha de Nacimiento</label>
-                    <input @bind="_registerModel.BirthDate" type="date"
-                           class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
-                </div>
-
-                <button type="submit"
-                        class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-3">
-                    <span>Crear Mi Ficha y Entrar</span>
-                    <span>✓</span>
-                </button>
-            </form>
+                    <button type="submit" disabled="@_busy"
+                            class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-3 disabled:opacity-60">
+                        <span>@(_busy ? "Creando ficha..." : "Crear Mi Ficha y Entrar")</span>
+                        <span>✓</span>
+                    </button>
+                </form>
+            }
         }
 
         <div class="mt-4 pt-3 border-t border-line/60 flex items-center justify-between text-[11px] text-muted">
-            <span class="font-cond font-bold tracking-wider">v2.3 · ATLETIC POBLENOU</span>
+            <span class="font-cond font-bold tracking-wider">v@AppInfo.Version · ATLETIC POBLENOU</span>
             <button type="button" @onclick="ForceAppUpdate"
                     class="text-amber-500 hover:text-amber-400 font-bold flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 transition">
                 <span>🔄</span> Actualizar versión
@@ -190,54 +177,180 @@
 @code {
     private string _activeAuthTab = "login";
     private string _errorMessage = "";
-    private bool _showReactivationBox = false;
+    private string _infoMessage = "";
     private string _reactivationCode = "";
     private string _reactivationError = "";
+    private bool _busy = false;
 
-    private LoginModel _loginModel = new() { EmailOrNickname = "", Password = "" };
-    private RegisterModel _registerModel = new() { TeamCode = "", Position = Position.Centrocampista, Foot = DominantFoot.Diestro };
+    private LoginModel _loginModel = new();
+    private RegisterModel _registerModel = new() { Position = Position.Centrocampista, Foot = DominantFoot.Diestro };
+
+    private RenderFragment ProfileFields => __builder =>
+    {
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Nombre y Apellido</label>
+                <input @bind="_registerModel.FullName" type="text" placeholder="Ej: Lionel Messi"
+                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+            </div>
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Apodo en el equipo</label>
+                <input @bind="_registerModel.Nickname" type="text" placeholder="Ej: Leo"
+                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Posición</label>
+                <select @bind="_registerModel.Position" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                    <option value="@Position.Portero">Arquero / Portero</option>
+                    <option value="@Position.Defensa">Defensa</option>
+                    <option value="@Position.Centrocampista">Mediocampista</option>
+                    <option value="@Position.Delantero">Delantero</option>
+                </select>
+            </div>
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Pie Hábil</label>
+                <select @bind="_registerModel.Foot" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                    <option value="@DominantFoot.Diestro">Diestro</option>
+                    <option value="@DominantFoot.Zurdo">Zurdo</option>
+                    <option value="@DominantFoot.Ambidiestro">Ambidiestro</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Dorsal (#)</label>
+                <input @bind="_registerModel.JerseyNumber" type="number" min="1" max="99" placeholder="Ej: 10"
+                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none" />
+            </div>
+            <div>
+                <label class="font-bold text-ink2 block mb-1">Teléfono (WhatsApp)</label>
+                <input @bind="_registerModel.Phone" type="tel" placeholder="+34 600 00 00 00"
+                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+            </div>
+        </div>
+
+        <div>
+            <label class="font-bold text-ink2 block mb-1">Fecha de Nacimiento</label>
+            <input @bind="_registerModel.BirthDate" type="date"
+                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+        </div>
+    };
+
+    protected override void OnInitialized()
+    {
+        TeamService.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeAuthTab = tab;
+        _errorMessage = "";
+        _infoMessage = "";
+    }
 
     private async Task HandleLogin()
     {
+        if (_busy) return;
+        _busy = true;
         _errorMessage = "";
-        _showReactivationBox = false;
-        var result = await TeamService.LoginAsync(_loginModel.EmailOrNickname, _loginModel.Password);
-        if (!result.Success)
+        _infoMessage = "";
+        try
         {
-            if (result.ErrorMessage == "DEACTIVATED_NEEDS_CODE")
-            {
-                _showReactivationBox = true;
-                _reactivationError = "";
-            }
-            else
+            var result = await TeamService.LoginAsync(_loginModel.EmailOrNickname, _loginModel.Password);
+            if (!result.Success && result.ErrorMessage != "DEACTIVATED_NEEDS_CODE")
             {
                 _errorMessage = result.ErrorMessage;
             }
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
     private async Task HandleReactivate()
     {
+        if (_busy) return;
+        _busy = true;
         _reactivationError = "";
-        var result = await TeamService.ReactivateWithCodeAsync(_loginModel.EmailOrNickname, _loginModel.Password, _reactivationCode);
-        if (!result.Success)
+        try
         {
-            _reactivationError = result.ErrorMessage;
+            var result = await TeamService.ReactivateWithCodeAsync(_reactivationCode);
+            if (!result.Success) _reactivationError = result.ErrorMessage;
         }
-        else
+        finally
         {
-            _showReactivationBox = false;
+            _busy = false;
         }
     }
 
     private async Task HandleRegister()
     {
+        if (_busy) return;
+        _busy = true;
         _errorMessage = "";
-        var result = await TeamService.RegisterAsync(_registerModel);
-        if (!result.Success)
+        _infoMessage = "";
+        try
         {
-            _errorMessage = result.ErrorMessage;
+            var result = await TeamService.RegisterAsync(_registerModel);
+            if (!result.Success)
+            {
+                if (result.ErrorMessage == "CONFIRM_EMAIL")
+                {
+                    _infoMessage = "Cuenta creada. Revisa tu email para confirmarla y luego inicia sesión: tu ficha se completará sola.";
+                    _activeAuthTab = "login";
+                    _loginModel.EmailOrNickname = _registerModel.Email;
+                }
+                else
+                {
+                    _errorMessage = result.ErrorMessage;
+                }
+            }
         }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task HandleCompleteProfile()
+    {
+        if (_busy) return;
+        _busy = true;
+        _errorMessage = "";
+        try
+        {
+            var result = await TeamService.CompleteRegistrationAsync(_registerModel);
+            if (!result.Success) _errorMessage = result.ErrorMessage;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task HandleRetry()
+    {
+        if (_busy) return;
+        _busy = true;
+        try { await TeamService.RefreshFromCloudAsync(); }
+        finally { _busy = false; }
+    }
+
+    private async Task HandleLogout()
+    {
+        _reactivationError = "";
+        _errorMessage = "";
+        await TeamService.LogoutAsync();
     }
 
     private async Task ForceAppUpdate()
@@ -245,4 +358,3 @@
         await JS.InvokeVoidAsync("forceAppUpdate");
     }
 }
-

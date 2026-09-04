@@ -6,8 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <CodePage>65001</CodePage>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
-    <Version>2.3.0</Version>
+    <Version>2.4.0</Version>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+    <DefaultItemExcludes>$(DefaultItemExcludes);node_modules/**;Styles/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,5 +19,14 @@
   <ItemGroup>
     <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
+
+  <!--
+    Tailwind CSS se compila con su CLI (npm run build:css) y el resultado wwwroot/css/tailwind.css
+    va versionado en git para que la app compile sin Node. Si node_modules existe, se regenera
+    automáticamente antes de cada build para que los cambios en los .razor se reflejen.
+  -->
+  <Target Name="TailwindBuild" BeforeTargets="BeforeBuild" Condition="Exists('$(MSBuildProjectDirectory)/node_modules/tailwindcss')">
+    <Exec Command="npm run --silent build:css" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 
 </Project>

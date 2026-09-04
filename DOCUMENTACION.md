@@ -1,18 +1,16 @@
 # 📖 DOCUMENTACIÓN TÉCNICA INTEGRAL - ATLÈTIC POBLENOU (A.P.N.)
 
-Este documento contiene la arquitectura completa, modelos de datos, reglas de negocio, conexiones a servicios externos, soluciones a errores históricos y guías operativas del proyecto **Atlètic Poblenou PWA**. Está redactado para que cualquier desarrollador o agente de Inteligencia Artificial pueda comprender el sistema y continuar su mantenimiento y evolución de manera inmediata.
+Este documento contiene la arquitectura, modelos de datos, reglas de negocio, seguridad, sincronización y guías operativas del proyecto **Atlètic Poblenou PWA**. Está redactado para que cualquier desarrollador o agente de IA pueda continuar el mantenimiento de inmediato.
 
 ---
 
 ## 1. Visión General del Proyecto
 
-- **Nombre:** Atlètic Poblenou (A.P.N. Veteranos)
-- **Propósito:** Plataforma web y móvil (PWA) para la gestión completa del equipo de fútbol veterano (convocatorias y asistencia a partidos, cobro y seguimiento de cuotas por Bizum/efectivo, caja común de gastos, roles de la plantilla, tablón de comunicados oficiales con encuestas interactivas y estadísticas).
-- **Entorno de Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
-- **Repositorio Git:** `https://github.com/pitu1386/AppPoblenou.git`
-  - Rama de código fuente: `main`
-  - Rama de publicación / hosting: `gh-pages`
-- **Versión Activa:** `v2.3`
+- **Nombre:** Atlètic Poblenou - App de Veteranos
+- **Propósito:** PWA para la gestión del equipo de fútbol veterano: convocatorias y asistencia, cuotas y caja común, roles de plantilla, tablón con encuestas, resultados, clasificación y estadísticas.
+- **Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
+- **Repositorio:** `https://github.com/pitu1386/AppPoblenou.git` (código en `main`, hosting en `gh-pages`)
+- **Versión activa:** `v2.4` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
 
 ---
 
@@ -20,147 +18,166 @@ Este documento contiene la arquitectura completa, modelos de datos, reglas de ne
 
 | Capa | Tecnología | Notas |
 |---|---|---|
-| **Frontend / Lógica** | C# / Blazor WebAssembly (.NET 10) | Single Page Application cliente (WASM). |
-| **Estilos / UI** | Tailwind CSS (vía CDN) + Tokens semánticos en `css/app.css` | Soporte Dark/Light Theme nativo (`apnTheme`). |
-| **Backend & Base de Datos** | Supabase (PostgreSQL 15 en la nube) | Conectado vía REST API v1 (`PostgREST`). |
-| **Almacenamiento Local** | `localStorage` del navegador vía JS Interop | Caché offline y arranque inmediato. |
-| **PWA & Offline** | Service Worker (`service-worker.published.js`) con PWA manifest | Instalable en iOS y Android. |
-| **Despliegue** | Script PowerShell automatizado (`deploy.ps1`) | Publica a GitHub Pages en la rama `gh-pages`. |
+| Frontend / Lógica | C# / Blazor WebAssembly (.NET 10) | SPA cliente (WASM). |
+| Estilos | Tailwind CSS 3 compilado con su CLI + tokens semánticos en `wwwroot/css/app.css` | Tema claro/oscuro con clase `dark` en `<html>` (`apnTheme`). |
+| Autenticación | Supabase Auth (GoTrue) vía REST | Contraseñas hasheadas en el servidor. Sesión en `localStorage` (`apn_session`). |
+| Base de datos | Supabase (PostgreSQL) vía PostgREST | Row Level Security por rol. |
+| Tiempo real | Supabase Realtime (`supabase-js` por CDN, solo para el canal) | Avisa a C# de cambios por tabla. |
+| Caché local | `localStorage` (`apn2_*`) | Pintado instantáneo al arrancar; la verdad está en la nube. |
+| PWA | Service Worker (`service-worker.published.js`) + manifest | Instalable en iOS y Android. |
+| Despliegue | `deploy.ps1` | Compila Tailwind, publica y hace push a `gh-pages`. |
 
 ---
 
-## 3. Conexión y Backend (Supabase Cloud)
+## 3. Backend: Supabase
 
-La aplicación utiliza un backend PostgreSQL gestionado en Supabase a través de llamadas REST (`HttpClient` autenticado).
+### 3.1. Proyecto y claves
+- **URL:** `https://dlajpiuuslegmoedslux.supabase.co` (constante `AppInfo.SupabaseUrl`)
+- **Clave pública (anon):** en `AppInfo.SupabaseAnonKey`. Es pública por diseño: viaja en el WASM. Solo permite lo que autorizan las políticas RLS y las funciones RPC expuestas a `anon` (buscar email por apodo y validar el código de equipo).
 
-### 3.1. Credenciales y Endpoint
-- **URL Base:** `https://dlajpiuuslegmoedslux.supabase.co/rest/v1`
-- **Clave Pública Anon:** `sb_publishable_2jgFAT8ePAK6BJOyPDUImA_-BC8NXjq`
-- **Servicio C# responsable:** [`AtleticPoblenou/Services/SupabaseClientService.cs`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Services/SupabaseClientService.cs)
+### 3.2. Scripts SQL
+- `supabase_schema.sql`: crea las tablas desde cero (borra las existentes) con el perfil del admin principal, los rivales y la configuración del club.
+- `migracion_auth_rls.sql`: **idempotente**. Migra usuarios a Supabase Auth, enlaza `profiles.auth_uid`, elimina la columna `password`, activa RLS con políticas por rol, crea triggers de protección, funciones RPC y añade las tablas a Realtime. Se ejecuta tanto en una instalación nueva (después del esquema) como sobre una base v2.3.
 
-### 3.2. Tablas en Supabase
-1. `profiles`: Datos de los jugadores (nombre, apodo, dorsal, posición, pierna hábil, rol, capitán, teléfono, email, contraseña hash/plana, estado activo).
-2. `matches`: Fixture de partidos de la liga, fecha/hora, rival, local/visitante, marcador, estado (0: Por jugar, 1: Finalizado, 2: Suspendido), notas y jornada (`round`).
-3. `attendance`: Asistencia a cada partido vinculada por `match_id` y `player_id` (0: Asiste, 1: No asiste, 2: Duda, notas de justificación).
-4. `payments`: Registro de cuotas por jugador (concepto, importe, estado 0: Pendiente / 1: Pagado, fecha de pago, método: Bizum / Efectivo / Transferencia).
-5. `team_expenses`: Gastos de la caja común (concepto, importe, fecha, categoría: canchas, árbitros, tercer tiempo, material, pagado por quién).
-6. `match_events`: Goles, asistencias, tarjetas amarillas/rojas y MVP asociados a un partido y jugador.
-7. `rival_teams`: Equipos rivales de la liga (nombre, colores de equipación, notas).
-8. `announcements`: Comunicados del club, avisos fijados (`is_pinned`), encuestas con opciones y votos por ID de jugador.
-9. `club_settings`: Configuración única del club (ID `'current'`), nombre, colores, cancha habitual, cuota por temporada (`season_fee_per_player`), código secreto de acceso (`team_secret_code`) e historial de temporadas archivadas.
+Requisito en el Dashboard: **Authentication → Providers → Email → "Confirm email" desactivado**. Si está activado, el alta crea la cuenta pero no inicia sesión; la app guarda la ficha pendiente y la completa en el primer login.
 
-### 3.3. Scripts SQL de Referencia en el Repositorio
-- [`supabase_schema.sql`](file:///c:/Desarrollos/AppPoblenou/supabase_schema.sql): Esquema DDL completo para creación y estructura de tablas.
-- [`habilitar_permisos_supabase.sql`](file:///c:/Desarrollos/AppPoblenou/habilitar_permisos_supabase.sql): Desactiva RLS (`DISABLE ROW LEVEL SECURITY`) y otorga permisos `GRANT ALL` para roles `anon` y `authenticated`.
-- [`bloquear_partidos_mock.sql`](file:///c:/Desarrollos/AppPoblenou/bloquear_partidos_mock.sql): Purga de partidos demo antiguos y creación de restricción estricta de PostgreSQL:
-  ```sql
-  ALTER TABLE public.matches ADD CONSTRAINT check_no_mock_matches CHECK (id NOT IN ('match-1', 'match-2'));
-  ```
+### 3.3. Tablas
+1. `profiles`: ficha de jugador. `id` texto (para cuentas nuevas coincide con el UID de Auth; el admin principal es `user-1`), `auth_uid` UUID único, datos deportivos y personales, `role`, `is_captain`, `is_active`. Sin contraseña.
+2. `matches`: fixture (`round`, fecha, rival, local/visitante, marcador, `status` 0 Por jugar / 1 Finalizado / 2 Suspendido, notas). Los partidos ajenos de la liga se guardan con `notes = 'LM|homeId|homeName|awayId|awayName'`.
+3. `attendance`: asistencia por `match_id` + `player_id` (único). 0 Asiste / 1 No asiste / 2 Duda.
+4. `payments`: cuotas por jugador (0 Pendiente / 1 Pagado; método 0 Bizum / 1 Efectivo / 2 Transferencia).
+5. `team_expenses`: gastos de caja (`category` texto, `paid_by`).
+6. `match_events`: goles, asistencias, tarjetas y MVP.
+7. `rival_teams`: rivales de la liga.
+8. `announcements`: comunicados, fijados y encuestas (`votes` JSONB `{playerId: opción}`).
+9. `club_settings`: fila única `'current'` con identidad del club, cuota, `team_secret_code` e historial de temporadas.
 
----
+### 3.4. Permisos (RLS)
+Funciones de apoyo: `my_profile_id()`, `my_role()`, `is_member()`, `is_admin()` (rol 0), `is_staff()` (0, 2 Delegado, 4 DT), `is_treasury()` (0, 1 Tesorero).
 
-## 4. Arquitectura de Sincronización (Dual-Layer)
+| Tabla | Lectura | Escritura |
+|---|---|---|
+| profiles | miembros activos (y la propia ficha aunque esté de baja) | propia ficha o admin; alta solo vía `register_profile()`; borrado admin |
+| matches, rival_teams, match_events | miembros | staff |
+| attendance | miembros | propia fila o staff |
+| payments, team_expenses | miembros | tesorería |
+| announcements | miembros | staff (votos vía `vote_poll()`) |
+| club_settings | miembros | admin |
 
-La app utiliza un modelo híbrido para máxima velocidad y funcionamiento offline:
+Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`, impide su borrado) y `prevent_privilege_escalation` (un no-admin no puede cambiar rol, capitanía, estado, email ni `auth_uid`).
 
-1. **Lectura en arranque ([`TeamDataService.cs -> InitializeAsync`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Services/TeamDataService.cs)):**
-   - Primero lee instantáneamente desde `localStorage` (`apn_profiles`, `apn_matches`, `apn_club_settings`, etc.) para pintar la pantalla en 0 milisegundos.
-   - En paralelo, lanza peticiones `GET` a Supabase para obtener el estado real y más reciente de la nube.
-   - Al recibir los datos de Supabase, actualiza la memoria, sobreescribe el `localStorage` con la verdad del servidor y notifica a los componentes con `NotifyStateChanged()`.
-
-2. **Escritura y Mutaciones:**
-   - Cada acción de guardado escribe inmediatamente en `localStorage` y envía un `POST` con `Prefer: resolution=merge-duplicates` (Upsert idempotente) o `DELETE` a Supabase.
-
----
-
-## 5. Reglas de Negocio y Seguridad Críticas
-
-### 5.1. Blindaje del Administrador Principal (Pitu)
-- **Identificación:** Usuario con ID `user-1`, apodo `pitu1386`, nombre `Pitu` o email que contenga `pitu1386`.
-- **Regla Intocable:** Pitu **SIEMPRE** debe mantener el rol `UserRole.Admin`.
-  - No puede ser degradado en [`ManageRolesModal.razor`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Components/ManageRolesModal.razor).
-  - No puede ser dado de baja ni eliminado en [`PlayerSheetModal.razor`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Components/PlayerSheetModal.razor) ni en `TeamDataService.DeleteProfileAsync`.
-  - La función guardiana en el backend de servicios es `TeamService.IsOwnerAdmin(UserProfile? p)`.
-- **Desacople de Capitanía:** El usuario Pitu **NO** es obligatoriamente el capitán del equipo. La propiedad `IsCaptain` es un booleano editable libremente para cualquier jugador sin afectar sus permisos de administrador.
-
-### 5.2. Sistema de Roles de Usuario
-Enum `UserRole` en [`AtleticPoblenou/Models/TeamModels.cs`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Models/TeamModels.cs):
-- `Admin (0)`: Acceso total al club, ajustes, finanzas, borrado de partidos, gestión de roles y base de datos.
-- `Treasurer (1)`: Tesorero (cobro de cuotas de temporada, registro de pagos y control de gastos de caja).
-- `FieldManager (2)`: Delegado de equipo (gestión de fixture, canchas, planillas y resultados de partidos).
-- `Player (3)`: Jugador estándar (confirmación de asistencia, visualización de estadísticas y comunicados).
-- `Coach (4)`: Director Técnico / DT (convocatorias tácticas, alineaciones y actas de partido).
-
-### 5.3. Código Secreto de Equipo (`team_secret_code`)
-- Almacenado en Supabase en `club_settings.team_secret_code`.
-- Es el código de seguridad que un nuevo jugador debe introducir obligatoriamente para crear su cuenta (`RegisterAsync`) o para reactivar una cuenta dada de baja (`ReactivateWithCodeAsync`).
-- Al hacer clic en *"Regenerar código"* en el panel de Admin, se genera un nuevo formato `APN-XXXX`, se persiste inmediatamente en Supabase con `SaveClubSettingsAsync` y se sincroniza en todos los dispositivos.
+### 3.5. Funciones RPC
+| Función | Quién | Para qué |
+|---|---|---|
+| `lookup_login_email(identifier)` | anon | Login por apodo o nombre: devuelve el email de la cuenta. |
+| `validate_team_code(p_code)` | anon | Comprueba el código antes de crear la cuenta. |
+| `register_profile(...)` | autenticado | Crea la ficha del usuario logueado validando el código. Si no hay ningún admin activo, el primero lo es. |
+| `reactivate_with_code(p_team_code)` | autenticado | Reactiva la propia ficha dada de baja. |
+| `admin_set_password(p_profile_id, p_new_password)` | admin | Restablece la contraseña de otro jugador. |
+| `vote_poll(p_announcement_id, p_option)` | autenticado | Guarda solo el voto propio en el JSON. |
+| `clear_all_matches()` | staff | Vacía fixture, asistencias y eventos. |
+| `close_season(p_archive, p_new_season_name, p_new_fee)` | admin | Archiva la temporada y limpia partidos, asistencias, eventos y cobros en una transacción. |
 
 ---
 
-## 6. Problemas Históricos Resueltos y Trampas a Evitar
+## 4. Arquitectura del Cliente
 
-> [!CAUTION]
-> **No alterar las siguientes defensas** para evitar regresiones críticas:
+### 4.1. Servicios (`AtleticPoblenou/Services`)
+- `AppInfo`: versión y constantes de Supabase.
+- `SupabaseAuthService`: signup, login con contraseña, refresh automático del token, cambio de contraseña, logout. Persiste la sesión en `localStorage`.
+- `SupabaseClientService`: cliente PostgREST genérico (`GetAsync<T>`, `UpsertAsync<T>`, `DeleteAsync`, `RpcAsync`) con envoltorios tipados por tabla. Lanza `SupabaseException` con mensaje apto para el usuario.
+- `SupabaseDtos`: DTOs con nombres de columna y mapeadores modelo ↔ DTO.
+- `TeamDataService`: estado en memoria + caché, autenticación de alto nivel, mutaciones y sincronización. Expone `OnChange` (datos) y `OnError` (fallos de nube, mostrados como aviso en `Home.razor`).
+- `WeatherService`: previsión de Open-Meteo. Si no hay datos, `IsAvailable = false` y la UI lo indica; nunca inventa valores.
+- `ThemeService`: tema claro/oscuro.
 
-1. **La "Resurrección" de partidos borrados (`match-1` FONTETAS / `match-2` Atletic Poblenou):**
-   - *Causa del bug histórico:* Antes, si Supabase tenía 0 partidos, el cliente interpretaba que la base de datos estaba vacía y re-subía los partidos mock que venían predefinidos en memoria.
-   - *Defensa instalada en 4 niveles:*
-     1. **`bloquear_partidos_mock.sql`:** Restricción en PostgreSQL que rechaza inserciones de esos IDs.
-     2. **[`SupabaseClientService.cs`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Services/SupabaseClientService.cs):** Filtro en `UpsertMatchAsync` y `UpsertMatchesBatchAsync` que descarta `match-1`, `match-2` y `FONTETAS`. Si la lista queda vacía, no hace petición HTTP.
-     3. **[`TeamDataService.cs`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Services/TeamDataService.cs):** `_matches` y `_attendance` arrancan vacíos (`new()`), y nunca se re-siembran datos si el servidor retorna lista vacía.
-     4. **[`index.html`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/wwwroot/index.html):** Script de purga al inicio del `<head>` que borra del `localStorage` cualquier residuo antiguo.
+### 4.2. Ciclo de sincronización
+1. **Arranque:** se carga la sesión; si existe, se pinta desde la caché `apn2_*` y en paralelo se leen las nueve tablas de Supabase. Cada tabla que llega sustituye su copia local y su caché.
+2. **Mutación:** cambio optimista en memoria → escritura en la nube de **solo la fila afectada** (o RPC) → relectura de la(s) tabla(s) implicada(s). Si la nube rechaza, `OnError` muestra el motivo y la relectura deshace el cambio local. No se hacen upserts de listas completas.
+3. **Realtime:** `window.apnRealtime` (index.html) se suscribe a `postgres_changes` de todo el esquema `public` con el token del usuario y llama a `TeamDataService.OnCloudChange(tabla)`, que relee esa tabla. Al volver la pestaña a primer plano o recuperar la conexión se relee todo.
+4. **Sin conexión:** la app muestra la caché y avisa de cada escritura fallida. No hay cola de escrituras offline.
 
-2. **Caché persistente del Service Worker en navegadores:**
-   - La app utiliza un Service Worker PWA con `self.skipWaiting()` y `clients.claim()`.
-   - Si un usuario tiene abierta una pestaña vieja, la app cuenta con un botón en la pantalla de Login y en el encabezado: *"Actualizar app (Borrar caché)"* que ejecuta `window.forceAppUpdate()`, desregistrando los service workers y borrando las `caches` del navegador antes de recargar.
-
----
-
-## 7. Control de Versiones y Visibilidad
-
-Para comprobar en cualquier momento qué versión exacta tiene cargada el navegador del usuario:
-1. **Archivo de proyecto:** `AtleticPoblenou.csproj` (`<Version>2.3.0</Version>`).
-2. **Pantalla de Login:** Pie inferior en [`LoginView.razor`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Components/LoginView.razor):
-   `<span class="font-cond font-bold tracking-wider">v2.3 · ATLETIC POBLENOU</span>`
-3. **Menú de Usuario:** Al pulsar el avatar en [`AppHeader.razor`](file:///c:/Desarrollos/AppPoblenou/AtleticPoblenou/Components/AppHeader.razor), al pie del menú desplegable:
-   `<span class="text-[10px] text-muted font-cond font-bold tracking-wider">v2.3 · ATLETIC POBLENOU</span>`
+### 4.3. Estados de sesión (`ITeamDataService`)
+- `IsAuthenticated`: sesión + ficha + ficha activa. Muestra la app.
+- `NeedsProfile`: sesión sin ficha (alta a medias). `LoginView` muestra el formulario para completarla.
+- `IsDeactivated`: sesión con ficha dada de baja. `LoginView` pide el código de equipo.
 
 ---
 
-## 8. Guía de Ejecución y Despliegue
+## 5. Reglas de Negocio
 
-### 8.1. Ejecutar en Local (Desarrollo)
-En una terminal PowerShell desde la raíz:
+### 5.1. Administrador principal
+- Es el perfil con `id = 'user-1'`. En cliente `IsOwnerAdmin(p)` compara **solo el ID**; en servidor lo blinda el trigger `protect_owner_admin`.
+- La capitanía (`IsCaptain`) es independiente del rol.
+
+### 5.2. Roles (`UserRole`)
+`Admin (0)` todo · `Treasurer (1)` cobros y caja · `FieldManager (2)` fixture, canchas y actas · `Player (3)` asistencia, estadísticas y comunicados · `Coach (4)` convocatorias, alineaciones y actas.
+
+### 5.3. Código de equipo
+- Vive en `club_settings.team_secret_code`. Se regenera desde el panel Admin con formato `APN-XXXX` y se guarda en la nube.
+- Lo valida el servidor (`validate_team_code`, `register_profile`, `reactivate_with_code`). Se compara sin guiones y sin distinguir mayúsculas.
+
+### 5.4. Altas y bajas
+- Alta: el jugador crea cuenta con email y contraseña (mínimo 6 caracteres) y código de equipo. La ficha se crea con `register_profile`.
+- Baja: el admin marca `is_active = false`. El jugador sigue pudiendo iniciar sesión pero solo ve la pantalla de reactivación.
+- Contraseña olvidada: un admin la restablece desde la ficha del jugador (`admin_set_password`).
+
+### 5.5. Temporadas
+`CloseSeasonAndStartNewAsync` calcula el resumen en cliente y llama a `close_season`, que archiva en `club_settings.season_history` y borra partidos, asistencias, eventos y cobros en una sola transacción. Los perfiles y rivales se conservan.
+
+---
+
+## 6. Historial de problemas resueltos
+
+1. **Resurrección de partidos de prueba (v2.2):** el cliente re-subía datos por defecto cuando la nube devolvía vacío y hacía upserts de listas completas desde cachés viejas. En v2.4 no existen datos por defecto en el cliente, las escrituras son por fila y las lecturas siempre sustituyen la copia local. La restricción `check_no_mock_matches` se mantiene en el esquema.
+2. **Cierre de temporada que no limpiaba la nube:** ahora lo hace `close_season` en el servidor.
+3. **Rival FONTETAS inmortal / perfiles ficticios:** eliminados los datos semilla del cliente. Los rivales iniciales solo están en `supabase_schema.sql`.
+4. **Seguridad (v2.3 y anteriores):** base abierta con `anon`, contraseñas en claro y contraseña maestra `1234`. Sustituido por Supabase Auth + RLS. La migración conserva las contraseñas antiguas hasheándolas; quien no tuviera contraseña recibe `1234` y debe cambiarla.
+5. **Caché del Service Worker:** botón *Actualizar app (Borrar caché)* en login y cabecera (`window.forceAppUpdate`).
+6. **Clasificación vacía:** `GetStandings` no añadía filas a la tabla. Ahora parte de nuestro equipo y todos los rivales.
+
+---
+
+## 7. Guía de Ejecución y Despliegue
+
+### 7.1. Preparar la base de datos
+1. Supabase Dashboard → SQL Editor.
+2. Base nueva: ejecutar `supabase_schema.sql` y luego `migracion_auth_rls.sql`. Base existente: solo `migracion_auth_rls.sql`.
+3. Authentication → Providers → Email → desactivar "Confirm email".
+4. Entrar con `pitu1386` y la contraseña que tenía el perfil (o `1234` si no tenía) y cambiarla desde *Ver mi ficha → Editar*.
+
+### 7.2. Desarrollo local
 ```powershell
+cd .\AtleticPoblenou
+npm install          # solo la primera vez
+npm run build:css    # o npm run watch:css mientras editas .razor
+cd ..
 dotnet run --project .\AtleticPoblenou\AtleticPoblenou.csproj --urls "http://localhost:5091"
 ```
-Abrir `http://localhost:5091`.
+Con `node_modules` presente, `dotnet build` regenera `wwwroot/css/tailwind.css` automáticamente (target `TailwindBuild` en el .csproj). El archivo generado va en git para que compile sin Node.
 
-### 8.2. Desplegar en Producción (GitHub Pages)
-Ejecutar el script automatizado:
+### 7.3. Producción
 ```powershell
 powershell -File .\deploy.ps1
 ```
-El script realiza automáticamente:
-1. `dotnet publish -c Release -o .\publish_output`
-2. Genera el archivo `.nojekyll` para GitHub Pages.
-3. Copia `blazor.webassembly.js` y `dotnet.js` para compatibilidad de rutas.
-4. Ajusta `<base href="/AppPoblenou/" />` en `index.html` y genera `404.html` para el routing SPA de Blazor.
-5. Realiza un `git push -f origin gh-pages` desde un directorio temporal aislado.
+Compila Tailwind (si hay npm), publica en Release, ajusta `<base href="/AppPoblenou/">`, genera `404.html` y `.nojekyll`, y hace `git push -f` a `gh-pages` desde un directorio temporal.
 
 ---
 
-## 9. Mapa de Archivos Principales del Proyecto
+## 8. Mapa de Archivos
 
-- `AtleticPoblenou/Program.cs`: Registro de servicios de DI (`ITeamDataService`, `SupabaseClientService`, `ThemeService`).
-- `AtleticPoblenou/Models/TeamModels.cs`: Todas las clases de datos (`UserProfile`, `Match`, `Attendance`, `Payment`, `ClubSettings`, enums de roles y posiciones).
-- `AtleticPoblenou/Services/SupabaseClientService.cs`: Cliente HTTP directo con serialización/deserialización DTOs para Supabase.
-- `AtleticPoblenou/Services/TeamDataService.cs`: Núcleo de lógica de negocio, caché local, reactividad y llamadas a Supabase.
-- `AtleticPoblenou/Components/AppHeader.razor`: Barra superior con escudo, tema Dark/Light, menú de usuario, cambio de rol y versión.
-- `AtleticPoblenou/Components/MatchesTab.razor`: Pestaña de partidos, botón de vaciado de fixture, detalle de partido y filtros.
-- `AtleticPoblenou/Components/SquadTab.razor`: Plantilla del equipo organizada por líneas (porteros, defensas, medios, delanteros, cuerpo técnico).
-- `AtleticPoblenou/Components/PaymentsTab.razor`: Balances económicos, estado de cuotas de temporada, cobros Bizum y caja común.
-- `AtleticPoblenou/Components/AdminTab.razor`: Panel de administración del club, gestión de roles, código de equipo y temporadas.
-- `AtleticPoblenou/Components/LoginView.razor`: Pantalla de autenticación, alta con código de equipo y forzado de actualización.
-- `deploy.ps1`: Script PowerShell de build y publicación a GitHub Pages.
+- `AtleticPoblenou/Program.cs`: registro de servicios.
+- `AtleticPoblenou/Models/TeamModels.cs`: modelos y enums.
+- `AtleticPoblenou/Services/*`: ver 4.1.
+- `AtleticPoblenou/Pages/Home.razor`: puerta de entrada (login / app), pestañas, modales y aviso de errores de nube.
+- `AtleticPoblenou/Components/LoginView.razor`: login, alta, completar ficha y reactivación.
+- `AtleticPoblenou/Components/AppHeader.razor`: cabecera, tema, menú de usuario con versión y estado de nube.
+- `AtleticPoblenou/Components/MatchesTab.razor`: próximo partido, fixture, tabla y rivales.
+- `AtleticPoblenou/Components/PaymentsTab.razor`: cuotas y caja.
+- `AtleticPoblenou/Components/AdminTab.razor`: roles, bajas, código de equipo, club, temporadas.
+- `AtleticPoblenou/Components/PlayerSheetModal.razor`: ficha de jugador, edición y cambio/restablecimiento de contraseña.
+- `AtleticPoblenou/Components/DbConfigModal.razor`: estado de conexión y sincronización manual.
+- `AtleticPoblenou/wwwroot/index.html`: tema, service worker, puente Realtime y helpers JS.
+- `AtleticPoblenou/tailwind.config.js`, `Styles/tailwind.input.css`, `package.json`: compilación de Tailwind.
+- `supabase_schema.sql`, `migracion_auth_rls.sql`: base de datos.
+- `deploy.ps1`: publicación.

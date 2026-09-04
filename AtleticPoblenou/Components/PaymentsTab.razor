@@ -251,10 +251,30 @@
                                 </div>
                             </div>
 
-                            <div class="text-right">
+                            <div class="flex items-center gap-2.5">
                                 <div class="font-cond font-extrabold text-sm text-oktext">
                                     +@pay.Amount.ToString("N2") €
                                 </div>
+                                @if (IsAdmin)
+                                {
+                                    @if (_confirmDeletePaymentId == pay.Id)
+                                    {
+                                        <div class="flex items-center gap-1 text-[11px]">
+                                            <span class="text-clubtext font-bold">¿Borrar?</span>
+                                            <button type="button" @onclick="() => DeletePayment(pay.Id)"
+                                                    class="px-2 py-1 rounded-md bg-club text-white font-bold">Sí</button>
+                                            <button type="button" @onclick="() => _confirmDeletePaymentId = null"
+                                                    class="px-2 py-1 rounded-md bg-well text-ink font-bold">No</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" @onclick="() => _confirmDeletePaymentId = pay.Id"
+                                                class="text-faint hover:text-club text-xs p-1" title="Eliminar cobro (registrado por error)">
+                                            ✕
+                                        </button>
+                                    }
+                                }
                             </div>
                         </div>
                     }
@@ -304,10 +324,23 @@
                                 </div>
                                 @if (IsAdmin)
                                 {
-                                    <button type="button" @onclick="() => TeamService.DeleteExpenseAsync(exp.Id)"
-                                            class="text-faint hover:text-club text-xs p-1" title="Eliminar gasto">
-                                        ✕
-                                    </button>
+                                    @if (_confirmDeleteExpenseId == exp.Id)
+                                    {
+                                        <div class="flex items-center gap-1 text-[11px]">
+                                            <span class="text-clubtext font-bold">¿Borrar?</span>
+                                            <button type="button" @onclick="() => DeleteExpense(exp.Id)"
+                                                    class="px-2 py-1 rounded-md bg-club text-white font-bold">Sí</button>
+                                            <button type="button" @onclick="() => _confirmDeleteExpenseId = null"
+                                                    class="px-2 py-1 rounded-md bg-well text-ink font-bold">No</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" @onclick="() => _confirmDeleteExpenseId = exp.Id"
+                                                class="text-faint hover:text-club text-xs p-1" title="Eliminar gasto">
+                                            ✕
+                                        </button>
+                                    }
                                 }
                             </div>
                         </div>
@@ -325,6 +358,20 @@
 
     private string _subTab = "players"; // "players", "history", "expenses"
     private string? _expandedPlayerId = null;
+    private string? _confirmDeletePaymentId = null;
+    private string? _confirmDeleteExpenseId = null;
+
+    private async Task DeletePayment(string paymentId)
+    {
+        _confirmDeletePaymentId = null;
+        await TeamService.DeletePaymentAsync(paymentId);
+    }
+
+    private async Task DeleteExpense(string expenseId)
+    {
+        _confirmDeleteExpenseId = null;
+        await TeamService.DeleteExpenseAsync(expenseId);
+    }
 
     private UserProfile CurrentUser => TeamService.GetCurrentUser();
     private bool IsAdmin => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.Treasurer;

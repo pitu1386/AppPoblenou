@@ -65,7 +65,7 @@
                             <span class="text-base">🔄</span>
                             Actualizar app (Borrar caché)
                         </button>
-                        @if (IsSuperOwner())
+                        @if (TeamService.IsOwnerAdmin(CurrentUser))
                         {
                             <button @onclick="HandleOpenDb" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
                                 <svg class="w-5 h-5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"></ellipse><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path></svg>
@@ -82,7 +82,10 @@
                     </div>
 
                     <div class="py-1.5 px-3 bg-well border-t border-line text-center">
-                        <span class="text-[10px] text-muted font-cond font-bold tracking-wider">v2.3 · ATLETIC POBLENOU</span>
+                        <span class="text-[10px] text-muted font-cond font-bold tracking-wider">v@AppInfo.Version · ATLETIC POBLENOU</span>
+                        <span class="block text-[10px] font-medium @(TeamService.IsCloudConnected ? "text-oktext" : "text-clubtext")">
+                            @(TeamService.IsCloudConnected ? (TeamService.IsRealtimeConnected ? "● Nube conectada · tiempo real" : "● Nube conectada") : "● Sin conexión con la nube")
+                        </span>
                     </div>
                 </div>
             }
@@ -165,11 +168,4 @@
         await TeamService.LogoutAsync();
     }
 
-    private bool IsSuperOwner()
-    {
-        if (CurrentUser == null) return false;
-        var nick = CurrentUser.Nickname?.ToLowerInvariant() ?? "";
-        var email = CurrentUser.Email?.ToLowerInvariant() ?? "";
-        return nick == "pitu1386" || email.Contains("pitu1386") || CurrentUser.Id == "user-1";
-    }
 }

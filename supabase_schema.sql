@@ -1,8 +1,10 @@
-﻿-- ==========================================================
--- CLUB ATLÈTIC POBLENOU - FULL DATABASE SCHEMA (SUPABASE)
+-- ==========================================================
+-- CLUB ATLÈTIC POBLENOU - ESQUEMA BASE (SUPABASE) · v2.4
+-- Solo para una instalación desde cero. Borra y recrea todo.
+-- Después de ejecutarlo, ejecuta migracion_auth_rls.sql para
+-- activar Supabase Auth, RLS, funciones RPC y Realtime.
 -- ==========================================================
 
--- 1. PROFILES (Jugadores y Cuerpo Técnico)
 DROP TABLE IF EXISTS public.match_events CASCADE;
 DROP TABLE IF EXISTS public.attendance CASCADE;
 DROP TABLE IF EXISTS public.payments CASCADE;
@@ -13,19 +15,20 @@ DROP TABLE IF EXISTS public.rival_teams CASCADE;
 DROP TABLE IF EXISTS public.announcements CASCADE;
 DROP TABLE IF EXISTS public.club_settings CASCADE;
 
+-- 1. PROFILES (Jugadores y Cuerpo Técnico). La contraseña vive en Supabase Auth.
 CREATE TABLE public.profiles (
     id TEXT PRIMARY KEY,
+    auth_uid UUID UNIQUE,
     full_name TEXT NOT NULL,
     nickname TEXT,
     jersey_number INTEGER,
-    position INTEGER DEFAULT 2, -- 0: Portero, 1: Defensa, 2: Centrocampista, 3: Delantero
+    position INTEGER DEFAULT 2, -- 0: Portero, 1: Defensa, 2: Centrocampista, 3: Delantero, 4: Cuerpo Técnico
     foot INTEGER DEFAULT 0,     -- 0: Diestro, 1: Zurdo, 2: Ambidiestro
-    role INTEGER DEFAULT 3,     -- 0: Admin, 1: Treasurer, 2: FieldManager, 3: Player
+    role INTEGER DEFAULT 3,     -- 0: Admin, 1: Treasurer, 2: FieldManager, 3: Player, 4: Coach
     is_captain BOOLEAN DEFAULT FALSE,
     is_sub_captain BOOLEAN DEFAULT FALSE,
     phone TEXT,
     email TEXT,
-    password TEXT DEFAULT '1234',
     birth_date DATE,
     dni TEXT,
     medical_notes TEXT,
@@ -37,6 +40,7 @@ CREATE TABLE public.profiles (
 -- 2. MATCHES (Partidos y Resultados)
 CREATE TABLE public.matches (
     id TEXT PRIMARY KEY,
+    round INTEGER DEFAULT 1,
     match_date TIMESTAMPTZ NOT NULL,
     opponent TEXT NOT NULL,
     rival_team_id TEXT,
@@ -46,9 +50,10 @@ CREATE TABLE public.matches (
     is_home BOOLEAN DEFAULT TRUE,
     our_score INTEGER,
     rival_score INTEGER,
-    status INTEGER DEFAULT 0, -- 0: Upcoming, 1: Finished, 2: Suspended
+    status INTEGER DEFAULT 0, -- 0: Upcoming, 1: Finished, 2: Cancelled
     notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT check_no_mock_matches CHECK (id NOT IN ('match-1', 'match-2'))
 );
 
 -- 3. ATTENDANCE (Convocatorias y Asistencia)
@@ -71,7 +76,7 @@ CREATE TABLE public.payments (
     status INTEGER NOT NULL DEFAULT 0, -- 0: Pending, 1: Paid
     due_date DATE,
     paid_at TIMESTAMPTZ,
-    method INTEGER DEFAULT 0,         -- 0: Bizum, 1: Cash, 2: BankTransfer
+    method INTEGER DEFAULT 0,         -- 0: Bizum, 1: Cash, 2: Transfer
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -82,14 +87,15 @@ CREATE TABLE public.team_expenses (
     concept TEXT NOT NULL,
     amount NUMERIC(10,2) NOT NULL,
     expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    category INTEGER DEFAULT 0,       -- 0: Arbitros, 1: Canchas, 2: Material, 3: TercerTiempo, 4: Inscripcion, 5: Otros
+    category TEXT DEFAULT 'Otros',    -- Árbitros, Campos, Material, Tercer Tiempo, Inscripción, Otros
+    paid_by TEXT,
     paid_by_player_id TEXT REFERENCES public.profiles(id) ON DELETE SET NULL,
     receipt_url TEXT,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. MATCH EVENTS (Goles, Asistencias, Tarjetas)
+-- 6. MATCH EVENTS (Goles, Asistencias, Tarjetas, MVP)
 CREATE TABLE public.match_events (
     id TEXT PRIMARY KEY,
     match_id TEXT NOT NULL REFERENCES public.matches(id) ON DELETE CASCADE,
@@ -142,37 +148,15 @@ CREATE TABLE public.club_settings (
 );
 
 -- ==========================================================
--- PERMISOS PARA LA APP (ANON ACCESS)
--- ==========================================================
-ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.matches DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.team_expenses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.match_events DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.rival_teams DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.announcements DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.club_settings DISABLE ROW LEVEL SECURITY;
-
--- ==========================================================
--- DATOS INICIALES (Plantilla, Rivales, Partidos y Ajustes)
+-- DATOS INICIALES
 -- ==========================================================
 
--- Jugadores iniciales
-INSERT INTO public.profiles (id, full_name, nickname, jersey_number, position, foot, role, is_captain, phone, email, password, birth_date, dni, is_active)
-VALUES
-('user-1', 'Pitu', 'pitu1386', 10, 2, 0, 0, true, '+34 600 00 00 00', 'pitu1386@atleticpoblenou.cat', '1234', '1986-05-14', '47891234X', true),
-('user-2', 'Carles Puig', 'Carles', 4, 1, 0, 1, true, '+34 622 33 44 55', 'carles@atleticpoblenou.cat', '1234', '1985-11-23', '46543210Y', true),
-('user-3', 'Marc Rovira', 'Marc', 1, 0, 0, 2, false, '+34 633 44 55 66', 'marc@atleticpoblenou.cat', '1234', '1989-02-08', NULL, true),
-('user-4', 'Jordi Soler', 'Jordi', 2, 1, 0, 3, false, '+34 644 55 66 77', 'jordi@atleticpoblenou.cat', '1234', '1986-09-30', NULL, true),
-('user-5', 'Sergi Vidal', 'Sergi', 3, 1, 1, 3, false, '+34 655 66 77 88', 'sergi@atleticpoblenou.cat', '1234', '1988-04-19', NULL, true),
-('user-6', 'Xavi Font', 'Xavi', 6, 2, 2, 3, false, '+34 666 77 88 99', 'xavi@atleticpoblenou.cat', '1234', '1984-12-01', NULL, true),
-('user-7', 'Albert Serra', 'Albert', 8, 2, 0, 3, false, '+34 677 88 99 00', 'albert@atleticpoblenou.cat', '1234', '1987-08-11', NULL, true),
-('user-8', 'Lluís Martí', 'Lluís', 9, 3, 1, 3, false, '+34 688 99 00 11', 'lluis@atleticpoblenou.cat', '1234', '1986-07-25', NULL, true),
-('user-9', 'Pol Navarro', 'Pol', 11, 3, 0, 3, false, '+34 699 00 11 22', 'pol@atleticpoblenou.cat', '1234', '1990-03-17', NULL, true),
-('user-10', 'Gerard Mas', 'Geri', 5, 1, 0, 3, false, '+34 612 34 56 78', 'gerard@atleticpoblenou.cat', '1234', '1988-10-05', NULL, true);
+-- Administrador principal. Su cuenta de Auth la crea migracion_auth_rls.sql
+-- con la contraseña inicial '1234' (cámbiala desde la app al entrar).
+INSERT INTO public.profiles (id, full_name, nickname, jersey_number, position, foot, role, is_captain, phone, email, is_active)
+VALUES ('user-1', 'Pitu', 'pitu1386', 10, 2, 0, 0, false, '', 'pitu1386@atleticpoblenou.cat', true);
 
--- Rivales
+-- Rivales de la liga
 INSERT INTO public.rival_teams (id, name, primary_color_hex, secondary_color_hex, kit_description)
 VALUES
 ('team-1', 'FONTETAS', '#EAB308', '#15803D', 'Amarillo y Verde'),
@@ -190,18 +174,7 @@ VALUES
 ('team-14', 'PUEBLO NUEVO 2002', '#991B1B', '#000000', 'Granate y Negro'),
 ('team-15', 'ARISTOI A', '#1E3A8A', '#F59E0B', 'Azul Marino y Dorado');
 
--- Partidos
-INSERT INTO public.matches (id, match_date, opponent, rival_team_id, competition, location_name, location_url, is_home, status, notes)
-VALUES
-('match-1', NOW() + INTERVAL '3 days 18 hours', 'FONTETAS', 'team-1', 'Sábados División Honor (Temp. 26/27)', 'Camp Municipal Agapito Fernández', 'https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona', true, 0, 'Llevar camiseta rojiblanca titular. Llegar 30 min antes para calentar.'),
-('match-2', NOW() + INTERVAL '10 days 17 hours', 'LA PEÑA', 'team-2', 'Sábados División Honor (Temp. 26/27)', 'CEM Poblenou - Can Felipa', 'https://maps.google.com/?q=Can+Felipa+Poblenou+Barcelona', false, 0, 'Llevar las dos camisetas por coincidencia de colores.');
-
 -- Ajustes del club
 INSERT INTO public.club_settings (id, club_name, short_name, league_name, season_name, season_fee_per_player, team_secret_code)
 VALUES ('current', 'Atletic Poblenou', 'ATºPOBLENOU', 'Sábados División Honor (Temp. 26/27)', 'TEMP 26/27', 200.00, 'APN1929')
 ON CONFLICT (id) DO NOTHING;
-
--- Anuncio inicial
-INSERT INTO public.announcements (id, title, content, author_name, has_poll, poll_options, votes, is_pinned, is_active)
-VALUES
-('ann-1', '🥩 Asado y Tercer Tiempo post-partido', 'Muchachos, después de jugar contra FONTETAS organizamos asado en el club. ¡Voten en la encuesta para calcular la compra!', 'pitu1386 (Capitán)', true, '["Me sumo al asado 🥩", "En duda / aviso el viernes 🤔", "No llego ❌"]'::jsonb, '{"user-1": 0, "user-2": 0, "user-3": 0}'::jsonb, true, true);

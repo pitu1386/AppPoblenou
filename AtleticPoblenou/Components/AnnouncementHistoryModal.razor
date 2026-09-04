@@ -17,7 +17,7 @@
         a.AuthorName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
     ).ToList();
 
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in">
         <div class="bg-surface border border-line2 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
 
             <!-- Header -->
@@ -98,7 +98,7 @@
             <!-- Feedback Notification -->
             @if (!string.IsNullOrEmpty(_feedbackMessage))
             {
-                <div class="mx-4 mb-2 p-2.5 rounded-xl bg-okbg border border-ok/30 text-oktext text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-in fade-in">
+                <div class="mx-4 mb-2 p-2.5 rounded-xl bg-okbg border border-ok/30 text-oktext text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-in">
                     <div class="flex items-center gap-2">
                         <span>✓</span>
                         <span>@_feedbackMessage</span>

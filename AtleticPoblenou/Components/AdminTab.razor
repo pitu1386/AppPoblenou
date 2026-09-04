@@ -94,7 +94,7 @@
                             Regenerar
                         </button>
                         @{
-                            var codeText = Uri.EscapeDataString($"¡Hola! Para registrarte en la app oficial del Atlètic Poblenou usa este código de equipo: {TeamService.GetTeamSecretCode()}");
+                            var codeText = Uri.EscapeDataString($"¡Hola! Para registrarte en la App de Veteranos del Atlètic Poblenou usa este código de equipo: {TeamService.GetTeamSecretCode()}");
                         }
                         <a href="https://wa.me/?text=@codeText" target="_blank"
                            class="px-3 py-1.5 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center gap-1.5 shadow-xs">
@@ -174,7 +174,7 @@
             </button>
 
             <!-- Base de Datos Cloud (Supabase) -->
-            @if (IsSuperOwner())
+            @if (TeamService.IsOwnerAdmin(TeamService.GetCurrentUser()))
             {
                 <button type="button" @onclick="OnOpenDbModal"
                         class="w-full p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group shadow-xs">
@@ -189,7 +189,7 @@
                                     En la nube
                                 </span>
                             </div>
-                            <div class="text-xs text-muted">Ver estado de conexión en la nube y scripts SQL de permisos</div>
+                            <div class="text-xs text-muted">Estado de conexión, tiempo real y sincronización manual</div>
                         </div>
                     </div>
                     <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
@@ -277,14 +277,5 @@
         await TeamService.GenerateNewTeamCodeAsync();
         _codeJustGenerated = true;
         StateHasChanged();
-    }
-
-    private bool IsSuperOwner()
-    {
-        var u = TeamService.GetCurrentUser();
-        if (u == null) return false;
-        var nick = u.Nickname?.ToLowerInvariant() ?? "";
-        var email = u.Email?.ToLowerInvariant() ?? "";
-        return nick == "pitu1386" || email.Contains("pitu1386") || u.Id == "user-1";
     }
 }

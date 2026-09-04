@@ -2,7 +2,7 @@
 @inject ITeamDataService TeamService
 @implements IDisposable
 
-<PageTitle>Atlètic Poblenou | A.P.N. Veteranos</PageTitle>
+<PageTitle>Atlètic Poblenou - App de Veteranos</PageTitle>
 
 @if (!_isLoaded)
 {
@@ -13,19 +13,15 @@
 }
 else if (!TeamService.IsAuthenticated)
 {
-    <!-- AUTHENTICATION GATE (LOGIN & REGISTRO CON CÓDIGO DE EQUIPO) -->
+    <!-- LOGIN, ALTA, COMPLETAR FICHA O REACTIVACIÓN -->
     <LoginView />
 }
 else
 {
-    <!-- MAIN APP INTERFACE (SOLO PARA JUGADORES LOGUEADOS) -->
-
-    <!-- App Header -->
     <AppHeader OnOpenInstall="() => _showInstallModal = true"
                OnOpenDbModal="() => _showDbModal = true"
                OnOpenMySheet="OpenPlayerSheet" />
 
-    <!-- Main Content Area with Bottom Padding for Navigation -->
     <main class="flex-1 p-4 overflow-y-auto">
         @switch (_activeTab)
         {
@@ -64,10 +60,8 @@ else
         }
     </main>
 
-    <!-- Bottom Navigation Bar -->
     <BottomNav ActiveTab="@_activeTab" ActiveTabChanged="HandleTabChanged" />
 
-    <!-- All Interactive Modals -->
     <CreateMatchModal @bind-IsOpen="_showCreateMatchModal" TargetMatch="_selectedMatchForEdit" />
     <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
     <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
@@ -80,9 +74,26 @@ else
     <PwaInstallModal @bind-IsOpen="_showInstallModal" />
 }
 
+@if (!string.IsNullOrEmpty(_errorToast))
+{
+    <!-- AVISO DE ERROR DE SINCRONIZACIÓN (la nube rechazó o no respondió) -->
+    <div class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] w-[calc(100%-2rem)] max-w-md animate-in">
+        <div class="bg-surface border-2 border-club/60 rounded-xl shadow-2xl p-3.5 flex items-start gap-3 text-xs">
+            <span class="text-lg leading-none">⚠️</span>
+            <div class="flex-1 min-w-0">
+                <div class="font-extrabold text-clubtext mb-0.5">No se pudo guardar en la nube</div>
+                <div class="text-ink2 leading-relaxed">@_errorToast</div>
+            </div>
+            <button type="button" @onclick="() => _errorToast = null" class="text-muted hover:text-ink font-bold px-1">✕</button>
+        </div>
+    </div>
+}
+
 @code {
     private string _activeTab = "matches";
     private bool _isLoaded = false;
+    private string? _errorToast;
+    private CancellationTokenSource? _toastCts;
 
     private bool _showCreateMatchModal = false;
     private bool _showRecordResultModal = false;
@@ -103,8 +114,24 @@ else
     protected override async Task OnInitializedAsync()
     {
         TeamService.OnChange += StateHasChanged;
+        TeamService.OnError += ShowError;
         await TeamService.InitializeAsync();
         _isLoaded = true;
+    }
+
+    private void ShowError(string message)
+    {
+        _errorToast = message;
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+        _ = Task.Delay(8000, token).ContinueWith(_ =>
+        {
+            if (token.IsCancellationRequested) return;
+            _errorToast = null;
+            InvokeAsync(StateHasChanged);
+        }, TaskScheduler.Default);
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandleTabChanged(string tab)
@@ -139,5 +166,7 @@ else
     public void Dispose()
     {
         TeamService.OnChange -= StateHasChanged;
+        TeamService.OnError -= ShowError;
+        _toastCts?.Cancel();
     }
 }

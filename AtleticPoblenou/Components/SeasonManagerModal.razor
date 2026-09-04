@@ -9,7 +9,7 @@
     var scorers = TeamService.GetTopScorers();
     var pichichi = scorers.OrderByDescending(s => s.Value).FirstOrDefault();
 
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in">
         <div class="bg-surface border border-line2 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
 
             <!-- Modal Header -->
@@ -96,7 +96,7 @@
                 }
                 else
                 {
-                    <div class="bg-surface border-2 border-warn/60 rounded-xl p-4 space-y-3 animate-in fade-in">
+                    <div class="bg-surface border-2 border-warn/60 rounded-xl p-4 space-y-3 animate-in">
                         <div class="flex items-center justify-between border-b border-line pb-2">
                             <div class="font-bold text-sm text-warntext flex items-center gap-2">
                                 <span>⚠️</span>

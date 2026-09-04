@@ -1,920 +1,177 @@
-using System.Net.Http.Headers;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using AtleticPoblenou.Models;
 
 namespace AtleticPoblenou.Services;
 
+/// <summary>Error de una llamada a Supabase (PostgREST o RPC). El mensaje ya está preparado para mostrarse al usuario.</summary>
+public class SupabaseException : Exception
+{
+    public HttpStatusCode? StatusCode { get; }
+
+    public SupabaseException(string message, HttpStatusCode? status = null, Exception? inner = null) : base(message, inner)
+    {
+        StatusCode = status;
+    }
+}
+
+/// <summary>
+/// Cliente PostgREST de Supabase. Todas las peticiones llevan la clave pública y, si hay sesión,
+/// el access token del usuario para que apliquen las políticas RLS.
+/// Las operaciones lanzan <see cref="SupabaseException"/> si el servidor rechaza la petición.
+/// </summary>
 public class SupabaseClientService
 {
-    private readonly HttpClient _http;
-    private const string BaseUrl = "https://dlajpiuuslegmoedslux.supabase.co/rest/v1";
-    private const string ApiKey = "sb_publishable_2jgFAT8ePAK6BJOyPDUImA_-BC8NXjq";
+    private static readonly string RestUrl = $"{AppInfo.SupabaseUrl}/rest/v1";
 
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never
     };
 
-    public SupabaseClientService(HttpClient http)
+    private readonly HttpClient _http;
+    private readonly SupabaseAuthService _auth;
+
+    public SupabaseClientService(HttpClient http, SupabaseAuthService auth)
     {
         _http = http;
+        _auth = auth;
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string pathAndQuery)
+    // ==========================================
+    // NÚCLEO GENÉRICO
+    // ==========================================
+    private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string url)
     {
-        var req = new HttpRequestMessage(method, $"{BaseUrl}/{pathAndQuery}");
-        req.Headers.Add("apikey", ApiKey);
-        req.Headers.Add("Authorization", $"Bearer {ApiKey}");
+        var req = new HttpRequestMessage(method, url);
+        req.Headers.Add("apikey", AppInfo.SupabaseAnonKey);
+        var token = await _auth.GetAccessTokenAsync();
+        req.Headers.Add("Authorization", $"Bearer {token ?? AppInfo.SupabaseAnonKey}");
         return req;
     }
 
-    // ==========================================
-    // 1. PROFILES
-    // ==========================================
-    public async Task<List<UserProfile>?> FetchProfilesAsync()
+    private async Task<string> SendAsync(HttpMethod method, string url, object? body = null, string? prefer = null)
     {
+        HttpResponseMessage resp;
         try
         {
-            using var req = CreateRequest(HttpMethod.Get, "profiles?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseProfileDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
+            using var req = await CreateRequestAsync(method, url);
+            if (prefer != null) req.Headers.Add("Prefer", prefer);
+            if (body != null)
+            {
+                req.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+            }
+            resp = await _http.SendAsync(req);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            throw new SupabaseException("Sin conexión con la nube. Comprueba tu internet e inténtalo de nuevo.", null, ex);
+        }
+
+        using (resp)
+        {
+            var text = await resp.Content.ReadAsStringAsync();
+            if (resp.IsSuccessStatusCode) return text;
+            throw new SupabaseException(TranslateError(resp.StatusCode, text), resp.StatusCode);
         }
     }
 
-    public async Task<bool> UpsertProfileAsync(UserProfile profile)
+    public async Task<List<T>> GetAsync<T>(string table, string query = "select=*")
     {
-        try
-        {
-            var dto = ToDto(profile);
-            using var req = CreateRequest(HttpMethod.Post, "profiles");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        var json = await SendAsync(HttpMethod.Get, $"{RestUrl}/{table}?{query}");
+        return JsonSerializer.Deserialize<List<T>>(json, JsonOptions) ?? new List<T>();
     }
 
-    public async Task<bool> UpsertProfilesBatchAsync(IEnumerable<UserProfile> profiles)
+    public async Task UpsertAsync<T>(string table, IEnumerable<T> rows)
     {
-        try
-        {
-            var dtos = profiles.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "profiles");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        var list = rows.ToList();
+        if (list.Count == 0) return;
+        await SendAsync(HttpMethod.Post, $"{RestUrl}/{table}", list, "resolution=merge-duplicates,return=minimal");
     }
 
-    // ==========================================
-    // 2. RIVAL TEAMS
-    // ==========================================
-    public async Task<List<RivalTeam>?> FetchRivalTeamsAsync()
+    /// <summary>Upsert de una sola fila. Nombre distinto al de lista para que la resolución de sobrecargas no recurse.</summary>
+    public Task UpsertRowAsync<T>(string table, T row) => UpsertAsync(table, new List<T> { row });
+
+    /// <summary>Borra filas. El filtro es sintaxis PostgREST, por ejemplo "id=eq.abc" o "match_id=eq.abc".</summary>
+    public async Task DeleteAsync(string table, string filter)
     {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "rival_teams?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseRivalTeamDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(filter)) throw new ArgumentException("Un DELETE sin filtro borraría toda la tabla.", nameof(filter));
+        await SendAsync(HttpMethod.Delete, $"{RestUrl}/{table}?{filter}", null, "return=minimal");
     }
 
-    public async Task<bool> UpsertRivalTeamsBatchAsync(IEnumerable<RivalTeam> teams)
+    public async Task<TResult?> RpcAsync<TResult>(string function, object? args = null)
     {
-        try
-        {
-            var dtos = teams.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "rival_teams");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        var json = await SendAsync(HttpMethod.Post, $"{RestUrl}/rpc/{function}", args ?? new { });
+        if (string.IsNullOrWhiteSpace(json)) return default;
+        return JsonSerializer.Deserialize<TResult>(json, JsonOptions);
     }
 
-    public async Task<bool> UpsertRivalTeamAsync(RivalTeam team)
+    public Task RpcAsync(string function, object? args = null) => RpcAsync<JsonElement?>(function, args);
+
+    private static string TranslateError(HttpStatusCode status, string body)
     {
+        string? detail = null;
         try
         {
-            var dto = ToDto(team);
-            using var req = CreateRequest(HttpMethod.Post, "rival_teams");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("message", out var m)) detail = m.GetString();
+            else if (doc.RootElement.TryGetProperty("hint", out var h)) detail = h.GetString();
         }
-        catch
+        catch { }
+
+        // Los RAISE EXCEPTION de las funciones SQL llegan aquí como message: los mostramos tal cual.
+        if (!string.IsNullOrEmpty(detail) && !detail.Contains("row-level security") && !detail.Contains("violates"))
         {
-            return false;
+            return detail;
         }
+
+        return status switch
+        {
+            HttpStatusCode.Unauthorized => "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+            HttpStatusCode.Forbidden => "No tienes permiso para hacer esto.",
+            HttpStatusCode.NotFound => "El servidor no encuentra ese recurso. ¿Está ejecutado el script SQL de migración?",
+            HttpStatusCode.Conflict => "Ese dato ya existe o choca con otro registro.",
+            _ when !string.IsNullOrEmpty(detail) && detail.Contains("row-level security") => "No tienes permiso para modificar ese dato.",
+            _ => $"Error del servidor ({(int)status}). {detail}".Trim()
+        };
     }
 
     // ==========================================
-    // 3. MATCHES
+    // LECTURAS TIPADAS
     // ==========================================
-    public async Task<List<Match>?> FetchMatchesAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "matches?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseMatchDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    public async Task<List<UserProfile>> FetchProfilesAsync() => (await GetAsync<SupabaseProfileDto>("profiles")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<RivalTeam>> FetchRivalTeamsAsync() => (await GetAsync<SupabaseRivalTeamDto>("rival_teams")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<Match>> FetchMatchesAsync() => (await GetAsync<SupabaseMatchDto>("matches")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<Attendance>> FetchAttendanceAsync() => (await GetAsync<SupabaseAttendanceDto>("attendance")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<Payment>> FetchPaymentsAsync() => (await GetAsync<SupabasePaymentDto>("payments")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<TeamExpense>> FetchExpensesAsync() => (await GetAsync<SupabaseExpenseDto>("team_expenses")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<MatchEvent>> FetchMatchEventsAsync() => (await GetAsync<SupabaseEventDto>("match_events")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<TeamAnnouncement>> FetchAnnouncementsAsync() => (await GetAsync<SupabaseAnnouncementDto>("announcements")).Select(SupabaseMappers.FromDto).ToList();
 
-    public async Task<bool> UpsertMatchAsync(Match match)
-    {
-        if (match.Id == "match-1" || match.Id == "match-2" || match.Opponent == "FONTETAS")
-        {
-            return false;
-        }
-
-        try
-        {
-            var dto = ToDto(match);
-            using var req = CreateRequest(HttpMethod.Post, "matches");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> UpsertMatchesBatchAsync(IEnumerable<Match> matches)
-    {
-        try
-        {
-            var dtos = matches
-                .Where(m => m.Id != "match-1" && m.Id != "match-2" && m.Opponent != "FONTETAS")
-                .Select(ToDto)
-                .ToList();
-
-            if (dtos.Count == 0) return true;
-
-            using var req = CreateRequest(HttpMethod.Post, "matches");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 4. ATTENDANCE
-    // ==========================================
-    public async Task<List<Attendance>?> FetchAttendanceAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "attendance?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseAttendanceDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertAttendanceAsync(Attendance att)
-    {
-        try
-        {
-            var dto = ToDto(att);
-            using var req = CreateRequest(HttpMethod.Post, "attendance");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> UpsertAttendanceBatchAsync(IEnumerable<Attendance> attendanceList)
-    {
-        try
-        {
-            var dtos = attendanceList.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "attendance");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 5. PAYMENTS
-    // ==========================================
-    public async Task<List<Payment>?> FetchPaymentsAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "payments?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabasePaymentDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertPaymentAsync(Payment payment)
-    {
-        try
-        {
-            var dto = ToDto(payment);
-            using var req = CreateRequest(HttpMethod.Post, "payments");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> UpsertPaymentsBatchAsync(IEnumerable<Payment> payments)
-    {
-        try
-        {
-            var dtos = payments.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "payments");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 6. TEAM EXPENSES
-    // ==========================================
-    public async Task<List<TeamExpense>?> FetchExpensesAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "team_expenses?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseExpenseDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertExpenseAsync(TeamExpense expense)
-    {
-        try
-        {
-            var dto = ToDto(expense);
-            using var req = CreateRequest(HttpMethod.Post, "team_expenses");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 7. MATCH EVENTS
-    // ==========================================
-    public async Task<List<MatchEvent>?> FetchMatchEventsAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "match_events?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseEventDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertMatchEventsBatchAsync(IEnumerable<MatchEvent> events)
-    {
-        try
-        {
-            var dtos = events.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "match_events");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 8. ANNOUNCEMENTS
-    // ==========================================
-    public async Task<List<TeamAnnouncement>?> FetchAnnouncementsAsync()
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "announcements?select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseAnnouncementDto>>(json, _jsonOptions);
-            return dtos?.Select(FromDto).ToList();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertAnnouncementAsync(TeamAnnouncement ann)
-    {
-        try
-        {
-            var dto = ToDto(ann);
-            using var req = CreateRequest(HttpMethod.Post, "announcements");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> UpsertAnnouncementsBatchAsync(IEnumerable<TeamAnnouncement> announcements)
-    {
-        try
-        {
-            var dtos = announcements.Select(ToDto).ToList();
-            using var req = CreateRequest(HttpMethod.Post, "announcements");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // 9. CLUB SETTINGS
-    // ==========================================
     public async Task<ClubSettings?> FetchClubSettingsAsync()
     {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Get, "club_settings?id=eq.current&select=*");
-            using var resp = await _http.SendAsync(req);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json = await resp.Content.ReadAsStringAsync();
-            var dtos = JsonSerializer.Deserialize<List<SupabaseClubSettingsDto>>(json, _jsonOptions);
-            var first = dtos?.FirstOrDefault();
-            return first != null ? FromDto(first) : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    public async Task<bool> UpsertClubSettingsAsync(ClubSettings settings)
-    {
-        try
-        {
-            var dto = ToDto(settings);
-            using var req = CreateRequest(HttpMethod.Post, "club_settings");
-            req.Headers.Add("Prefer", "resolution=merge-duplicates");
-            req.Content = new StringContent(JsonSerializer.Serialize(dto, _jsonOptions), Encoding.UTF8, "application/json");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
+        var rows = await GetAsync<SupabaseClubSettingsDto>("club_settings", "id=eq.current&select=*");
+        var first = rows.FirstOrDefault();
+        return first == null ? null : SupabaseMappers.FromDto(first);
     }
 
     // ==========================================
-    // GENERIC DELETE
+    // ESCRITURAS TIPADAS (por fila o lote explícito)
     // ==========================================
-    public async Task<bool> DeleteRowAsync(string table, string id)
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Delete, $"{table}?id=eq.{id}");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    public Task UpsertProfileAsync(UserProfile p) => UpsertRowAsync("profiles", SupabaseMappers.ToDto(p));
+    public Task UpsertRivalTeamAsync(RivalTeam t) => UpsertRowAsync("rival_teams", SupabaseMappers.ToDto(t));
+    public Task UpsertMatchAsync(Match m) => UpsertRowAsync("matches", SupabaseMappers.ToDto(m));
+    public Task UpsertMatchesAsync(IEnumerable<Match> ms) => UpsertAsync("matches", ms.Select(SupabaseMappers.ToDto));
+    public Task UpsertAttendanceAsync(Attendance a) => UpsertRowAsync("attendance", SupabaseMappers.ToDto(a));
+    public Task UpsertPaymentAsync(Payment p) => UpsertRowAsync("payments", SupabaseMappers.ToDto(p));
+    public Task UpsertPaymentsAsync(IEnumerable<Payment> ps) => UpsertAsync("payments", ps.Select(SupabaseMappers.ToDto));
+    public Task UpsertExpenseAsync(TeamExpense e) => UpsertRowAsync("team_expenses", SupabaseMappers.ToDto(e));
+    public Task UpsertMatchEventsAsync(IEnumerable<MatchEvent> evs) => UpsertAsync("match_events", evs.Select(SupabaseMappers.ToDto));
+    public Task UpsertAnnouncementAsync(TeamAnnouncement a) => UpsertRowAsync("announcements", SupabaseMappers.ToDto(a));
+    public Task UpsertClubSettingsAsync(ClubSettings s) => UpsertRowAsync("club_settings", SupabaseMappers.ToDto(s));
 
-    public async Task<bool> DeleteRowsWhereAsync(string table, string column, string value)
-    {
-        try
-        {
-            using var req = CreateRequest(HttpMethod.Delete, $"{table}?{column}=eq.{value}");
-            using var resp = await _http.SendAsync(req);
-            return resp.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ==========================================
-    // DTO MAPPERS
-    // ==========================================
-    private static SupabaseProfileDto ToDto(UserProfile p) => new()
-    {
-        id = p.Id,
-        full_name = p.FullName,
-        nickname = p.Nickname,
-        jersey_number = p.JerseyNumber,
-        position = (int)p.Position,
-        foot = (int)p.Foot,
-        role = (int)p.Role,
-        is_captain = p.IsCaptain,
-        is_sub_captain = p.IsSubCaptain,
-        phone = p.Phone,
-        email = p.Email,
-        password = p.Password,
-        birth_date = p.BirthDate?.ToString("yyyy-MM-dd"),
-        dni = p.Dni,
-        medical_notes = p.MedicalNotes,
-        avatar_url = p.AvatarUrl,
-        is_active = p.IsActive,
-        created_at = p.CreatedAt
-    };
-
-    private static UserProfile FromDto(SupabaseProfileDto d) => new()
-    {
-        Id = d.id,
-        FullName = d.full_name,
-        Nickname = d.nickname ?? "",
-        JerseyNumber = d.jersey_number,
-        Position = (Position)d.position,
-        Foot = (DominantFoot)d.foot,
-        Role = (UserRole)d.role,
-        IsCaptain = d.is_captain,
-        IsSubCaptain = d.is_sub_captain,
-        Phone = d.phone ?? "",
-        Email = d.email ?? "",
-        Password = d.password ?? "1234",
-        BirthDate = DateTime.TryParse(d.birth_date, out var b) ? b : null,
-        Dni = d.dni ?? "",
-        MedicalNotes = d.medical_notes ?? "",
-        AvatarUrl = d.avatar_url ?? "",
-        IsActive = d.is_active,
-        CreatedAt = d.created_at ?? DateTime.UtcNow
-    };
-
-    private static SupabaseMatchDto ToDto(Match m)
-    {
-        var isOur = m.IsOurMatch;
-        return new SupabaseMatchDto
-        {
-            id = m.Id,
-            round = m.Round,
-            match_date = m.MatchDate,
-            opponent = isOur ? m.Opponent : $"{m.HomeTeamName} vs {m.AwayTeamName}",
-            rival_team_id = isOur ? m.RivalTeamId : m.HomeTeamId,
-            competition = m.Competition,
-            location_name = m.LocationName,
-            location_url = m.LocationUrl,
-            is_home = isOur ? m.IsHome : false,
-            our_score = isOur ? m.OurScore : m.HomeScore,
-            rival_score = isOur ? m.RivalScore : m.AwayScore,
-            status = (int)m.Status,
-            notes = isOur ? m.Notes : $"LM|{m.HomeTeamId}|{m.HomeTeamName}|{m.AwayTeamId}|{m.AwayTeamName}"
-        };
-    }
-
-    private static Match FromDto(SupabaseMatchDto d)
-    {
-        var m = new Match
-        {
-            Id = d.id,
-            Round = d.round > 0 ? d.round : 1,
-            MatchDate = d.match_date,
-            Competition = d.competition ?? "Sábados División Honor (Temp. 26/27)",
-            LocationName = d.location_name,
-            LocationUrl = d.location_url ?? "",
-            Status = (MatchStatus)d.status
-        };
-
-        if (!string.IsNullOrEmpty(d.notes) && d.notes.StartsWith("LM|"))
-        {
-            var parts = d.notes.Split('|');
-            m.HomeTeamId = parts.Length > 1 ? parts[1] : "";
-            m.HomeTeamName = parts.Length > 2 ? parts[2] : "";
-            m.AwayTeamId = parts.Length > 3 ? parts[3] : "";
-            m.AwayTeamName = parts.Length > 4 ? parts[4] : "";
-            m.HomeScore = d.our_score;
-            m.AwayScore = d.rival_score;
-        }
-        else if (d.opponent.Contains(" vs "))
-        {
-            var parts = d.opponent.Split(" vs ");
-            m.HomeTeamName = parts[0].Trim();
-            m.AwayTeamName = parts.Length > 1 ? parts[1].Trim() : "";
-            m.HomeTeamId = d.rival_team_id ?? "";
-            m.HomeScore = d.our_score;
-            m.AwayScore = d.rival_score;
-        }
-        else
-        {
-            // APN Match
-            m.IsHome = d.is_home;
-            m.Opponent = d.opponent;
-            m.RivalTeamId = d.rival_team_id;
-            m.OurScore = d.our_score;
-            m.RivalScore = d.rival_score;
-            m.Notes = d.notes ?? "";
-        }
-
-        return m;
-    }
-
-    private static SupabaseRivalTeamDto ToDto(RivalTeam t) => new()
-    {
-        id = t.Id,
-        name = t.Name,
-        primary_color_hex = t.PrimaryColorHex,
-        secondary_color_hex = t.SecondaryColorHex,
-        kit_description = t.KitDescription,
-        notes = t.Notes
-    };
-
-    private static RivalTeam FromDto(SupabaseRivalTeamDto d) => new()
-    {
-        Id = d.id,
-        Name = d.name,
-        PrimaryColorHex = d.primary_color_hex ?? "#1E3A8A",
-        SecondaryColorHex = d.secondary_color_hex ?? "#FFFFFF",
-        KitDescription = d.kit_description ?? "",
-        Notes = d.notes ?? ""
-    };
-
-    private static SupabaseAttendanceDto ToDto(Attendance a) => new()
-    {
-        id = a.Id,
-        match_id = a.MatchId,
-        player_id = a.PlayerId,
-        status = (int)a.Status,
-        note = a.Note,
-        updated_at = a.UpdatedAt
-    };
-
-    private static Attendance FromDto(SupabaseAttendanceDto d) => new()
-    {
-        Id = d.id,
-        MatchId = d.match_id,
-        PlayerId = d.player_id,
-        Status = (AttendanceStatus)d.status,
-        Note = d.note,
-        UpdatedAt = d.updated_at ?? DateTime.UtcNow
-    };
-
-    private static SupabasePaymentDto ToDto(Payment p) => new()
-    {
-        id = p.Id,
-        player_id = p.PlayerId,
-        concept = p.Concept,
-        amount = p.Amount,
-        status = (int)p.Status,
-        due_date = p.DueDate?.ToString("yyyy-MM-dd"),
-        paid_at = p.PaidAt,
-        method = p.Method.HasValue ? (int)p.Method.Value : null,
-        notes = p.Notes
-    };
-
-    private static Payment FromDto(SupabasePaymentDto d) => new()
-    {
-        Id = d.id,
-        PlayerId = d.player_id,
-        Concept = d.concept,
-        Amount = d.amount,
-        Status = (PaymentStatus)d.status,
-        DueDate = DateTime.TryParse(d.due_date, out var dt) ? dt : null,
-        PaidAt = d.paid_at,
-        Method = d.method.HasValue ? (PaymentMethod)d.method.Value : null,
-        Notes = d.notes ?? ""
-    };
-
-    private static SupabaseExpenseDto ToDto(TeamExpense e) => new()
-    {
-        id = e.Id,
-        concept = e.Concept,
-        amount = e.Amount,
-        expense_date = e.ExpenseDate.ToString("yyyy-MM-dd"),
-        category = 0,
-        paid_by_player_id = e.PaidBy,
-        notes = e.Notes
-    };
-
-    private static TeamExpense FromDto(SupabaseExpenseDto d) => new()
-    {
-        Id = d.id,
-        Concept = d.concept,
-        Amount = d.amount,
-        ExpenseDate = DateTime.TryParse(d.expense_date, out var dt) ? dt : DateTime.UtcNow,
-        Category = "Àrbitres",
-        PaidBy = d.paid_by_player_id,
-        Notes = d.notes ?? ""
-    };
-
-    private static SupabaseEventDto ToDto(MatchEvent ev) => new()
-    {
-        id = ev.Id,
-        match_id = ev.MatchId,
-        player_id = ev.PlayerId,
-        event_type = (int)ev.EventType,
-        minute = ev.Minute,
-        notes = ev.Notes
-    };
-
-    private static MatchEvent FromDto(SupabaseEventDto d) => new()
-    {
-        Id = d.id,
-        MatchId = d.match_id,
-        PlayerId = d.player_id,
-        EventType = (EventType)d.event_type,
-        Minute = d.minute,
-        Notes = d.notes ?? ""
-    };
-
-    private static SupabaseAnnouncementDto ToDto(TeamAnnouncement a) => new()
-    {
-        id = a.Id,
-        title = a.Title,
-        content = a.Content,
-        author_name = a.AuthorName,
-        created_at = a.CreatedAt,
-        has_poll = a.HasPoll,
-        poll_options = a.PollOptions,
-        votes = a.Votes,
-        is_pinned = a.IsPinned,
-        is_active = a.IsActive
-    };
-
-    private static TeamAnnouncement FromDto(SupabaseAnnouncementDto d) => new()
-    {
-        Id = d.id,
-        Title = d.title,
-        Content = d.content,
-        AuthorName = d.author_name ?? "Capitán",
-        CreatedAt = d.created_at,
-        HasPoll = d.has_poll,
-        PollOptions = d.poll_options ?? new(),
-        Votes = d.votes ?? new(),
-        IsPinned = d.is_pinned,
-        IsActive = d.is_active
-    };
-
-    private static SupabaseClubSettingsDto ToDto(ClubSettings s) => new()
-    {
-        id = "current",
-        club_name = s.ClubName,
-        short_name = s.ShortName,
-        league_name = s.LeagueName,
-        season_name = s.SeasonName,
-        primary_color_hex = s.PrimaryColorHex,
-        secondary_color_hex = s.SecondaryColorHex,
-        kit_description = s.KitDescription,
-        home_venue_name = s.HomeVenueName,
-        home_venue_maps_url = s.HomeVenueMapsUrl,
-        season_fee_per_player = s.SeasonFeePerPlayer,
-        team_secret_code = !string.IsNullOrWhiteSpace(s.TeamSecretCode) ? s.TeamSecretCode : "APN1929",
-        season_history = s.SeasonHistory
-    };
-
-    private static ClubSettings FromDto(SupabaseClubSettingsDto d) => new()
-    {
-        ClubName = d.club_name,
-        ShortName = d.short_name ?? "ATºPOBLENOU",
-        LeagueName = d.league_name ?? "Sábados División Honor (Temp. 26/27)",
-        SeasonName = d.season_name ?? "TEMP 26/27",
-        PrimaryColorHex = d.primary_color_hex ?? "#E53935",
-        SecondaryColorHex = d.secondary_color_hex ?? "#FFFFFF",
-        KitDescription = d.kit_description ?? "Rojiblanca a rayas verticales",
-        HomeVenueName = d.home_venue_name ?? "Camp Municipal Agapito Fernández",
-        HomeVenueMapsUrl = d.home_venue_maps_url ?? "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona",
-        SeasonFeePerPlayer = d.season_fee_per_player > 0 ? d.season_fee_per_player : 200,
-        TeamSecretCode = !string.IsNullOrWhiteSpace(d.team_secret_code) ? d.team_secret_code : "APN1929",
-        ShowDemoShortcuts = false,
-        SeasonHistory = d.season_history ?? new()
-    };
-}
-
-// ==========================================
-// DTO DEFINITIONS MATCHING SUPABASE EXACTLY
-// ==========================================
-public class SupabaseProfileDto
-{
-    public string id { get; set; } = "";
-    public string full_name { get; set; } = "";
-    public string? nickname { get; set; }
-    public int? jersey_number { get; set; }
-    public int position { get; set; }
-    public int foot { get; set; }
-    public int role { get; set; }
-    public bool is_captain { get; set; }
-    public bool is_sub_captain { get; set; }
-    public string? phone { get; set; }
-    public string? email { get; set; }
-    public string? password { get; set; }
-    public string? birth_date { get; set; }
-    public string? dni { get; set; }
-    public string? medical_notes { get; set; }
-    public string? avatar_url { get; set; }
-    public bool is_active { get; set; } = true;
-    public DateTime? created_at { get; set; }
-}
-
-public class SupabaseMatchDto
-{
-    public string id { get; set; } = "";
-    public int round { get; set; } = 1;
-    public DateTime match_date { get; set; }
-    public string opponent { get; set; } = "";
-    public string? rival_team_id { get; set; }
-    public string? competition { get; set; }
-    public string location_name { get; set; } = "";
-    public string? location_url { get; set; }
-    public bool is_home { get; set; } = true;
-    public int? our_score { get; set; }
-    public int? rival_score { get; set; }
-    public int status { get; set; }
-    public string? notes { get; set; }
-}
-
-public class SupabaseRivalTeamDto
-{
-    public string id { get; set; } = "";
-    public string name { get; set; } = "";
-    public string? primary_color_hex { get; set; }
-    public string? secondary_color_hex { get; set; }
-    public string? kit_description { get; set; }
-    public string? notes { get; set; }
-}
-
-public class SupabaseAttendanceDto
-{
-    public string id { get; set; } = "";
-    public string match_id { get; set; } = "";
-    public string player_id { get; set; } = "";
-    public int status { get; set; }
-    public string? note { get; set; }
-    public DateTime? updated_at { get; set; }
-}
-
-public class SupabasePaymentDto
-{
-    public string id { get; set; } = "";
-    public string player_id { get; set; } = "";
-    public string concept { get; set; } = "";
-    public decimal amount { get; set; }
-    public int status { get; set; }
-    public string? due_date { get; set; }
-    public DateTime? paid_at { get; set; }
-    public int? method { get; set; }
-    public string? notes { get; set; }
-}
-
-public class SupabaseExpenseDto
-{
-    public string id { get; set; } = "";
-    public string concept { get; set; } = "";
-    public decimal amount { get; set; }
-    public string? expense_date { get; set; }
-    public int category { get; set; }
-    public string? paid_by_player_id { get; set; }
-    public string? notes { get; set; }
-}
-
-public class SupabaseEventDto
-{
-    public string id { get; set; } = "";
-    public string match_id { get; set; } = "";
-    public string player_id { get; set; } = "";
-    public int event_type { get; set; }
-    public int? minute { get; set; }
-    public string? notes { get; set; }
-}
-
-public class SupabaseAnnouncementDto
-{
-    public string id { get; set; } = "";
-    public string title { get; set; } = "";
-    public string content { get; set; } = "";
-    public string? author_name { get; set; }
-    public DateTime created_at { get; set; }
-    public bool has_poll { get; set; }
-    public List<string>? poll_options { get; set; }
-    public Dictionary<string, int>? votes { get; set; }
-    public bool is_pinned { get; set; }
-    public bool is_active { get; set; } = true;
-}
-
-public class SupabaseClubSettingsDto
-{
-    public string id { get; set; } = "current";
-    public string club_name { get; set; } = "Atletic Poblenou";
-    public string? short_name { get; set; }
-    public string? league_name { get; set; }
-    public string? season_name { get; set; }
-    public string? primary_color_hex { get; set; }
-    public string? secondary_color_hex { get; set; }
-    public string? kit_description { get; set; }
-    public string? home_venue_name { get; set; }
-    public string? home_venue_maps_url { get; set; }
-    public decimal season_fee_per_player { get; set; }
-    public string? team_secret_code { get; set; }
-    public List<SeasonArchive>? season_history { get; set; }
+    public Task DeleteByIdAsync(string table, string id) => DeleteAsync(table, $"id=eq.{Uri.EscapeDataString(id)}");
+    public Task DeleteWhereAsync(string table, string column, string value) => DeleteAsync(table, $"{column}=eq.{Uri.EscapeDataString(value)}");
 }

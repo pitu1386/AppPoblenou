@@ -5,7 +5,7 @@
     var currentUser = TeamService.GetCurrentUser();
     var canEdit = currentUser.Role == UserRole.Admin || currentUser.Id == TargetProfile.Id;
 
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
         <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[92vh] overflow-y-auto relative">
 
             <!-- Modal Header -->
@@ -14,7 +14,7 @@
 
                     <div>
                         <h3 class="font-extrabold text-ink text-base">Ficha de Jugador</h3>
-                        <p class="text-xs text-muted">Atletic Poblenou • Plantilla Oficial</p>
+                        <p class="text-xs text-muted">Atlètic Poblenou • Plantilla de Veteranos</p>
                     </div>
                 </div>
                 <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
@@ -280,6 +280,21 @@
                         </div>
                     }
 
+                    @if (currentUser.Id == TargetProfile.Id || currentUser.Role == UserRole.Admin)
+                    {
+                        <div class="bg-well p-3 rounded-lg border border-line space-y-1.5">
+                            <label class="font-bold text-ink2 block">
+                                @(currentUser.Id == TargetProfile.Id ? "Cambiar mi contraseña" : "Restablecer contraseña de este jugador")
+                            </label>
+                            <input @bind="_newPassword" type="password" autocomplete="new-password" placeholder="Nueva contraseña (mínimo 6). Vacío = no cambiar"
+                                   class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                            @if (!string.IsNullOrEmpty(_passwordMessage))
+                            {
+                                <div class="text-xs font-bold @(_passwordOk ? "text-oktext" : "text-clubtext")">@_passwordMessage</div>
+                            }
+                        </div>
+                    }
+
                     <div>
                         <label class="font-bold text-ink2 block mb-1">Notas Médicas o Físicas (Opcional)</label>
                         <textarea @bind="_editModel.MedicalNotes" rows="2" placeholder="Ej: Lesión de rodilla, esguince reciente..."
@@ -371,6 +386,9 @@
 
     private bool _isEditing = false;
     private UserProfile _editModel = new();
+    private string _newPassword = "";
+    private string _passwordMessage = "";
+    private bool _passwordOk = false;
 
     protected override void OnParametersSet()
     {
@@ -384,6 +402,8 @@
     {
         if (TargetProfile == null) return;
         CloneToEditModel(TargetProfile);
+        _newPassword = "";
+        _passwordMessage = "";
         _isEditing = true;
     }
 
@@ -401,7 +421,6 @@
             FullName = p.FullName,
             Nickname = p.Nickname,
             Email = p.Email,
-            Password = p.Password,
             Phone = p.Phone,
             JerseyNumber = p.JerseyNumber,
             Position = p.Position,
@@ -444,6 +463,18 @@
         TargetProfile.BirthDate = _editModel.BirthDate;
         TargetProfile.Dni = _editModel.Dni;
         TargetProfile.MedicalNotes = _editModel.MedicalNotes;
+
+        if (!string.IsNullOrEmpty(_newPassword))
+        {
+            var me = TeamService.GetCurrentUser();
+            var (ok, error) = me.Id == TargetProfile.Id
+                ? await TeamService.ChangeMyPasswordAsync(_newPassword)
+                : await TeamService.AdminSetPasswordAsync(TargetProfile.Id, _newPassword);
+            _passwordOk = ok;
+            _passwordMessage = ok ? "Contraseña actualizada." : error;
+            if (!ok) return;
+            _newPassword = "";
+        }
 
         await TeamService.SaveProfileAsync(TargetProfile);
         _isEditing = false;

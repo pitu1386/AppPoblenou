@@ -1,7 +1,7 @@
 {
-  "name": "Club Atlètic Poblenou",
+  "name": "Atlètic Poblenou - App de Veteranos",
   "short_name": "A.P.N. Veteranos",
-  "description": "App oficial para el equipo de veteranos del Club Atlètic Poblenou (Barcelona)",
+  "description": "App de Veteranos del Atlètic Poblenou (Barcelona)",
   "id": "./",
   "start_url": "./",
   "display": "standalone",
