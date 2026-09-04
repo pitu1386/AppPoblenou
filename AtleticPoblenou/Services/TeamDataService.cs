@@ -93,13 +93,15 @@ public class TeamDataService : ITeamDataService
             if (!string.IsNullOrEmpty(jsonMatches))
             {
                 _matches = JsonSerializer.Deserialize<List<Match>>(jsonMatches) ?? new();
-                _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
+                _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
+                await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
             }
 
             if (!string.IsNullOrEmpty(jsonAttendance))
             {
                 _attendance = JsonSerializer.Deserialize<List<Attendance>>(jsonAttendance) ?? new();
                 _attendance.RemoveAll(a => a.MatchId == "match-1" || a.MatchId == "match-2");
+                await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
             }
 
             if (!string.IsNullOrEmpty(jsonPayments)) _payments = JsonSerializer.Deserialize<List<Payment>>(jsonPayments) ?? GetInitialPayments();
@@ -143,7 +145,7 @@ public class TeamDataService : ITeamDataService
                 var sbMatches = await _supabase.FetchMatchesAsync();
                 if (sbMatches != null)
                 {
-                    sbMatches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
+                    sbMatches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
                     _matches = sbMatches;
                     await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
                 }
@@ -966,7 +968,7 @@ public class TeamDataService : ITeamDataService
 
     private async Task SaveMatchesAsync()
     {
-        _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
+        _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2" || m.Opponent == "FONTETAS");
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
         if (_matches.Count > 0)
         {

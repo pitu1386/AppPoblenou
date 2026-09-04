@@ -4,6 +4,25 @@
 <head>
     <meta charset="utf-8" />
     <script>
+        // Purgado inmediato e irreversible de partidos mock residuales en localStorage
+        (function() {
+            try {
+                var rawM = localStorage.getItem('apn_matches');
+                if (rawM && (rawM.indexOf('match-1') !== -1 || rawM.indexOf('match-2') !== -1 || rawM.indexOf('FONTETAS') !== -1)) {
+                    localStorage.removeItem('apn_matches');
+                }
+                var rawA = localStorage.getItem('apn_attendance');
+                if (rawA && (rawA.indexOf('match-1') !== -1 || rawA.indexOf('match-2') !== -1)) {
+                    localStorage.removeItem('apn_attendance');
+                }
+                var rawE = localStorage.getItem('apn_events');
+                if (rawE && (rawE.indexOf('match-1') !== -1 || rawE.indexOf('match-2') !== -1)) {
+                    localStorage.removeItem('apn_events');
+                }
+            } catch(e) {}
+        })();
+    </script>
+    <script>
         // Tema visual: "light" = Editorial rojiblanco, "dark" = Noche de partido.
         // Se aplica antes de pintar para evitar el parpadeo al cargar.
         (function () {

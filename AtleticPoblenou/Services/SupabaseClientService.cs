@@ -159,6 +159,11 @@ public class SupabaseClientService
 
     public async Task<bool> UpsertMatchAsync(Match match)
     {
+        if (match.Id == "match-1" || match.Id == "match-2" || match.Opponent == "FONTETAS")
+        {
+            return false;
+        }
+
         try
         {
             var dto = ToDto(match);
@@ -178,7 +183,13 @@ public class SupabaseClientService
     {
         try
         {
-            var dtos = matches.Select(ToDto).ToList();
+            var dtos = matches
+                .Where(m => m.Id != "match-1" && m.Id != "match-2" && m.Opponent != "FONTETAS")
+                .Select(ToDto)
+                .ToList();
+
+            if (dtos.Count == 0) return true;
+
             using var req = CreateRequest(HttpMethod.Post, "matches");
             req.Headers.Add("Prefer", "resolution=merge-duplicates");
             req.Content = new StringContent(JsonSerializer.Serialize(dtos, _jsonOptions), Encoding.UTF8, "application/json");
