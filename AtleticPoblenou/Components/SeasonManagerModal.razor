@@ -1,0 +1,246 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    var settings = TeamService.GetClubSettings();
+    var standings = TeamService.GetStandings();
+    var ourStanding = standings.FirstOrDefault(s => s.IsOurTeam);
+    var ourPos = standings.FindIndex(s => s.IsOurTeam) + 1;
+    var scorers = TeamService.GetTopScorers();
+    var pichichi = scorers.OrderByDescending(s => s.Value).FirstOrDefault();
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-clubbg border border-club/30 flex items-center justify-center text-xl shrink-0">
+                        🏁
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Gestión de Temporadas
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            Temporada activa y cierre de ciclo anual
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <div class="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+
+                <!-- ACTIVE SEASON CARD -->
+                <div class="bg-well border border-line rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-muted">Temporada en Curso</span>
+                        <span class="px-2 py-0.5 rounded-full bg-okbg text-oktext border border-ok/30 font-extrabold text-[11px] flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-ok animate-pulse"></span>
+                            ACTIVA
+                        </span>
+                    </div>
+
+                    <div class="flex items-baseline justify-between">
+                        <div class="font-cond font-extrabold text-3xl text-ink">
+                            @settings.SeasonName
+                        </div>
+                        <div class="text-xs font-bold text-clubtext">
+                            @settings.LeagueName
+                        </div>
+                    </div>
+
+                    <!-- Current Season Metrics Grid -->
+                    <div class="grid grid-cols-3 gap-2 pt-2 border-t border-line">
+                        <div class="bg-surface p-2 rounded-lg border border-line">
+                            <div class="text-[10px] text-muted">Posición Liga</div>
+                            <div class="font-cond font-extrabold text-base text-ink">
+                                @(ourPos > 0 ? $"#{ourPos}" : "-") (@(ourStanding?.Points ?? 0) pts)
+                            </div>
+                        </div>
+                        <div class="bg-surface p-2 rounded-lg border border-line">
+                            <div class="text-[10px] text-muted">Pichichi Actual</div>
+                            <div class="font-cond font-extrabold text-base text-ink truncate">
+                                @(!string.IsNullOrEmpty(pichichi.Key) ? $"{pichichi.Key} ({pichichi.Value})" : "-")
+                            </div>
+                        </div>
+                        <div class="bg-surface p-2 rounded-lg border border-line">
+                            <div class="text-[10px] text-muted">Saldo Caja</div>
+                            <div class="font-cond font-extrabold text-base text-oktext">
+                                @TeamService.GetTeamBalance().ToString("N0") €
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WIZARD TO CLOSE & START NEW SEASON -->
+                @if (!_showConfirmClose)
+                {
+                    <div class="bg-surface border border-line2 rounded-xl p-4 space-y-2.5">
+                        <div class="font-bold text-sm text-ink flex items-center gap-2">
+                            <span>🚀</span>
+                            <span>Iniciar Próxima Temporada</span>
+                        </div>
+                        <p class="text-muted leading-relaxed">
+                            Al finalizar el campeonato oficial, puedes cerrar el ciclo anual. Se guardará un resumen histórico de la temporada actual y se preparará la app para el nuevo año.
+                        </p>
+                        <button type="button" @onclick="PrepareNewSeasonWizard"
+                                class="w-full py-2.5 px-3 bg-club hover:bg-clubdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                            <span>🏁</span>
+                            <span>Cerrar @settings.SeasonName e Iniciar Nueva Temporada</span>
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="bg-surface border-2 border-warn/60 rounded-xl p-4 space-y-3 animate-in fade-in">
+                        <div class="flex items-center justify-between border-b border-line pb-2">
+                            <div class="font-bold text-sm text-warntext flex items-center gap-2">
+                                <span>⚠️</span>
+                                <span>Confirmar Cierre de Temporada</span>
+                            </div>
+                            <button @onclick="() => _showConfirmClose = false" class="text-muted hover:text-ink">✕</button>
+                        </div>
+
+                        <div class="bg-warnbg p-3 rounded-lg text-warntext space-y-1.5 text-[11px] leading-relaxed">
+                            <div class="font-bold">¿Qué sucederá al confirmar?</div>
+                            <div>• Se creará un registro histórico con la posición final, goles y balance de @settings.SeasonName.</div>
+                            <div>• <strong>Cuotas y aportes:</strong> Se reiniciarán a 0 € para comenzar a cobrar la nueva temporada.</div>
+                            <div>• <strong>Partidos y actas:</strong> Quedarán limpios para cargar el nuevo fixture oficial.</div>
+                            <div>• <strong>Plantilla de jugadores:</strong> <span class="font-bold text-oktext">100% CONSERVADA</span> (nadie pierde usuario, contraseña, dorsal ni permisos).</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 pt-1">
+                            <div>
+                                <label class="font-bold text-ink block mb-1">Nombre de la Nueva Temporada</label>
+                                <input @bind="_newSeasonName" type="text"
+                                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-bold font-cond focus:border-club focus:outline-none" />
+                            </div>
+                            <div>
+                                <label class="font-bold text-ink block mb-1">Cuota por Jugador (€)</label>
+                                <input @bind="_newSeasonFee" type="number" step="10"
+                                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-bold font-cond focus:border-club focus:outline-none" />
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_errorMessage))
+                        {
+                            <div class="text-club font-bold">@_errorMessage</div>
+                        }
+
+                        <div class="flex gap-2 pt-2">
+                            <button type="button" @onclick="() => _showConfirmClose = false"
+                                    class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold rounded-lg transition">
+                                Cancelar
+                            </button>
+                            <button type="button" @onclick="ConfirmCloseSeason"
+                                    class="flex-1 py-2 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg transition shadow-sm">
+                                Confirmar y Comenzar
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <!-- HISTORICAL SEASONS ARCHIVE -->
+                <div class="space-y-2">
+                    <div class="font-bold text-sm text-ink flex items-center justify-between">
+                        <span>📚 Histórico de Temporadas Anteriores</span>
+                        <span class="text-xs text-muted font-normal">(@settings.SeasonHistory.Count archivadas)</span>
+                    </div>
+
+                    @if (!settings.SeasonHistory.Any())
+                    {
+                        <div class="p-4 bg-well rounded-xl border border-line text-center text-muted">
+                            Aún no hay temporadas archivadas. La actual es la primera en curso.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="space-y-2">
+                            @foreach (var arch in settings.SeasonHistory.OrderByDescending(a => a.ClosedAt))
+                            {
+                                <div class="bg-well p-3 rounded-xl border border-line space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="font-cond font-extrabold text-base text-ink">@arch.SeasonName</div>
+                                        <div class="text-[11px] text-muted">Cerrada el @arch.ClosedAt.ToString("dd/MM/yyyy")</div>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2 text-center text-[11px] bg-surface p-2 rounded-lg border border-line">
+                                        <div>
+                                            <div class="text-muted">Posición</div>
+                                            <div class="font-bold text-ink">#@arch.Position</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-muted">Puntos</div>
+                                            <div class="font-bold text-ink">@arch.Points pts</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-muted">Pichichi</div>
+                                            <div class="font-bold text-ink truncate">@arch.PichichiPlayerName (@arch.PichichiGoals)</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-muted">Caja Final</div>
+                                            <div class="font-bold text-oktext">@arch.FinalBalance.ToString("N0") €</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-line bg-surface shrink-0">
+                <button @onclick="Close" class="w-full py-2.5 bg-well2 hover:bg-well text-ink font-bold rounded-xl text-xs transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool _showConfirmClose = false;
+    private string _newSeasonName = "TEMP 27/28";
+    private decimal _newSeasonFee = 200;
+    private string _errorMessage = "";
+
+    private void PrepareNewSeasonWizard()
+    {
+        var current = TeamService.GetClubSettings().SeasonName;
+        // Auto-increment suggestion if format is TEMP XX/YY
+        _newSeasonName = "TEMP 27/28";
+        _newSeasonFee = TeamService.GetClubSettings().SeasonFeePerPlayer;
+        _errorMessage = "";
+        _showConfirmClose = true;
+    }
+
+    private async Task ConfirmCloseSeason()
+    {
+        if (string.IsNullOrWhiteSpace(_newSeasonName))
+        {
+            _errorMessage = "Por favor ingresa el nombre de la nueva temporada.";
+            return;
+        }
+
+        await TeamService.CloseSeasonAndStartNewAsync(_newSeasonName.Trim(), _newSeasonFee);
+        _showConfirmClose = false;
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        _showConfirmClose = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
+

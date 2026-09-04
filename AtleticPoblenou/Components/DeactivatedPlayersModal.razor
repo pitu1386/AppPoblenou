@@ -1,0 +1,177 @@
+﻿@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    var deactivated = TeamService.GetProfiles().Where(p => !p.IsActive).OrderBy(p => p.JerseyNumber ?? 99).ToList();
+    var secretCode = TeamService.GetTeamSecretCode();
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-xl shrink-0">
+                        🚫
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Jugadores Desvinculados / Bajas
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            @deactivated.Count futbolistas dados de baja · reactívalos con 1 clic
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Team Code Quick Box -->
+            <div class="px-5 py-3 bg-well/60 border-b border-line flex items-center justify-between gap-3 text-xs shrink-0">
+                <div>
+                    <span class="text-muted block text-[11px]">Código de Seguridad del Equipo:</span>
+                    <span class="font-cond font-extrabold text-base text-warntext tracking-wider">@secretCode</span>
+                </div>
+                <div class="text-right">
+                    <span class="text-[11px] text-muted block">Al reactivarlos o pasarles este código,</span>
+                    <span class="text-[11px] font-bold text-ink block">podrán volver a iniciar sesión</span>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="p-4 space-y-3 overflow-y-auto flex-1">
+                @if (!string.IsNullOrEmpty(_statusMessage))
+                {
+                    <div class="p-3 rounded-xl bg-okbg border border-ok/30 text-oktext text-xs font-bold flex items-center gap-2">
+                        <span>✓</span>
+                        <span>@_statusMessage</span>
+                    </div>
+                }
+
+                @if (!deactivated.Any())
+                {
+                    <div class="py-12 text-center space-y-2">
+                        <div class="text-4xl">⚽</div>
+                        <div class="font-cond font-bold text-lg text-ink">¡No hay jugadores dados de baja!</div>
+                        <p class="text-xs text-muted max-w-xs mx-auto">
+                            Todos los futbolistas del Atlètic Poblenou forman parte de la plantilla activa con acceso normal a la app.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var player in deactivated)
+                    {
+                        var posName = player.Position == Position.Portero ? "Portero" :
+                                      player.Position == Position.Defensa ? "Defensa" :
+                                      player.Position == Position.Centrocampista ? "Mediocampista" : "Delantero";
+                        var posColor = player.Position == Position.Portero ? "text-warn" :
+                                       player.Position == Position.Defensa ? "text-info" :
+                                       player.Position == Position.Centrocampista ? "text-ok" : "text-club";
+
+                        <div class="bg-well border border-line rounded-xl p-3.5 space-y-3">
+                            <!-- Top Info Row -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-surface border border-line flex items-center justify-center font-cond font-extrabold text-lg text-ink shrink-0">
+                                    @(player.JerseyNumber?.ToString() ?? "-")
+                                </div>
+
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="font-bold text-sm text-ink truncate">@player.FullName</span>
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-red-500/15 text-red-500 border border-red-500/30 shrink-0">
+                                            🚫 DADO DE BAJA
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-xs text-muted mt-0.5">
+                                        <span class="font-bold @posColor">@posName</span>
+                                        <span>·</span>
+                                        <span>@player.Foot</span>
+                                        @if (!string.IsNullOrEmpty(player.Phone))
+                                        {
+                                            <span>·</span>
+                                            <span class="text-faint">@player.Phone</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions Row -->
+                            <div class="pt-2 border-t border-line/60 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                <button type="button" @onclick="() => Reactivate(player)"
+                                        class="flex-1 py-2 px-3 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-xs">
+                                    <span>✓</span>
+                                    <span>Reactivar en Plantilla</span>
+                                </button>
+
+                                @if (!string.IsNullOrEmpty(player.Phone))
+                                {
+                                    var cleanPhone = player.Phone.Replace(" ", "").Replace("+", "");
+                                    var waText = Uri.EscapeDataString($"¡Hola {player.Nickname ?? player.FullName}! Te hemos reactivado en el Atlètic Poblenou. Para volver a ingresar en la app usa tu contraseña y este código de equipo: {secretCode}");
+                                    var waUrl = $"https://wa.me/{cleanPhone}?text={waText}";
+
+                                    <a href="@waUrl" target="_blank"
+                                       class="py-2 px-3 bg-surface hover:bg-well2 border border-line text-ink font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shrink-0"
+                                       title="Enviar código por WhatsApp">
+                                        <svg class="w-4 h-4 text-oktext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                                        <span>Enviar Código</span>
+                                    </a>
+                                }
+
+                                @if (OnOpenPlayerSheet.HasDelegate)
+                                {
+                                    <button type="button" @onclick="() => OpenSheet(player)"
+                                            class="py-2 px-3 bg-surface hover:bg-well2 border border-line text-muted hover:text-ink font-bold text-xs rounded-lg transition shrink-0">
+                                        Ver Ficha
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Bottom Close -->
+            <div class="p-3 border-t border-line shrink-0 bg-surface">
+                <button type="button" @onclick="Close"
+                        class="w-full py-2.5 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-xl transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public EventCallback<UserProfile> OnOpenPlayerSheet { get; set; }
+
+    private string? _statusMessage;
+
+    private async Task Reactivate(UserProfile player)
+    {
+        await TeamService.ReactivatePlayerAsync(player.Id);
+        _statusMessage = $"¡{player.FullName} ha sido reactivado en el equipo con éxito!";
+        StateHasChanged();
+    }
+
+    private async Task OpenSheet(UserProfile player)
+    {
+        await Close();
+        if (OnOpenPlayerSheet.HasDelegate)
+        {
+            await OnOpenPlayerSheet.InvokeAsync(player);
+        }
+    }
+
+    private async Task Close()
+    {
+        _statusMessage = null;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

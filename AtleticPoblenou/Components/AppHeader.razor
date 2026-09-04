@@ -1,0 +1,209 @@
+@inject ITeamDataService TeamService
+@inject ThemeService Theme
+@implements IDisposable
+
+<header class="sticky top-0 z-30 bg-surface/95 backdrop-blur-md">
+    <div class="max-w-xl mx-auto flex items-center gap-3 px-5 pt-4 pb-3">
+
+        <!-- Escudo y nombre -->
+        <img src="escudo.png" alt="Escudo Atlètic Poblenou" class="w-9 h-[42px] object-contain shrink-0" />
+        <div class="flex-1 min-w-0">
+            <h1 class="font-cond font-extrabold text-[21px] leading-none tracking-wide text-ink m-0">
+                ATLÈTIC POBLENOU
+            </h1>
+            <p class="text-xs font-medium text-muted m-0 mt-1 truncate">
+                @TeamService.GetClubSettings().LeagueName
+            </p>
+        </div>
+
+        <!-- Tema claro / oscuro -->
+        <button @onclick="ToggleTheme"
+                title="@(Theme.IsDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro")"
+                aria-label="Cambiar tema"
+                class="w-10 h-10 rounded-full border border-line bg-surface text-ink2 flex items-center justify-center hover:bg-well transition shrink-0">
+            @if (Theme.IsDark)
+            {
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+            }
+            else
+            {
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z"></path></svg>
+            }
+        </button>
+
+        <!-- Jugador activo -->
+        <div class="relative shrink-0">
+            <button @onclick="ToggleUserMenu" title="@CurrentUser.Nickname"
+                    class="w-10 h-10 rounded-full bg-club text-white font-cond font-bold text-lg flex items-center justify-center hover:bg-clubdeep transition">
+                @(CurrentUser.JerseyNumber?.ToString() ?? (!string.IsNullOrEmpty(CurrentUser.FullName) ? CurrentUser.FullName.Substring(0, 1) : "P"))
+            </button>
+
+            @if (_showUserMenu)
+            {
+                <div class="absolute right-0 mt-2 w-72 bg-surface border border-line rounded-xl shadow-xl overflow-hidden z-50">
+                    <div class="p-3 border-b border-line flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full bg-club text-white font-cond font-bold text-base flex items-center justify-center shrink-0">
+                            @(CurrentUser.JerseyNumber?.ToString() ?? "-")
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-bold text-ink truncate">@CurrentUser.FullName</div>
+                            <div class="text-xs font-semibold @GetRoleColor(CurrentUser.Role)">@GetRoleBadge(CurrentUser.Role)</div>
+                        </div>
+                    </div>
+
+                    <div class="p-1.5 border-b border-line">
+                        <button @onclick="HandleOpenMySheet" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
+                            <svg class="w-5 h-5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>
+                            Ver mi ficha
+                        </button>
+                        <button @onclick="HandleOpenInstall" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
+                            <svg class="w-5 h-5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"></rect><path d="M12 17h.01"></path></svg>
+                            Instalar en el móvil
+                        </button>
+                        @if (IsSuperOwner())
+                        {
+                            <button @onclick="HandleOpenDb" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
+                                <svg class="w-5 h-5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"></ellipse><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path></svg>
+                                Base de datos (Postgres)
+                            </button>
+                        }
+                    </div>
+
+                    @if (TeamService.GetClubSettings().ShowDemoShortcuts)
+                    {
+                        <div class="px-3 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-faint">
+                            Cambiar de jugador (pruebas)
+                        </div>
+                        <div class="max-h-56 overflow-y-auto">
+                            @foreach (var player in TeamService.GetProfiles())
+                            {
+                                var isMe = player.Id == CurrentUser.Id;
+                                <button @onclick="() => SwitchUser(player.Id)"
+                                        class="w-full h-11 px-3 flex items-center gap-3 text-left hover:bg-well transition @(isMe ? "bg-well" : "")">
+                                    <span class="w-7 h-7 rounded-lg bg-well2 flex items-center justify-center text-xs font-cond font-bold text-ink shrink-0">
+                                        @(player.JerseyNumber?.ToString() ?? "-")
+                                    </span>
+                                    <span class="flex-1 min-w-0">
+                                        <span class="block text-sm font-semibold text-ink truncate">
+                                            @player.Nickname
+                                            @if (player.IsCaptain)
+                                            {
+                                                <span class="text-amber-500 font-bold ml-1">🟡 (C)</span>
+                                            }
+                                        </span>
+                                        <span class="block text-[11px] @GetRoleColor(player.Role)">@GetRoleBadge(player.Role) · @player.Position</span>
+                                    </span>
+                                    @if (isMe)
+                                    {
+                                        <svg class="w-4 h-4 text-clubtext shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    <div class="p-1.5 border-t border-line">
+                        <button @onclick="HandleLogout" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-clubtext hover:bg-clubbg transition flex items-center gap-3">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+                            Cerrar sesión
+                        </button>
+                        @if (TeamService.GetClubSettings().ShowDemoShortcuts)
+                        {
+                            <button @onclick="ResetDefaults" class="w-full h-9 px-3 rounded-lg text-left text-xs text-faint hover:text-ink transition">
+                                Restaurar datos de prueba
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+    <div class="apn-stripes h-1.5"></div>
+</header>
+
+@code {
+    [Parameter] public EventCallback OnOpenInstall { get; set; }
+    [Parameter] public EventCallback OnOpenDbModal { get; set; }
+    [Parameter] public EventCallback<UserProfile> OnOpenMySheet { get; set; }
+
+    private UserProfile CurrentUser => TeamService.GetCurrentUser();
+    private bool _showUserMenu = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        TeamService.OnChange += StateHasChanged;
+        Theme.OnChange += StateHasChanged;
+        await Theme.InitializeAsync();
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+        Theme.OnChange -= StateHasChanged;
+    }
+
+    private Task ToggleTheme() => Theme.ToggleAsync();
+
+    private void ToggleUserMenu() => _showUserMenu = !_showUserMenu;
+
+    private async Task SwitchUser(string userId)
+    {
+        await TeamService.SetCurrentUserIdAsync(userId);
+        _showUserMenu = false;
+    }
+
+    private string GetRoleBadge(UserRole role) => role switch
+    {
+        UserRole.Admin => "Admin",
+        UserRole.Treasurer => "Tesorero",
+        UserRole.FieldManager => "Canchas",
+        _ => "Jugador"
+    };
+
+    private string GetRoleColor(UserRole role) => role switch
+    {
+        UserRole.Admin => "text-warntext",
+        UserRole.Treasurer => "text-oktext",
+        UserRole.FieldManager => "text-infotext",
+        _ => "text-muted"
+    };
+
+    private async Task HandleOpenMySheet()
+    {
+        _showUserMenu = false;
+        await OnOpenMySheet.InvokeAsync(CurrentUser);
+    }
+
+    private async Task HandleOpenInstall()
+    {
+        _showUserMenu = false;
+        await OnOpenInstall.InvokeAsync();
+    }
+
+    private async Task HandleOpenDb()
+    {
+        _showUserMenu = false;
+        await OnOpenDbModal.InvokeAsync();
+    }
+
+    private async Task HandleLogout()
+    {
+        _showUserMenu = false;
+        await TeamService.LogoutAsync();
+    }
+
+    private async Task ResetDefaults()
+    {
+        await TeamService.ResetToDemoAsync();
+        _showUserMenu = false;
+    }
+
+    private bool IsSuperOwner()
+    {
+        if (CurrentUser == null) return false;
+        var nick = CurrentUser.Nickname?.ToLowerInvariant() ?? "";
+        var email = CurrentUser.Email?.ToLowerInvariant() ?? "";
+        return nick == "pitu1386" || email.Contains("pitu1386") || CurrentUser.Id == "user-1";
+    }
+}

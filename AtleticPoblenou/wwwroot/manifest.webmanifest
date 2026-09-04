@@ -1,0 +1,30 @@
+{
+  "name": "Club Atlètic Poblenou",
+  "short_name": "A.P.N. Veteranos",
+  "description": "App oficial para el equipo de veteranos del Club Atlètic Poblenou (Barcelona)",
+  "id": "./",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121212",
+  "theme_color": "#E53935",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "escudo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ]
+}

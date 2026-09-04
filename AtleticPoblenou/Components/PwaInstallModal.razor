@@ -1,0 +1,75 @@
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">Instala la App en el Móvil</h3>
+                        <p class="text-xs text-muted">Atletic Poblenou PWA</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Visual Crest & Benefits -->
+            <div class="flex items-center gap-3 p-3 bg-well rounded-xl border border-line">
+                <div class="w-12 h-14 shrink-0">
+                    <img src="escudo.png" alt="A.P.N." class="w-full h-full object-contain" />
+                </div>
+                <div class="text-xs">
+                    <div class="font-bold text-ink">Sin pasar por la App Store ni Google Play</div>
+                    <div class="text-muted text-xs">Se abre en pantalla completa como una app nativa con el escudo del A.P.N. en tu pantalla de inicio.</div>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <!-- iOS Instructions -->
+                <div class="p-3.5 bg-well rounded-xl border border-line space-y-1.5">
+                    <div class="flex items-center gap-2 font-bold text-ink text-sm">
+                        En iPhone (Safari):
+                    </div>
+                    <ol class="text-ink2 text-xs space-y-1 list-decimal list-inside">
+                        <li>Abre el enlace desde <strong class="text-ink">Safari</strong>.</li>
+                        <li>Toca el botón de <strong class="text-ink">Compartir</strong> (el cuadrado con la flecha hacia arriba ⎋).</li>
+                        <li>Elige la opción <strong class="text-ink">«Añadir a la pantalla de inicio»</strong>.</li>
+                    </ol>
+                </div>
+
+                <!-- Android Instructions -->
+                <div class="p-3.5 bg-well rounded-xl border border-line space-y-1.5">
+                    <div class="flex items-center gap-2 font-bold text-ink text-sm">
+                        En Android (Chrome):
+                    </div>
+                    <ol class="text-ink2 text-xs space-y-1 list-decimal list-inside">
+                        <li>Abre el enlace desde <strong class="text-ink">Google Chrome</strong>.</li>
+                        <li>Toca los <strong class="text-ink">3 puntos verticales</strong> arriba a la derecha.</li>
+                        <li>Toca <strong class="text-ink">«Instalar aplicación»</strong> o «Añadir a pantalla de inicio».</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button @onclick="Close" class="w-full py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
+                    ¡Entendido, listo para usar!
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

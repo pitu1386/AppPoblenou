@@ -1,0 +1,208 @@
+@inject ITeamDataService TeamService
+
+<div class="space-y-4 pb-20">
+
+    <!-- SUB-NAV FOR STATS -->
+    <div class="apn-tabs">
+        <button @onclick='() => _statType = "goals"' class="apn-tab @(_statType == "goals" ? "active" : "")">Goleadores</button>
+        <button @onclick='() => _statType = "assists"' class="apn-tab @(_statType == "assists" ? "active" : "")">Asistencias</button>
+        <button @onclick='() => _statType = "cards"' class="apn-tab @(_statType == "cards" ? "active" : "")">Tarjetas</button>
+        <button @onclick='() => _statType = "mvp"' class="apn-tab @(_statType == "mvp" ? "active" : "")">MVP</button>
+    </div>
+
+    <!-- PICHICHI (GOALS) -->
+    @if (_statType == "goals")
+    {
+        var topScorers = TeamService.GetTopScorers();
+        int rank = 1;
+
+        <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs text-muted px-1">
+                <span class="font-bold uppercase tracking-wider text-xs text-warntext">Trofeo Pichichi A.P.N.</span>
+                <span>Temporada actual</span>
+            </div>
+
+            @if (!topScorers.Any())
+            {
+                <div class="bg-surface border border-line rounded-xl p-6 text-center text-faint text-sm">
+                    Aún no hay goles registrados esta temporada.
+                </div>
+            }
+            else
+            {
+                <div class="bg-surface border border-line rounded-xl overflow-hidden divide-y divide-line">
+                    @foreach (var kv in topScorers)
+                    {
+                        var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+                        var currentRank = rank++;
+
+                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
+                            <div class="flex items-center gap-3">
+                                <!-- Rank Medal -->
+                                <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs @(currentRank == 1 ? "bg-warn text-black" : currentRank == 2 ? "bg-line2 text-black" : currentRank == 3 ? "bg-warn text-white" : "bg-well2 text-muted")">
+                                    @currentRank
+                                </div>
+
+                                <div>
+                                    <div class="font-bold text-sm text-ink flex items-center gap-1.5">
+                                        <span>@player?.Nickname</span>
+                                        <span class="text-xs text-muted font-cond">#@(player?.JerseyNumber?.ToString() ?? "-")</span>
+                                    </div>
+                                    <div class="text-xs text-muted">@player?.Position</div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
+
+                                <span class="font-extrabold text-sm text-ink font-cond">@kv.Value</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- ASSISTS -->
+    @if (_statType == "assists")
+    {
+        var topAssists = TeamService.GetTopAssisters();
+        int rank = 1;
+
+        <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs text-muted px-1">
+                <span class="font-bold uppercase tracking-wider text-xs text-infotext">Máximos Asistentes</span>
+                <span>Temporada actual</span>
+            </div>
+
+            @if (!topAssists.Any())
+            {
+                <div class="bg-surface border border-line rounded-xl p-6 text-center text-faint text-sm">
+                    Aún no hay asistencias registradas.
+                </div>
+            }
+            else
+            {
+                <div class="bg-surface border border-line rounded-xl overflow-hidden divide-y divide-line">
+                    @foreach (var kv in topAssists)
+                    {
+                        var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+                        var currentRank = rank++;
+
+                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
+                            <div class="flex items-center gap-3">
+                                <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs bg-well2 text-infotext border border-line2">
+                                    @currentRank
+                                </div>
+                                <div>
+                                    <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                    <div class="text-xs text-muted">@player?.Position</div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
+
+                                <span class="font-extrabold text-sm text-infotext font-cond">@kv.Value</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- CARDS -->
+    @if (_statType == "cards")
+    {
+        var cards = TeamService.GetCardsSummary();
+
+        <div class="space-y-2">
+            <div class="text-xs text-muted px-1">
+                Registro disciplinario del equipo:
+            </div>
+
+            @if (!cards.Any())
+            {
+                <div class="bg-surface border border-line rounded-xl p-6 text-center text-faint text-sm">
+                    ¡Ninguna tarjeta! Equipo muy limpio por ahora
+                </div>
+            }
+            else
+            {
+                <div class="bg-surface border border-line rounded-xl overflow-hidden divide-y divide-line">
+                    @foreach (var kv in cards)
+                    {
+                        var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+
+                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
+                            <div class="flex items-center gap-3">
+                                <span class="w-7 h-7 rounded-full bg-well2 border border-line2 flex items-center justify-center text-xs font-cond font-bold text-muted">
+                                    @(player?.JerseyNumber?.ToString() ?? "-")
+                                </span>
+                                <div>
+                                    <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                    <div class="text-xs text-muted">@player?.Position</div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                @if (kv.Value.Yellows > 0)
+                                {
+                                    <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-warnbg border border-warn/40 text-warntext text-xs font-cond font-bold">
+                                        <span class="w-2.5 h-3.5 bg-warn rounded-sm"></span>
+                                        <span>@kv.Value.Yellows</span>
+                                    </div>
+                                }
+                                @if (kv.Value.Reds > 0)
+                                {
+                                    <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-clubbg border border-club/40 text-clubtext text-xs font-cond font-bold">
+                                        <span class="w-2.5 h-3.5 bg-club rounded-sm"></span>
+                                        <span>@kv.Value.Reds</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- MVP -->
+    @if (_statType == "mvp")
+    {
+        var mvps = TeamService.GetMvpSummary();
+
+        <div class="space-y-2">
+            <div class="text-xs text-muted px-1">
+                Jugadores más destacados de cada jornada:
+            </div>
+
+            <div class="bg-surface border border-line rounded-xl overflow-hidden divide-y divide-line">
+                @foreach (var kv in mvps)
+                {
+                    var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+
+                    <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
+                        <div class="flex items-center gap-3">
+
+                            <div>
+                                <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                <div class="text-xs text-muted">@player?.Position</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-warnbg border border-warn/40 px-3 py-1 rounded-lg text-warntext font-bold text-xs font-cond">
+                            @kv.Value MVP@(kv.Value > 1 ? "s" : "")
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    private string _statType = "goals"; // "goals", "assists", "cards", "mvp"
+}

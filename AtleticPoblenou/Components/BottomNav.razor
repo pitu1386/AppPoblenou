@@ -1,0 +1,65 @@
+@inject ITeamDataService TeamService
+@implements IDisposable
+
+<nav class="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-line pb-[env(safe-area-inset-bottom)]">
+    <div class="max-w-lg mx-auto flex items-center px-2 pt-1 pb-2">
+
+        <button @onclick='() => SetTab("matches")' class="@ItemClass("matches")">
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>
+            <span>Partidos</span>
+        </button>
+
+        <button @onclick='() => SetTab("payments")' class="@ItemClass("payments")">
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h15a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7z"></path><path d="M3 7a2 2 0 0 1 2-2h11"></path><circle cx="16" cy="14" r="1.5"></circle></svg>
+            <span>Pagos</span>
+        </button>
+
+        <button @onclick='() => SetTab("stats")' class="@ItemClass("stats")">
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-8M11 20V5M17 20v-5M3 20h18"></path></svg>
+            <span>Stats</span>
+        </button>
+
+        <button @onclick='() => SetTab("squad")' class="@ItemClass("squad")">
+            <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M17.5 13.8a6.5 6.5 0 0 1 4 6.2"></path></svg>
+            <span>Plantilla</span>
+        </button>
+
+        @if (IsAdmin)
+        {
+            <button @onclick='() => SetTab("admin")' class="@ItemClass("admin")">
+                <svg class="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h8M18 18h2"></path><circle cx="15" cy="6" r="2.5"></circle><circle cx="9" cy="12" r="2.5"></circle><circle cx="15" cy="18" r="2.5"></circle></svg>
+                <span>Admin</span>
+            </button>
+        }
+
+    </div>
+</nav>
+
+@code {
+    [Parameter] public string ActiveTab { get; set; } = "matches";
+    [Parameter] public EventCallback<string> ActiveTabChanged { get; set; }
+
+    private bool IsAdmin => TeamService.GetCurrentUser()?.Role == UserRole.Admin;
+
+    private const string BaseItem = "flex-1 h-14 flex flex-col items-center justify-center gap-1 text-xs font-semibold transition rounded-lg";
+
+    private string ItemClass(string tab) =>
+        ActiveTab == tab
+            ? $"{BaseItem} text-clubtext"
+            : $"{BaseItem} text-faint hover:text-ink";
+
+    protected override void OnInitialized()
+    {
+        TeamService.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+    }
+
+    private async Task SetTab(string tab)
+    {
+        await ActiveTabChanged.InvokeAsync(tab);
+    }
+}

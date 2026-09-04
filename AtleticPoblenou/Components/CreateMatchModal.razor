@@ -1,0 +1,273 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">@(TargetMatch != null ? "Editar Horario y Cancha" : "Programar Partido de Liga")</h3>
+                        <p class="text-xs text-muted">Atletic Poblenou • Canchas y Horarios</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <!-- Select Rival Team from Registered or Custom -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="font-bold text-ink2">Equipo Rival</label>
+                        <span class="text-xs text-faint">Selecciona o escribe</span>
+                    </div>
+
+                    <select @onchange="OnRivalSelected" class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none mb-1.5">
+                        <option value="">-- Elige un equipo de la liga --</option>
+                        @foreach (var team in TeamService.GetRivalTeams())
+                        {
+                            <option value="@team.Id" selected="@(_selectedRivalId == team.Id)">@team.Name (@team.KitDescription)</option>
+                        }
+                    </select>
+
+                    <input @bind="_opponent" type="text" placeholder="O escribe el nombre del rival..."
+                           class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+
+                    @if (_selectedRival != null)
+                    {
+                        <div class="mt-1.5 p-2 bg-well rounded-lg border border-line flex items-center justify-between">
+                            <div class="text-xs text-muted">
+                                 Camiseta rival: <strong class="text-ink">@_selectedRival.KitDescription</strong>
+                            </div>
+                            <div class="w-5 h-5 rounded-md border border-line2 flex overflow-hidden">
+                                <div class="w-1/2 h-full" style="background-color: @_selectedRival.PrimaryColorHex"></div>
+                                <div class="w-1/2 h-full" style="background-color: @_selectedRival.SecondaryColorHex"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-1">
+                        <label class="font-bold text-ink2 block mb-1">Jornada (#)</label>
+                        <input @bind="_round" type="number" min="1" max="38"
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none text-center" />
+                    </div>
+                    <div class="col-span-1">
+                        <label class="font-bold text-ink2 block mb-1">Fecha</label>
+                        <input @bind="_matchDate" type="date"
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                    <div class="col-span-1">
+                        <label class="font-bold text-ink2 block mb-1">Hora</label>
+                        <input @bind="_matchTime" type="time"
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                </div>
+
+                <!-- Field & Google Maps URL -->
+                <div class="bg-well p-3 rounded-xl border border-line space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="font-bold text-ink2 block">Cancha / Ubicación</label>
+                        <span class="text-xs text-faint font-semibold">Canchas habituales:</span>
+                    </div>
+
+                    <!-- Fast shortcuts to popular Barcelona veteran fields -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <button type="button" @onclick='() => SetField("Camp Municipal Agapito Fernández", "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona")'
+                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
+                             Agapito Fernández
+                        </button>
+                        <button type="button" @onclick='() => SetField("CEM Can Felipa (Poblenou)", "https://maps.google.com/?q=Can+Felipa+Poblenou+Barcelona")'
+                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
+                             Can Felipa
+                        </button>
+                        <button type="button" @onclick='() => SetField("Camp Municipal Menorca", "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Menorca+Barcelona")'
+                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
+                             Menorca
+                        </button>
+                    </div>
+
+                    <div>
+                        <input @bind="_locationName" @bind:after="OnLocationChanged" type="text" placeholder="Nombre de la cancha o campo..."
+                               class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+
+                    <div>
+                        <label class="text-xs text-muted font-semibold block mb-0.5">Enlace a Google Maps</label>
+                        <div class="relative">
+                            <input @bind="_locationUrl" type="text" placeholder="https://maps.google.com/?q=..."
+                                   class="w-full bg-surface border border-line2 rounded-lg pl-8 pr-3 py-1.5 text-ink font-cond text-xs focus:border-club focus:outline-none" />
+
+                        </div>
+                        @if (!string.IsNullOrEmpty(_locationUrl))
+                        {
+                            <div class="mt-1 flex items-center justify-between text-xs">
+                                <span class="text-oktext">✓ Enlace de Maps listo</span>
+                                <a href="@_locationUrl" target="_blank" class="text-infotext hover:underline flex items-center gap-0.5">
+                                    <span>Abrir en Google Maps</span>
+                                    <span>↗</span>
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input @bind="_isHome" type="checkbox" id="isHomeCheck" class="rounded accent-red-600 w-4 h-4" />
+                    <label for="isHomeCheck" class="font-semibold text-ink2">Jugamos como local (en casa)</label>
+                </div>
+
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Indicaciones para la convocatoria (opcional)</label>
+                    <textarea @bind="_notes" rows="2" placeholder="Camiseta titular rojiblanca, estar 30 minutos antes..."
+                              class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none"></textarea>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-line">
+                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                    Cancelar
+                </button>
+                <button @onclick="SaveMatch" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
+                    @(TargetMatch != null ? "Guardar Cambios de Cancha" : "Crear y Convocar")
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public Match? TargetMatch { get; set; }
+
+    private string _opponent = "";
+    private string? _selectedRivalId = null;
+    private RivalTeam? _selectedRival = null;
+    private int _round = 5;
+    private DateTime _matchDate = DateTime.Today.AddDays(3);
+    private TimeOnly _matchTime = new TimeOnly(18, 30);
+    private string _locationName = "Camp Agapito Fernández (Poblenou)";
+    private string _locationUrl = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
+    private string _competition = "Liga Veteranos Barcelona";
+    private bool _isHome = true;
+    private string _notes = "Camiseta titular rojiblanca. Estar 40 minutos antes.";
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen)
+        {
+            if (TargetMatch != null)
+            {
+                _opponent = TargetMatch.Opponent;
+                _selectedRivalId = TargetMatch.RivalTeamId;
+                _selectedRival = !string.IsNullOrEmpty(_selectedRivalId) ? TeamService.GetRivalTeamById(_selectedRivalId) : null;
+                _round = TargetMatch.Round;
+                _matchDate = TargetMatch.MatchDate.ToLocalTime().Date;
+                _matchTime = TimeOnly.FromDateTime(TargetMatch.MatchDate.ToLocalTime());
+                _locationName = TargetMatch.LocationName;
+                _locationUrl = TargetMatch.LocationUrl ?? "";
+                _competition = TargetMatch.Competition;
+                _isHome = TargetMatch.IsHome;
+                _notes = TargetMatch.Notes;
+            }
+            else
+            {
+                var club = TeamService.GetClubSettings();
+                _locationName = club.HomeVenueName;
+                _locationUrl = club.HomeVenueMapsUrl;
+                _notes = $"Camiseta {club.KitDescription}. Estar 40 minutos antes.";
+            }
+        }
+    }
+
+    private void SetField(string name, string url)
+    {
+        _locationName = name;
+        _locationUrl = url;
+    }
+
+    private void OnLocationChanged()
+    {
+        if (string.IsNullOrWhiteSpace(_locationUrl) && !string.IsNullOrWhiteSpace(_locationName))
+        {
+            _locationUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(_locationName +" Barcelona")}";
+        }
+    }
+
+    private void OnRivalSelected(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString();
+        _selectedRivalId = id;
+        if (!string.IsNullOrEmpty(id))
+        {
+            _selectedRival = TeamService.GetRivalTeamById(id);
+            if (_selectedRival != null)
+            {
+                _opponent = _selectedRival.Name;
+            }
+        }
+        else
+        {
+            _selectedRival = null;
+        }
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveMatch()
+    {
+        if (string.IsNullOrWhiteSpace(_opponent)) return;
+
+        DateTime fullDate = _matchDate.Date.Add(_matchTime.ToTimeSpan());
+
+        if (string.IsNullOrWhiteSpace(_locationUrl) && !string.IsNullOrWhiteSpace(_locationName))
+        {
+            _locationUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(_locationName +" Barcelona")}";
+        }
+
+        if (TargetMatch != null)
+        {
+            TargetMatch.Opponent = _opponent.Trim();
+            TargetMatch.RivalTeamId = _selectedRivalId;
+            TargetMatch.Round = _round;
+            TargetMatch.MatchDate = fullDate;
+            TargetMatch.LocationName = _locationName;
+            TargetMatch.LocationUrl = _locationUrl;
+            TargetMatch.IsHome = _isHome;
+            TargetMatch.Notes = _notes;
+
+            await TeamService.UpdateMatchDetailsAsync(TargetMatch);
+        }
+        else
+        {
+            var match = new Match
+            {
+                Opponent = _opponent.Trim(),
+                RivalTeamId = _selectedRivalId,
+                Round = _round,
+                MatchDate = fullDate,
+                LocationName = _locationName,
+                LocationUrl = _locationUrl,
+                Competition = $"{_competition} - J{_round}",
+                IsHome = _isHome,
+                Notes = _notes,
+                Status = MatchStatus.Upcoming
+            };
+
+            await TeamService.AddMatchAsync(match);
+        }
+
+        await Close();
+    }
+}

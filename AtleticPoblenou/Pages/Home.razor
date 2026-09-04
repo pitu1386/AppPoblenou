@@ -1,0 +1,139 @@
+@page "/"
+@inject ITeamDataService TeamService
+@implements IDisposable
+
+<PageTitle>Atlètic Poblenou | A.P.N. Veteranos</PageTitle>
+
+@if (!_isLoaded)
+{
+    <div class="min-h-screen flex flex-col items-center justify-center py-20 text-center bg-app text-ink">
+        <div class="w-12 h-12 border-4 border-club border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-xs text-muted">Cargando datos del Atletic Poblenou...</p>
+    </div>
+}
+else if (!TeamService.IsAuthenticated)
+{
+    <!-- AUTHENTICATION GATE (LOGIN & REGISTRO CON CÓDIGO DE EQUIPO) -->
+    <LoginView />
+}
+else
+{
+    <!-- MAIN APP INTERFACE (SOLO PARA JUGADORES LOGUEADOS) -->
+
+    <!-- App Header -->
+    <AppHeader OnOpenInstall="() => _showInstallModal = true"
+               OnOpenDbModal="() => _showDbModal = true"
+               OnOpenMySheet="OpenPlayerSheet" />
+
+    <!-- Main Content Area with Bottom Padding for Navigation -->
+    <main class="flex-1 p-4 overflow-y-auto">
+        @switch (_activeTab)
+        {
+            case "matches":
+                <MatchesTab OnCreateMatch="() => OpenMatchModal(null)"
+                            OnEditMatch="OpenMatchModal"
+                            OnRecordResult="OpenRecordResult"
+                            OnOpenCreateTeam="() => _showCreateTeamModal = true"
+                            OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true" />
+                break;
+
+            case "payments":
+                <PaymentsTab OnOpenDirectPayment="OpenDirectPayment"
+                             OnAddExpense="() => _showAddExpenseModal = true" />
+                break;
+
+            case "stats":
+                <StatsTab />
+                break;
+
+            case "squad":
+                <SquadTab OnOpenPlayerSheet="OpenPlayerSheet" />
+                break;
+
+            case "admin":
+                <AdminTab OnCreateMatch="() => OpenMatchModal(null)"
+                          OnRecordPayment="() => OpenDirectPayment(null)"
+                          OnOpenCreateTeam="() => _showCreateTeamModal = true"
+                          OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
+                          OnAddExpense="() => _showAddExpenseModal = true"
+                          OnOpenDbModal="() => _showDbModal = true"
+                          OnOpenPlayerSheet="OpenPlayerSheet" />
+                break;
+        }
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <BottomNav ActiveTab="@_activeTab" ActiveTabChanged="HandleTabChanged" />
+
+    <!-- All Interactive Modals -->
+    <CreateMatchModal @bind-IsOpen="_showCreateMatchModal" TargetMatch="_selectedMatchForEdit" />
+    <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
+    <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="_selectedPlayerForPayment" />
+    <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
+    <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" />
+    <CreateAnnouncementModal @bind-IsOpen="_showCreateAnnouncementModal" />
+    <AddExpenseModal @bind-IsOpen="_showAddExpenseModal" />
+    <DbConfigModal @bind-IsOpen="_showDbModal" />
+    <PwaInstallModal @bind-IsOpen="_showInstallModal" />
+}
+
+@code {
+    private string _activeTab = "matches";
+    private bool _isLoaded = false;
+
+    private bool _showCreateMatchModal = false;
+    private bool _showRecordResultModal = false;
+    private bool _showDirectPaymentModal = false;
+    private bool _showPlayerSheetModal = false;
+    private bool _showCreateTeamModal = false;
+    private bool _showCreateAnnouncementModal = false;
+    private bool _showAddExpenseModal = false;
+    private bool _showDbModal = false;
+    private bool _showInstallModal = false;
+
+    private Match? _selectedMatchForScore;
+    private Match? _selectedMatchForEdit;
+    private string? _selectedPlayerForPayment;
+    private UserProfile? _selectedProfileForSheet;
+
+    protected override async Task OnInitializedAsync()
+    {
+        TeamService.OnChange += StateHasChanged;
+        await TeamService.InitializeAsync();
+        _isLoaded = true;
+    }
+
+    private void HandleTabChanged(string tab)
+    {
+        _activeTab = tab;
+    }
+
+    private void OpenMatchModal(Match? match)
+    {
+        _selectedMatchForEdit = match;
+        _showCreateMatchModal = true;
+    }
+
+    private void OpenRecordResult(Match match)
+    {
+        _selectedMatchForScore = match;
+        _showRecordResultModal = true;
+    }
+
+    private void OpenDirectPayment(string? playerId)
+    {
+        _selectedPlayerForPayment = playerId;
+        _showDirectPaymentModal = true;
+    }
+
+    private void OpenPlayerSheet(UserProfile profile)
+    {
+        _selectedProfileForSheet = profile;
+        _showPlayerSheetModal = true;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+    }
+}

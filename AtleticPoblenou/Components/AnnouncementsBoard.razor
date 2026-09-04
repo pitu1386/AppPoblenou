@@ -1,0 +1,182 @@
+@inject ITeamDataService TeamService
+
+@{
+    var announcements = TeamService.GetAnnouncements();
+    var currentUser = TeamService.GetCurrentUser();
+    var isAdmin = currentUser.Role == UserRole.Admin;
+}
+
+@if (announcements.Any() || isAdmin)
+{
+    <div class="space-y-3">
+
+        <div class="flex items-center justify-between px-0.5">
+            <div class="flex items-center gap-2">
+                <span class="w-7 h-7 rounded-full bg-clubbg text-clubtext flex items-center justify-center">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"></path><path d="M17 9a4 4 0 0 1 0 6"></path></svg>
+                </span>
+                <h3 class="font-cond font-bold text-[20px] leading-none text-ink m-0">Cartelera</h3>
+            </div>
+
+            @if (isAdmin)
+            {
+                <button @onclick="() => OnCreateAnnouncement.InvokeAsync()"
+                        class="h-8 px-3 rounded-lg border border-line bg-surface text-[13px] font-bold text-ink hover:bg-well transition">
+                    + Publicar
+                </button>
+            }
+        </div>
+
+        @foreach (var ann in announcements)
+        {
+            var totalVotes = ann.Votes.Count;
+            var myVote = ann.Votes.TryGetValue(currentUser.Id, out var v) ? v : (int?)null;
+            var isExpanded = _expandedRosters.Contains(ann.Id);
+
+            <div class="bg-surface border border-line rounded-xl p-4 space-y-3 relative overflow-hidden transition hover:border-line2">
+
+                @if (ann.IsPinned)
+                {
+                    <div class="absolute top-0 right-0 bg-club text-white font-extrabold text-[11px] uppercase tracking-wider px-3 py-0.5 rounded-bl-xl">
+                         Fijado
+                    </div>
+                }
+
+                <div>
+                    <div class="font-extrabold text-ink text-sm leading-snug pr-14">
+                        @ann.Title
+                    </div>
+                    <div class="text-xs text-muted mt-0.5 flex items-center gap-2">
+                        <span>Por <strong class="text-ink2">@ann.AuthorName</strong></span>
+                        <span>•</span>
+                        <span>@ann.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")h</span>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(ann.Content))
+                {
+                    <p class="text-xs text-ink2 bg-well p-3 rounded-xl border border-line leading-relaxed whitespace-pre-line">
+                        @ann.Content
+                    </p>
+                }
+
+                <!-- INTERACTIVE POLL SECTION -->
+                @if (ann.HasPoll && ann.PollOptions.Any())
+                {
+                    <div class="space-y-2 pt-1 border-t border-line">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-bold text-muted">Encuesta del equipo:</span>
+                            <span class="text-faint font-cond">@totalVotes @(totalVotes == 1 ? "voto" : "votos")</span>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            @for (int i = 0; i < ann.PollOptions.Count; i++)
+                            {
+                                int optionIndex = i;
+                                var optionText = ann.PollOptions[i];
+                                var optionVotes = ann.Votes.Count(kv => kv.Value == optionIndex);
+                                var percent = totalVotes > 0 ? (int)Math.Round((double)optionVotes / totalVotes * 100) : 0;
+                                var isMyChoice = myVote == optionIndex;
+
+                                <button type="button" @onclick="() => Vote(ann.Id, optionIndex)"
+                                        class="w-full text-left p-2.5 rounded-xl border transition relative overflow-hidden group @(isMyChoice ? "bg-okbg border-ok/40" : "bg-well border-line hover:border-line2")">
+
+                                    <!-- Progress fill background -->
+                                    <div class="absolute inset-y-0 left-0 @(isMyChoice ? "bg-okbg" : "bg-well2") transition-all" style="width: @percent%"></div>
+
+                                    <div class="relative flex items-center justify-between text-xs z-10">
+                                        <div class="flex items-center gap-2 font-bold @(isMyChoice ? "text-oktext" : "text-ink")">
+                                            @if (isMyChoice)
+                                            {
+                                                <span class="w-4 h-4 rounded-full bg-ok text-black flex items-center justify-center text-xs font-extrabold">✓</span>
+                                            }
+                                            <span>@optionText</span>
+                                        </div>
+
+                                        <div class="flex items-center gap-1.5 font-cond text-xs shrink-0 @(isMyChoice ? "text-oktext font-extrabold" : "text-muted")">
+                                            <span>@optionVotes</span>
+                                            <span class="text-xs opacity-75">(@percent%)</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+
+                        <!-- TOGGLE WHO VOTED WHAT -->
+                        @if (totalVotes > 0)
+                        {
+                            <div class="pt-1">
+                                <button type="button" @onclick="() => ToggleRoster(ann.Id)"
+                                        class="text-xs text-muted hover:text-ink font-bold flex items-center gap-1">
+                                    <span>@(isExpanded ? "▾ Ocultar quién votó" : "▸ Ver quién votó qué")</span>
+                                </button>
+
+                                @if (isExpanded)
+                                {
+                                    <div class="mt-2 p-2.5 bg-well rounded-xl border border-line space-y-2 text-xs animate-in fade-in duration-150">
+                                        @for (int i = 0; i < ann.PollOptions.Count; i++)
+                                        {
+                                            int optionIndex = i;
+                                            var voters = ann.Votes.Where(kv => kv.Value == optionIndex).Select(kv => kv.Key).ToList();
+
+                                            @if (voters.Any())
+                                            {
+                                                <div class="space-y-1">
+                                                    <div class="font-bold text-muted text-xs uppercase">
+                                                        @ann.PollOptions[optionIndex] (@voters.Count):
+                                                    </div>
+                                                    <div class="flex flex-wrap gap-1">
+                                                        @foreach (var vId in voters)
+                                                        {
+                                                            var profile = TeamService.GetProfileById(vId);
+                                                            <span class="px-2 py-0.5 rounded-lg bg-surface border border-line text-xs font-semibold text-ink">
+                                                                @(profile?.Nickname ?? "Jugador")
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (isAdmin)
+                {
+                    <div class="pt-2 border-t border-line flex justify-end">
+                        <button type="button" @onclick="() => TeamService.DeleteAnnouncementAsync(ann.Id)"
+                                class="text-xs text-faint hover:text-club flex items-center gap-1 transition">
+                            Borrar comunicado
+                        </button>
+                    </div>
+                }
+
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback OnCreateAnnouncement { get; set; }
+
+    private HashSet<string> _expandedRosters = new();
+
+    private void ToggleRoster(string annId)
+    {
+        if (_expandedRosters.Contains(annId))
+            _expandedRosters.Remove(annId);
+        else
+            _expandedRosters.Add(annId);
+    }
+
+    private async Task Vote(string annId, int optionIndex)
+    {
+        var user = TeamService.GetCurrentUser();
+        await TeamService.VoteAnnouncementPollAsync(annId, user.Id, optionIndex);
+    }
+}
+

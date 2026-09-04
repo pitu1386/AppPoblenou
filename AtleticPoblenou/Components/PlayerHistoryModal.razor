@@ -1,0 +1,353 @@
+﻿@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    var allPlayers = TeamService.GetProfiles();
+    var activePlayers = allPlayers.Where(p => p.IsActive).ToList();
+    var deactivatedPlayers = allPlayers.Where(p => !p.IsActive).ToList();
+    var currentUser = TeamService.GetCurrentUser();
+    var secretCode = TeamService.GetTeamSecretCode();
+
+    var baseList = _filterTab == "bajas" ? deactivatedPlayers :
+                   _filterTab == "activos" ? activePlayers : allPlayers;
+
+    var filteredList = baseList.Where(p =>
+        string.IsNullOrWhiteSpace(_searchQuery) ||
+        p.FullName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+        (p.Nickname != null && p.Nickname.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+        (p.JerseyNumber.HasValue && p.JerseyNumber.Value.ToString().Contains(_searchQuery)) ||
+        (p.Phone != null && p.Phone.Contains(_searchQuery))
+    ).OrderByDescending(p => !p.IsActive) // Deactivated first
+     .ThenBy(p => p.JerseyNumber ?? 99)
+     .ToList();
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-clubbg border border-club/30 flex items-center justify-center text-xl shrink-0">
+                        📜
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Histórico de Jugadores
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            Registro de futbolistas, control de bajas y reactivación directa
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Stats Ribbon -->
+            <div class="px-5 py-2.5 bg-well/50 border-b border-line grid grid-cols-3 gap-2 text-center text-xs shrink-0">
+                <div class="py-1">
+                    <span class="text-muted text-[11px] block">Total Histórico</span>
+                    <span class="font-cond font-bold text-base text-ink">@allPlayers.Count</span>
+                </div>
+                <div class="py-1 border-x border-line">
+                    <span class="text-oktext text-[11px] block font-semibold">🟢 En Activo</span>
+                    <span class="font-cond font-bold text-base text-oktext">@activePlayers.Count</span>
+                </div>
+                <div class="py-1">
+                    <span class="text-red-500 text-[11px] block font-semibold">🚫 Bajas / Desvinculados</span>
+                    <span class="font-cond font-bold text-base text-red-500">@deactivatedPlayers.Count</span>
+                </div>
+            </div>
+
+            <!-- Team Security Code Reminder Card -->
+            <div class="px-5 py-2.5 bg-warnbg/20 border-b border-line flex items-center justify-between gap-3 text-xs shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🔑</span>
+                    <div>
+                        <span class="text-muted text-[11px]">Código de Seguridad para Reactivados:</span>
+                        <span class="font-cond font-extrabold text-sm text-warntext ml-1">@secretCode</span>
+                    </div>
+                </div>
+                <span class="text-[11px] text-muted hidden sm:inline">
+                    Al reactivar a un jugador, dale este código para que inicie sesión
+                </span>
+            </div>
+
+            <!-- Search & Filters Toolbar -->
+            <div class="p-4 pb-2 space-y-2.5 shrink-0 bg-surface">
+                <!-- Search Bar -->
+                <div class="relative flex items-center">
+                    <svg class="w-4 h-4 text-muted absolute left-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input @bind="_searchQuery" @bind:event="oninput" type="text"
+                           placeholder="Buscar por nombre, apodo, dorsal o teléfono..."
+                           class="w-full bg-well border border-line2 rounded-xl pl-9 pr-8 py-2 text-xs text-ink placeholder-faint focus:border-club focus:outline-none transition" />
+                    @if (!string.IsNullOrEmpty(_searchQuery))
+                    {
+                        <button @onclick='() => _searchQuery = ""' class="absolute right-2.5 text-xs text-muted hover:text-ink">
+                            ✕
+                        </button>
+                    }
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex items-center gap-1.5 p-1 bg-well rounded-xl border border-line text-xs font-bold">
+                    <button @onclick='() => _filterTab = "bajas"'
+                            class="flex-1 py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 @(_filterTab == "bajas" ? "bg-surface text-ink shadow-xs border border-line" : "text-muted hover:text-ink")">
+                        <span>🚫 Bajas (@deactivatedPlayers.Count)</span>
+                    </button>
+                    <button @onclick='() => _filterTab = "todos"'
+                            class="flex-1 py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 @(_filterTab == "todos" ? "bg-surface text-ink shadow-xs border border-line" : "text-muted hover:text-ink")">
+                        <span>👥 Todos (@allPlayers.Count)</span>
+                    </button>
+                    <button @onclick='() => _filterTab = "activos"'
+                            class="flex-1 py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 @(_filterTab == "activos" ? "bg-surface text-ink shadow-xs border border-line" : "text-muted hover:text-ink")">
+                        <span>🟢 Activos (@activePlayers.Count)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Feedback Toast -->
+            @if (!string.IsNullOrEmpty(_feedbackMessage))
+            {
+                <div class="mx-4 my-1 p-3 rounded-xl bg-okbg border border-ok/30 text-oktext text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-in fade-in">
+                    <div class="flex items-center gap-2">
+                        <span>✓</span>
+                        <span>@_feedbackMessage</span>
+                    </div>
+                    <button @onclick='() => _feedbackMessage = null' class="text-oktext hover:opacity-75">✕</button>
+                </div>
+            }
+
+            <!-- Players List -->
+            <div class="p-4 pt-1 space-y-2.5 overflow-y-auto flex-1">
+                @if (!filteredList.Any())
+                {
+                    <div class="py-12 text-center space-y-2">
+                        @if (_filterTab == "bajas")
+                        {
+                            <div class="text-4xl">🛡️</div>
+                            <div class="font-cond font-bold text-base text-ink">¡No hay jugadores dados de baja!</div>
+                            <p class="text-xs text-muted max-w-xs mx-auto">
+                                Todos los futbolistas del historial forman parte actualmente de la plantilla activa.
+                            </p>
+                        }
+                        else
+                        {
+                            <div class="text-4xl">🔍</div>
+                            <div class="font-cond font-bold text-base text-ink">No se encontraron jugadores</div>
+                            <p class="text-xs text-muted">Prueba con otro término de búsqueda o cambia de filtro.</p>
+                        }
+                    </div>
+                }
+                else
+                {
+                    @foreach (var player in filteredList)
+                    {
+                        var isDeactivated = !player.IsActive;
+                        var posName = player.Position == Position.Portero ? "Portero" :
+                                      player.Position == Position.Defensa ? "Defensa" :
+                                      player.Position == Position.Centrocampista ? "Mediocampista" : "Delantero";
+                        var goals = TeamService.GetMatchEvents().Count(e => e.PlayerId == player.Id && e.EventType == EventType.Goal);
+                        var assists = TeamService.GetMatchEvents().Count(e => e.PlayerId == player.Id && e.EventType == EventType.Assist);
+
+                        <div class="bg-surface border @(isDeactivated ? "border-red-500/30 bg-red-500/[0.02]" : "border-line") rounded-xl p-3.5 space-y-3 transition hover:border-line2">
+                            <!-- Main Row -->
+                            <div class="flex items-center gap-3">
+                                <!-- Dorsal Box -->
+                                <div class="w-11 h-11 rounded-xl @(isDeactivated ? "bg-red-500/10 text-red-500 border border-red-500/20" : "bg-well text-ink border border-line") flex flex-col items-center justify-center shrink-0">
+                                    <span class="font-cond font-extrabold text-lg leading-none">@(player.JerseyNumber?.ToString() ?? "-")</span>
+                                    <span class="text-[8px] uppercase tracking-wider text-muted mt-0.5">Dorsal</span>
+                                </div>
+
+                                <!-- Player Info -->
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="font-bold text-[15px] text-ink truncate">@player.FullName</span>
+                                        @if (isDeactivated)
+                                        {
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-500/20 text-red-500 border border-red-500/30 shrink-0">
+                                                🚫 DADO DE BAJA
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-okbg text-oktext border border-ok/30 shrink-0">
+                                                🟢 ACTIVO
+                                            </span>
+                                        }
+
+                                        @if (player.IsCaptain)
+                                        {
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/40 shrink-0">
+                                                🟡 (C)
+                                            </span>
+                                        }
+                                    </div>
+
+                                    <div class="flex items-center gap-2 text-xs text-muted mt-0.5 flex-wrap">
+                                        <span class="font-semibold text-ink">@posName</span>
+                                        <span>·</span>
+                                        <span>@player.Foot</span>
+                                        @if (player.Age.HasValue)
+                                        {
+                                            <span>·</span>
+                                            <span>@player.Age años</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(player.Phone))
+                                        {
+                                            <span>·</span>
+                                            <span class="text-faint">@player.Phone</span>
+                                        }
+                                    </div>
+
+                                    <!-- Historical Stats Mini Strip -->
+                                    <div class="flex items-center gap-3 text-[11px] text-muted mt-1 font-medium">
+                                        <span>⚽ <strong class="text-ink">@goals</strong> goles</span>
+                                        <span>👟 <strong class="text-ink">@assists</strong> asis</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions Row -->
+                            <div class="pt-2.5 border-t border-line flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                @if (isDeactivated)
+                                {
+                                    <!-- PROMINENT REACTIVATION BUTTON -->
+                                    <button type="button" @onclick="() => ReactivatePlayer(player)"
+                                            class="flex-1 py-2 px-3 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-xs">
+                                        <span>✓</span>
+                                        <span>Reactivar en el Equipo</span>
+                                    </button>
+
+                                    @if (!string.IsNullOrEmpty(player.Phone))
+                                    {
+                                        var cleanPhone = player.Phone.Replace(" ", "").Replace("+", "");
+                                        var waText = Uri.EscapeDataString($"¡Hola {player.Nickname ?? player.FullName}! Te hemos reactivado en el Atlètic Poblenou. Para volver a ingresar a la app usa tu contraseña y este código de equipo: {secretCode}");
+                                        var waUrl = $"https://wa.me/{cleanPhone}?text={waText}";
+
+                                        <a href="@waUrl" target="_blank"
+                                           class="py-2 px-3 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shrink-0 border border-line"
+                                           title="Enviar código de acceso por WhatsApp">
+                                            <svg class="w-4 h-4 text-oktext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                                            <span>WhatsApp Código</span>
+                                        </a>
+                                    }
+                                }
+                                else if (currentUser.Id != player.Id)
+                                {
+                                    <button type="button" @onclick="() => _confirmDeactivatePlayer = player"
+                                            class="py-2 px-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5">
+                                        <span>🚫</span>
+                                        <span>Dar de baja</span>
+                                    </button>
+                                }
+
+                                <button type="button" @onclick="() => OpenPlayerSheet(player)"
+                                        class="py-2 px-3 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-lg transition shrink-0 border border-line">
+                                    Ver Ficha
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Footer Close -->
+            <div class="p-3 border-t border-line shrink-0 bg-surface flex items-center justify-between gap-3">
+                <span class="text-xs text-muted hidden sm:inline">
+                    Gestión histórica del Atlètic Poblenou
+                </span>
+                <button type="button" @onclick="Close"
+                        class="w-full sm:w-auto px-6 py-2.5 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-xl transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    @if (_confirmDeactivatePlayer != null)
+    {
+        <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+            <div class="bg-surface border-2 border-red-500/50 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-3 animate-in zoom-in-95">
+                <div class="font-bold text-sm text-red-500 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>¿Dar de baja a @_confirmDeactivatePlayer.FullName?</span>
+                </div>
+                <p class="text-xs text-muted leading-relaxed">
+                    Se le revocará inmediatamente el acceso a la aplicación. Quedará en este <strong>Histórico</strong> y podrás reactivarlo en cualquier momento con un solo clic.
+                </p>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" @onclick="() => _confirmDeactivatePlayer = null"
+                            class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-xl transition">
+                        Cancelar
+                    </button>
+                    <button type="button" @onclick="ConfirmDeactivate"
+                            class="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition">
+                        Sí, dar de baja
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public EventCallback<UserProfile> OnOpenPlayerSheet { get; set; }
+
+    private string _searchQuery = "";
+    private string _filterTab = "bajas";
+    private string? _feedbackMessage;
+    private UserProfile? _confirmDeactivatePlayer;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen)
+        {
+            var hasBajas = TeamService.GetProfiles().Any(p => !p.IsActive);
+            _filterTab = hasBajas ? "bajas" : "todos";
+        }
+    }
+
+    private async Task ReactivatePlayer(UserProfile player)
+    {
+        await TeamService.ReactivatePlayerAsync(player.Id);
+        _feedbackMessage = $"¡{player.FullName} ha sido reactivado en el equipo con éxito!";
+        StateHasChanged();
+    }
+
+    private async Task ConfirmDeactivate()
+    {
+        if (_confirmDeactivatePlayer != null)
+        {
+            var name = _confirmDeactivatePlayer.FullName;
+            await TeamService.DeactivatePlayerAsync(_confirmDeactivatePlayer.Id);
+            _confirmDeactivatePlayer = null;
+            _feedbackMessage = $"Se ha dado de baja a {name}. Puedes reactivarlo cuando desees.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenPlayerSheet(UserProfile player)
+    {
+        await Close();
+        if (OnOpenPlayerSheet.HasDelegate)
+        {
+            await OnOpenPlayerSheet.InvokeAsync(player);
+        }
+    }
+
+    private async Task Close()
+    {
+        _feedbackMessage = null;
+        _confirmDeactivatePlayer = null;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

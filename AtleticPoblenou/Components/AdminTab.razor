@@ -1,0 +1,285 @@
+@inject ITeamDataService TeamService
+
+<div class="space-y-4 pb-20">
+
+    <div class="px-0.5 pb-1">
+        <h2 class="font-cond font-extrabold text-[26px] leading-none text-ink m-0">Administración</h2>
+        <p class="text-[13px] font-medium text-muted m-0 mt-1">Gestión del club para capitán y tesorero</p>
+    </div>
+
+    @{
+        var allProfiles = TeamService.GetProfiles();
+        var activeCount = allProfiles.Count(p => p.IsActive);
+        var deactivatedCount = allProfiles.Count(p => !p.IsActive);
+    }
+
+    <div class="bg-surface border border-line rounded-xl px-[18px] py-3 grid grid-cols-3 divide-x divide-line">
+        <div class="pr-3">
+            <div class="text-xs font-medium text-muted">Jugadores</div>
+            <div class="font-cond font-bold text-[24px] leading-tight text-ink">@activeCount</div>
+            @if (deactivatedCount > 0)
+            {
+                <div class="text-[10px] font-bold text-red-500 mt-0.5">@deactivatedCount bajas</div>
+            }
+        </div>
+        <div class="px-3">
+            <div class="text-xs font-medium text-muted">Partidos</div>
+            <div class="font-cond font-bold text-[24px] leading-tight text-ink">@TeamService.GetMatches().Count</div>
+        </div>
+        <div class="pl-3">
+            <div class="text-xs font-medium text-muted">Caja</div>
+            <div class="font-cond font-bold text-[24px] leading-tight text-oktext">@TeamService.GetTeamBalance().ToString("N0") €</div>
+        </div>
+    </div>
+
+    <!-- TEAM INVITATION SECRET CODE GENERATOR -->
+    <div class="bg-surface border border-line rounded-xl p-5 space-y-3">
+        <div class="flex items-center gap-2">
+
+            <div>
+                <h3 class="font-extrabold text-ink text-xs uppercase tracking-wider">Código de Registro de Jugadores</h3>
+                <p class="text-xs text-muted">Pásale este código a los nuevos compañeros para que puedan crearse su cuenta</p>
+            </div>
+        </div>
+
+        <div class="p-3.5 bg-well rounded-xl border border-line flex items-center justify-between gap-2">
+            <div>
+                <div class="text-xs text-faint font-bold uppercase tracking-wider">Código Activo</div>
+                <div class="font-cond font-extrabold text-xl text-warntext tracking-wider">
+                    @TeamService.GetTeamSecretCode()
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <button @onclick="GenerateNewCode"
+                        class="px-3 py-2 bg-well2 hover:bg-well2 text-ink font-bold text-xs rounded-lg transition border border-line2 flex items-center gap-1.5">
+                    Generar Nuevo
+                </button>
+
+                @{
+                    var currentCode = TeamService.GetTeamSecretCode();
+                    var waText = Uri.EscapeDataString($"¡Hola! Para registrarte en la app oficial del Atlètic Poblenou, usa este código de equipo: {currentCode}");
+                    var waUrl = $"https://wa.me/?text={waText}";
+                }
+                <a href="@waUrl" target="_blank"
+                   class="px-3 py-2 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center gap-1.5">
+                    Enviar
+                </a>
+            </div>
+        </div>
+
+        @if (_codeJustGenerated)
+        {
+            <div class="text-xs text-oktext font-bold flex items-center gap-1">
+                <span>✓</span> ¡Nuevo código random generado y guardado! Los anteriores ya no servirán.
+            </div>
+        }
+    </div>
+
+    <!-- ADMIN QUICK ACTIONS -->
+    <div class="space-y-2">
+        <h3 class="text-xs font-bold text-muted uppercase tracking-wider px-1">Acciones Principales</h3>
+
+        <div class="grid grid-cols-1 gap-2.5">
+            <!-- Action 1: Create Match -->
+            <button @onclick="OnCreateMatch"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-clubbg border border-club/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Programar Nuevo Partido</div>
+                        <div class="text-xs text-muted">Rival, fecha, hora, campo y convocatoria</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 2: Direct Payment Entry -->
+            <button @onclick="OnRecordPayment"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-okbg border border-ok/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Registrar Cobro Recibido</div>
+                        <div class="text-xs text-muted">Cargar importe recibido a un jugador (Bizum / Efectivo)</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 3: Create Rival Team -->
+            <button @onclick="OnOpenCreateTeam"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-infobg border border-info/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Cargar Equipo Rival</div>
+                        <div class="text-xs text-muted">Nombre del club y colores de camiseta</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 4: Add Expense -->
+            <button @onclick="OnAddExpense"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-warnbg border border-warn/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Registrar Gasto de Caja</div>
+                        <div class="text-xs text-muted">Árbitro, alquiler de cancha, balones o tercer tiempo</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 5: Postgres / Supabase Modal (Exclusivo para pitu1386) -->
+            @if (IsSuperOwner())
+            {
+                <button @onclick="OnOpenDbModal"
+                        class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-infobg border border-info/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+                            🐘
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm text-ink">PostgreSQL & Base de Datos</div>
+                            <div class="text-xs text-muted">Ver script SQL y configuración para tu máquina</div>
+                        </div>
+                    </div>
+                    <span class="text-faint text-lg font-bold">›</span>
+                </button>
+            }
+
+            <!-- Action 6: Club Settings -->
+            <button @onclick="() => _showClubSettingsModal = true"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-clubbg border border-club/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Configuración de Nuestro Club</div>
+                        <div class="text-xs text-muted">Nuestra camiseta, cancha local y costo inicial de temporada</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 7: Create Announcement / Poll -->
+            <button @onclick="OnOpenCreateAnnouncement"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-warnbg border border-warn/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Publicar Comunicado o Encuesta</div>
+                        <div class="text-xs text-muted">Asados, tercer tiempo, avisos importantes y votaciones</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 8: Manage Roles & Permissions -->
+            <button @onclick="() => _showRolesModal = true"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-infobg border border-info/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+                        👥
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Administrar Roles y Permisos</div>
+                        <div class="text-xs text-muted">Asignar Capitán/Admin, Tesorero o Jugador a cada miembro</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 9: Season Lifecycle & New Season -->
+            <button @onclick="() => _showSeasonModal = true"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-okbg border border-ok/40 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition">
+                        🏁
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Gestión de Temporadas</div>
+                        <div class="text-xs text-muted">Temporada activa (@TeamService.GetClubSettings().SeasonName), archivo histórico y nuevo año</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+
+            <!-- Action 10: Histórico de Jugadores & Reactivación -->
+            <button @onclick="() => _showPlayerHistoryModal = true"
+                    class="p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg @(deactivatedCount > 0 ? "bg-red-500/10 border border-red-500/30 text-red-500" : "bg-infobg border border-info/40 text-infotext") flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition">
+                        📜
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink flex items-center gap-2">
+                            <span>Histórico de Jugadores & Bajas</span>
+                            @if (deactivatedCount > 0)
+                            {
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-500 text-white animate-pulse">
+                                    @deactivatedCount @(deactivatedCount == 1 ? "baja" : "bajas")
+                                </span>
+                            }
+                        </div>
+                        <div class="text-xs text-muted">Registro histórico de futbolistas, consultar bajas y reactivarlos al equipo</div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold">›</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <ClubSettingsModal @bind-IsOpen="_showClubSettingsModal" />
+    <ManageRolesModal @bind-IsOpen="_showRolesModal" />
+    <SeasonManagerModal @bind-IsOpen="_showSeasonModal" />
+    <PlayerHistoryModal @bind-IsOpen="_showPlayerHistoryModal" OnOpenPlayerSheet="OnOpenPlayerSheet" />
+
+</div>
+
+@code {
+    [Parameter] public EventCallback OnCreateMatch { get; set; }
+    [Parameter] public EventCallback OnRecordPayment { get; set; }
+    [Parameter] public EventCallback OnOpenCreateTeam { get; set; }
+    [Parameter] public EventCallback OnOpenCreateAnnouncement { get; set; }
+    [Parameter] public EventCallback OnAddExpense { get; set; }
+    [Parameter] public EventCallback OnOpenDbModal { get; set; }
+    [Parameter] public EventCallback<UserProfile> OnOpenPlayerSheet { get; set; }
+
+    private bool _codeJustGenerated = false;
+    private bool _showClubSettingsModal = false;
+    private bool _showRolesModal = false;
+    private bool _showSeasonModal = false;
+    private bool _showPlayerHistoryModal = false;
+
+    private async Task GenerateNewCode()
+    {
+        await TeamService.GenerateNewTeamCodeAsync();
+        _codeJustGenerated = true;
+        StateHasChanged();
+    }
+
+    private bool IsSuperOwner()
+    {
+        var u = TeamService.GetCurrentUser();
+        if (u == null) return false;
+        var nick = u.Nickname?.ToLowerInvariant() ?? "";
+        var email = u.Email?.ToLowerInvariant() ?? "";
+        return nick == "pitu1386" || email.Contains("pitu1386") || u.Id == "user-1";
+    }
+}

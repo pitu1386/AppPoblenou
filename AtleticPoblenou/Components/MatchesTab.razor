@@ -1,0 +1,711 @@
+@inject ITeamDataService TeamService
+@inject IJSRuntime JS
+
+<div class="space-y-4 pb-20">
+
+    <!-- SUB-NAV FOR MATCHES SECTION -->
+    <div class="apn-tabs">
+        <button @onclick='() => _subTab = "next"' class="apn-tab @(_subTab == "next" ? "active" : "")">Próximo</button>
+        <button @onclick='() => _subTab = "fixture"' class="apn-tab @(_subTab == "fixture" ? "active" : "")">Fixture</button>
+        <button @onclick='() => _subTab = "table"' class="apn-tab @(_subTab == "table" ? "active" : "")">Posiciones</button>
+        <button @onclick='() => _subTab = "rivals"' class="apn-tab @(_subTab == "rivals" ? "active" : "")">Equipos</button>
+    </div>
+    <!-- TAB 1: PRÓXIMO PARTIDO & CONVOCATORIA EN DIRECTO -->
+    @if (_subTab == "next")
+    {
+        <!-- CARTELERA Y COMUNICADOS OFICIALES (ASADOS, ENCUESTAS, AVISOS) -->
+        <AnnouncementsBoard OnCreateAnnouncement="() => OnOpenCreateAnnouncement.InvokeAsync()" />
+
+        @if (NextMatch != null)
+        {
+            var attendanceList = TeamService.GetAttendanceForMatch(NextMatch.Id);
+            var goingCount = attendanceList.Count(a => a.Status == AttendanceStatus.Going);
+            var maybeCount = attendanceList.Count(a => a.Status == AttendanceStatus.Maybe);
+            var notGoingCount = attendanceList.Count(a => a.Status == AttendanceStatus.NotGoing);
+            var myAttendance = TeamService.GetUserAttendance(NextMatch.Id, CurrentUser.Id);
+
+            var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == NextMatch.RivalTeamId);
+            var answered = goingCount + maybeCount + notGoingCount;
+            var goingPct = answered == 0 ? 0 : (int)Math.Round(100.0 * goingCount / answered);
+            var maybePct = answered == 0 ? 0 : (int)Math.Round(100.0 * maybeCount / answered);
+            var notGoingPct = answered == 0 ? 0 : 100 - goingPct - maybePct;
+            var dayName = NextMatch.MatchDate.ToString("dddd", EsCulture).ToLowerInvariant();
+            var allProfiles = TeamService.GetProfiles();
+            var answeredPlayerIds = attendanceList.Select(a => a.PlayerId).ToHashSet();
+            var unansweredPlayers = allProfiles.Where(p => !answeredPlayerIds.Contains(p.Id)).ToList();
+
+            <!-- PRÓXIMO PARTIDO -->
+            <div class="bg-surface border border-line rounded-xl px-[18px] pt-4 pb-3.5 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="text-[11px] font-bold tracking-[0.1em] uppercase text-clubtext truncate">
+                        Jornada @NextMatch.Round · @NextMatch.Competition
+                    </div>
+                    <div class="text-[11px] font-bold tracking-wider px-2 py-0.5 rounded bg-well text-ink shrink-0">
+                        @(NextMatch.IsHome ? "LOCAL" : "VISITANTE")
+                    </div>
+                </div>
+
+                <div class="flex items-baseline gap-2.5 flex-wrap">
+                    <div class="font-cond font-extrabold text-[38px] leading-none text-ink capitalize">
+                        @NextMatch.MatchDate.ToString("ddd d MMM", EsCulture).Replace(".", "")
+                    </div>
+                    <div class="font-cond font-extrabold text-[38px] leading-none text-clubtext">
+                        @NextMatch.MatchDate.ToString("HH:mm")
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center gap-2.5 py-2 border-b border-line">
+                        <img src="escudo.png" alt="" class="w-6 h-7 object-contain shrink-0" />
+                        <div class="flex-1 text-base font-bold text-ink truncate">Atlètic Poblenou</div>
+                        <div class="text-xs font-semibold text-faint shrink-0">A.P.N.</div>
+                    </div>
+                    <div class="flex items-center gap-2.5 py-2">
+                        <div class="w-6 h-7 flex items-center justify-center shrink-0">
+                            <div class="w-[22px] h-[22px] rounded-[5px] border border-line flex overflow-hidden">
+                                <div class="w-1/2 h-full" style="background-color: @(rival?.PrimaryColorHex ?? "#1E3A8A")"></div>
+                                <div class="w-1/2 h-full" style="background-color: @(rival?.SecondaryColorHex ?? "#FFFFFF")"></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 text-base font-bold text-ink truncate">@NextMatch.Opponent</div>
+                        <div class="text-xs font-semibold text-faint shrink-0">Rival</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-2.5 border-t border-line">
+                    <svg class="w-[18px] h-[18px] text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"></path><circle cx="12" cy="11" r="2.2"></circle></svg>
+                    <div class="flex-1 text-sm font-medium text-ink2 truncate">@NextMatch.LocationName</div>
+                    <a href="@NextMatch.LocationUrl" target="_blank" class="inline-flex items-center gap-0.5 text-[13px] font-bold text-clubtext hover:text-club shrink-0">
+                        Cómo llegar
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"></path></svg>
+                    </a>
+                </div>
+
+                <!-- PRONÓSTICO DEL CLIMA DINÁMICO (FECHA, HORA Y CANCHA DEL PARTIDO) -->
+                @if (_matchWeather != null)
+                {
+                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-infobg/40 border border-info/20 text-xs">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl shrink-0">@_matchWeather.Icon</span>
+                            <div>
+                                <div class="font-bold text-ink flex items-center gap-1.5 flex-wrap">
+                                    <span>@_matchWeather.Temperature°C · @_matchWeather.ConditionText</span>
+                                    @if (_matchWeather.IsOptimal)
+                                    {
+                                        <span class="text-[10px] bg-okbg text-oktext border border-ok/30 px-1.5 py-0.2 rounded font-extrabold">ÓPTIMO</span>
+                                    }
+                                    else if (_matchWeather.PrecipitationProbability > 50)
+                                    {
+                                        <span class="text-[10px] bg-clubbg text-clubtext border border-club/30 px-1.5 py-0.2 rounded font-extrabold">ALERTA LLUVIA</span>
+                                    }
+                                </div>
+                                <div class="text-[11px] text-muted">
+                                    @NextMatch.MatchDate.ToString("ddd d/MM HH:mm") h · Viento: @_matchWeather.WindSpeed km/h · Humedad: @_matchWeather.Humidity%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0 hidden sm:block">
+                            @if (_matchWeather.PrecipitationProbability > 0)
+                            {
+                                <span class="text-[11px] font-cond font-bold text-clubtext">@_matchWeather.PrecipitationProbability% lluvia</span>
+                            }
+                            else
+                            {
+                                <span class="text-[11px] font-cond font-bold text-muted">Sin lluvia</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-2 rounded-xl bg-well/60 border border-line text-[11px] text-muted flex items-center gap-2">
+                        <span>⏳</span>
+                        <span>Consultando pronóstico para la hora del partido...</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(NextMatch.Notes))
+                {
+                    <div class="text-[13px] text-ink2 bg-warnbg rounded-lg px-3 py-2.5">@NextMatch.Notes</div>
+                }
+
+                <!-- ACTION BUTTONS: WHATSAPP CONVOCATORIA & PIZARRA TÁCTICA -->
+                <div class="grid grid-cols-2 gap-2 pt-1 border-t border-line">
+                    <button type="button" @onclick="ShareMatchWhatsApp"
+                            class="h-10 rounded-xl bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                        <span>Convocatoria WhatsApp</span>
+                    </button>
+                    <button type="button" @onclick="() => _showTacticalModal = true"
+                            class="h-10 rounded-xl bg-surface border border-line2 hover:border-club text-ink text-xs font-bold transition flex items-center justify-center gap-1.5 hover:bg-well">
+                        <span class="text-base">🟢</span>
+                        <span>Pizarra Táctica (11)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ASISTENCIA -->
+            <div class="bg-surface border border-line rounded-xl px-[18px] pt-3.5 pb-4 space-y-3">
+                <div class="flex items-baseline justify-between gap-2">
+                    <div class="font-cond font-bold text-[22px] leading-none text-ink">¿Vas este @dayName?</div>
+                    @if (myAttendance != null)
+                    {
+                        <span class="text-xs font-bold tracking-wider px-2 py-0.5 rounded shrink-0 @(myAttendance.Status == AttendanceStatus.Going ? "bg-okbg text-oktext" : myAttendance.Status == AttendanceStatus.Maybe ? "bg-warnbg text-warntext" : "bg-clubbg text-clubtext")">
+                            @(myAttendance.Status == AttendanceStatus.Going ? "CONFIRMADO" : myAttendance.Status == AttendanceStatus.Maybe ? "EN DUDA" : "BAJA")
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="text-[13px] text-muted shrink-0">Confirma tu asistencia</span>
+                    }
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <button @onclick="() => SetMyRsvp(AttendanceStatus.Going)"
+                            class="h-12 rounded-[10px] text-[15px] flex items-center justify-center gap-1.5 border transition @(myAttendance?.Status == AttendanceStatus.Going ? "bg-ok text-white border-ok font-bold" : "bg-surface text-ink2 border-line2 font-semibold hover:bg-well")">
+                        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                        Voy
+                    </button>
+                    <button @onclick="() => SetMyRsvp(AttendanceStatus.Maybe)"
+                            class="h-12 rounded-[10px] text-[15px] flex items-center justify-center gap-1.5 border transition @(myAttendance?.Status == AttendanceStatus.Maybe ? "bg-warn text-white border-warn font-bold" : "bg-surface text-ink2 border-line2 font-semibold hover:bg-well")">
+                        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"></path><circle cx="12" cy="17" r=".9" fill="currentColor"></circle></svg>
+                        Duda
+                    </button>
+                    <button @onclick="() => SetMyRsvp(AttendanceStatus.NotGoing)"
+                            class="h-12 rounded-[10px] text-[15px] flex items-center justify-center gap-1.5 border transition @(myAttendance?.Status == AttendanceStatus.NotGoing ? "bg-club text-white border-club font-bold" : "bg-surface text-ink2 border-line2 font-semibold hover:bg-well")">
+                        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                        No voy
+                    </button>
+                </div>
+            </div>
+
+            <!-- CONVOCATORIA -->
+            <div class="bg-surface border border-line rounded-xl px-[18px] pt-3.5 pb-4 space-y-3">
+                <div class="flex items-baseline justify-between gap-2">
+                    <div class="font-cond font-bold text-[20px] leading-none text-ink">Convocatoria</div>
+                    <div class="text-[13px] font-semibold text-muted shrink-0">
+                        <span class="text-oktext font-bold">@goingCount @(goingCount == 1 ? "va" : "van")</span> · @maybeCount duda · @notGoingCount baja
+                    </div>
+                </div>
+
+                <div class="apn-meter">
+                    <div class="bg-ok h-full transition-all" style="width: @goingPct%"></div>
+                    <div class="bg-warn h-full transition-all" style="width: @maybePct%"></div>
+                    <div class="bg-club h-full transition-all" style="width: @notGoingPct%"></div>
+                </div>
+
+                <!-- FILTROS DE CONVOCATORIA -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    <button type="button" @onclick='() => _rsvpFilter = "all"'
+                            class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_rsvpFilter == "all" ? "bg-well2 text-ink border-line2" : "bg-surface text-muted border-line hover:text-ink")">
+                        Todos (@allProfiles.Count)
+                    </button>
+                    <button type="button" @onclick='() => _rsvpFilter = "going"'
+                            class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_rsvpFilter == "going" ? "bg-ok text-white border-ok" : "bg-surface text-muted border-line hover:text-oktext")">
+                        Van (@goingCount)
+                    </button>
+                    <button type="button" @onclick='() => _rsvpFilter = "maybe"'
+                            class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_rsvpFilter == "maybe" ? "bg-warn text-white border-warn" : "bg-surface text-muted border-line hover:text-warntext")">
+                        Duda (@maybeCount)
+                    </button>
+                    <button type="button" @onclick='() => _rsvpFilter = "notgoing"'
+                            class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_rsvpFilter == "notgoing" ? "bg-club text-white border-club" : "bg-surface text-muted border-line hover:text-clubtext")">
+                        Bajas (@notGoingCount)
+                    </button>
+                    <button type="button" @onclick='() => _rsvpFilter = "unanswered"'
+                            class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_rsvpFilter == "unanswered" ? "bg-amber-500 text-black border-amber-500 font-extrabold shadow-sm" : "bg-surface text-amber-500/80 border-amber-500/40 hover:bg-amber-500/10")">
+                        ⚠️ Sin responder (@unansweredPlayers.Count)
+                    </button>
+                </div>
+
+                @if (_rsvpFilter == "unanswered")
+                {
+                    @if (!unansweredPlayers.Any())
+                    {
+                        <div class="py-4 text-center text-xs text-oktext font-bold">
+                            🎉 ¡Excelente! Toda la plantilla ha confirmado su estado para este partido.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="space-y-2 pt-1">
+                            <div class="text-[11px] text-muted">
+                                Toca para enviarles un mensaje recordatorio directo por WhatsApp:
+                            </div>
+                            <div class="space-y-1.5">
+                                @foreach (var player in unansweredPlayers)
+                                {
+                                    <div class="flex items-center justify-between p-2 rounded-xl bg-well border border-line text-xs">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-6 h-6 rounded bg-surface border border-line2 flex items-center justify-center font-cond font-bold text-ink">
+                                                @(player.JerseyNumber?.ToString() ?? "-")
+                                            </span>
+                                            <div>
+                                                <span class="font-bold text-ink">@player.FullName</span>
+                                                <span class="text-[11px] text-muted"> (@player.Nickname)</span>
+                                            </div>
+                                        </div>
+                                        <button type="button" @onclick="() => NudgePlayerWhatsApp(player)"
+                                                class="px-2.5 py-1 rounded-lg bg-ok hover:bg-okdeep text-white font-bold text-[11px] transition flex items-center gap-1 shadow-xs">
+                                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                                            <span>Dar toque</span>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    var filteredAtt = attendanceList.Where(a => 
+                        _rsvpFilter == "all" ||
+                        (_rsvpFilter == "going" && a.Status == AttendanceStatus.Going) ||
+                        (_rsvpFilter == "maybe" && a.Status == AttendanceStatus.Maybe) ||
+                        (_rsvpFilter == "notgoing" && a.Status == AttendanceStatus.NotGoing)
+                    ).ToList();
+
+                    @if (!filteredAtt.Any())
+                    {
+                        <div class="text-[13px] text-faint py-2">
+                            No hay jugadores en esta categoría.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var att in filteredAtt.OrderBy(a => a.Status))
+                            {
+                                var player = allProfiles.FirstOrDefault(p => p.Id == att.PlayerId);
+                                if (player != null)
+                                {
+                                    <span title="@att.Note"
+                                          class="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full text-[13px] font-semibold @(att.Status == AttendanceStatus.Going ? "bg-okbg text-oktext" : att.Status == AttendanceStatus.Maybe ? "bg-warnbg text-warntext" : "bg-well text-faint line-through")">
+                                        <span class="w-5 h-5 rounded-full flex items-center justify-center font-cond font-bold text-xs text-white @(att.Status == AttendanceStatus.Going ? "bg-ok" : att.Status == AttendanceStatus.Maybe ? "bg-warn" : "bg-line2")">
+                                            @(player.JerseyNumber?.ToString() ?? "-")
+                                        </span>
+                                        @player.Nickname
+                                    </span>
+                                }
+                            }
+                        </div>
+                    }
+                }
+
+                @if (CanManageMatches || IsAdmin)
+                {
+                    <div class="pt-2.5 border-t border-line flex gap-2">
+                        @if (CanManageMatches)
+                        {
+                            <button @onclick="() => OnEditMatch.InvokeAsync(NextMatch)"
+                                    class="flex-1 h-10 rounded-lg border border-line2 bg-surface text-ink text-[13px] font-bold hover:bg-well transition">
+                                Editar cancha / hora
+                            </button>
+                        }
+                        @if (IsAdmin)
+                        {
+                            <button @onclick="() => OnRecordResult.InvokeAsync(NextMatch)"
+                                    class="flex-1 h-10 rounded-lg bg-ink text-app text-[13px] font-bold hover:opacity-90 transition">
+                                Cargar acta y resultado
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="bg-surface border border-line rounded-xl p-8 text-center space-y-3">
+
+                <div class="font-extrabold text-ink text-base">No hay próximos partidos programados</div>
+                <p class="text-xs text-muted">El capitán o delegado de canchas aún no ha fijado la fecha del siguiente encuentro.</p>
+                @if (CanManageMatches)
+                {
+                    <button @onclick="() => OnEditMatch.InvokeAsync(null)" class="py-2.5 px-4 bg-club hover:bg-clubdeep text-white font-bold text-xs rounded-lg transition">
+                        + Programar Partido
+                    </button>
+                }
+            </div>
+        }
+    }
+
+    <!-- TAB 2: FIXTURE COMPLETO (TODAS LAS JORNADAS) -->
+    @if (_subTab == "fixture")
+    {
+        var allMatches = TeamService.GetMatches().OrderBy(m => m.MatchDate).ToList();
+
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <div>
+                    <h2 class="text-sm font-extrabold text-ink tracking-wide uppercase">
+                        Fixture de la Liga
+                    </h2>
+                    <p class="text-xs text-muted">Calendario oficial de partidos</p>
+                </div>
+                @if (CanManageMatches)
+                {
+                    <button @onclick="() => OnEditMatch.InvokeAsync(null)"
+                            class="text-xs font-bold text-clubtext hover:text-club flex items-center gap-1 bg-surface px-2.5 py-1.5 rounded-lg border border-line">
+                        <span>+</span> Nuevo Partido
+                    </button>
+                }
+            </div>
+
+            @foreach (var match in allMatches)
+            {
+                <div class="bg-surface border border-line rounded-xl p-4 transition hover:border-line2">
+                    <div class="flex items-center justify-between text-xs text-muted mb-2">
+                        <span class="font-bold text-clubtext">@match.Competition</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-bold @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
+                            @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
+                        </span>
+                    </div>
+
+                    <!-- Teams & Score -->
+                    <div class="flex items-center justify-between my-2">
+                        <div class="flex-1 font-bold text-sm @(match.OurScore > match.RivalScore ? "text-oktext font-extrabold" : "text-ink")">
+                            Atletic Poblenou
+                        </div>
+
+                        @if (match.Status == MatchStatus.Finished)
+                        {
+                            <div class="px-3 py-1 bg-well rounded-lg border border-line font-cond font-extrabold text-base mx-3 text-ink">
+                                @match.OurScore - @match.RivalScore
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="px-2.5 py-1 bg-well2 rounded-lg text-xs font-bold text-muted mx-3">
+                                VS
+                            </div>
+                        }
+
+                        <div class="flex-1 text-right font-bold text-sm @(match.RivalScore > match.OurScore ? "text-clubtext font-extrabold" : "text-ink2")">
+                            @match.Opponent
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-muted flex items-center justify-between mt-2 pt-2 border-t border-line">
+                        <span>@match.LocationName</span>
+                        <span>@(match.IsHome ? "Local" : "Visitante")</span>
+                    </div>
+
+                    <!-- Match actions: Canchas / Admin -->
+                    @if (CanManageMatches || IsAdmin)
+                    {
+                        <div class="mt-2 pt-2 border-t border-line flex items-center justify-between">
+                            @if (CanManageMatches && match.Status == MatchStatus.Upcoming)
+                            {
+                                <button @onclick="() => OnEditMatch.InvokeAsync(match)"
+                                        class="text-xs font-bold text-infotext hover:text-info flex items-center gap-1">
+                                    Editar Cancha / Hora
+                                </button>
+                            }
+                            else
+                            {
+                                <span></span>
+                            }
+
+                            @if (IsAdmin)
+                            {
+                                <button @onclick="() => OnRecordResult.InvokeAsync(match)"
+                                        class="text-xs font-bold text-warntext hover:text-warn">
+                                     Cargar/Editar Acta ›
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- TAB 3: TABLA DE POSICIONES OFICIAL DE LA LIGA -->
+    @if (_subTab == "table")
+    {
+        var standings = TeamService.GetStandings();
+        int rank = 1;
+
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <div>
+                    <h2 class="text-sm font-extrabold text-ink tracking-wide uppercase">
+                        Tabla de Posiciones
+                    </h2>
+                    <p class="text-xs text-muted font-semibold">@TeamService.GetClubSettings().LeagueName</p>
+                </div>
+                <div class="text-xs text-faint font-cond">
+                    PTS / PJ / DG
+                </div>
+            </div>
+
+            <!-- Standings Table -->
+            <div class="bg-surface border border-line rounded-xl overflow-hidden">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-well text-muted font-bold border-b border-line text-xs uppercase">
+                        <tr>
+                            <th class="py-2.5 pl-3 w-8">#</th>
+                            <th class="py-2.5">Equipo</th>
+                            <th class="py-2.5 text-center w-8">PJ</th>
+                            <th class="py-2.5 text-center w-8 hidden sm:table-cell">PG</th>
+                            <th class="py-2.5 text-center w-8 hidden sm:table-cell">PE</th>
+                            <th class="py-2.5 text-center w-8 hidden sm:table-cell">PP</th>
+                            <th class="py-2.5 text-center w-10 hidden xs:table-cell">DG</th>
+                            <th class="py-2.5 text-right pr-3 w-10 font-extrabold text-ink">PTS</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-line font-medium">
+                        @foreach (var row in standings)
+                        {
+                            var currentRank = rank++;
+                            var isTop = currentRank == 1;
+
+                            <tr class="@(row.IsOurTeam ? "bg-clubbg font-bold border-l-4 border-l-club" : "hover:bg-well")">
+                                <!-- Rank -->
+                                <td class="py-3 pl-3 font-cond font-bold text-xs @(isTop ? "text-warntext font-extrabold" : "text-muted")">
+                                    @currentRank
+                                </td>
+
+                                <!-- Team with Kit Colors -->
+                                <td class="py-3">
+                                    <div class="flex items-center gap-2">
+                                        <!-- Kit color dot -->
+                                        <div class="w-3.5 h-3.5 rounded-full border border-line2 flex overflow-hidden shrink-0">
+                                            <div class="w-1/2 h-full" style="background-color: @row.PrimaryColorHex"></div>
+                                            <div class="w-1/2 h-full" style="background-color: @row.SecondaryColorHex"></div>
+                                        </div>
+                                        <div class="truncate text-xs @(row.IsOurTeam ? "text-clubtext font-extrabold" : "text-ink")">
+                                            @row.TeamName
+                                            @if (row.IsOurTeam)
+                                            {
+                                                <span class="text-[11px] bg-club text-white px-1 py-0.2 rounded font-extrabold ml-1">APN</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- PJ -->
+                                <td class="py-3 text-center font-cond text-ink2">@row.Played</td>
+
+                                <!-- PG, PE, PP (hidden on tiny screens) -->
+                                <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Won</td>
+                                <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Drawn</td>
+                                <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Lost</td>
+
+                                <!-- DG -->
+                                <td class="py-3 text-center font-cond text-xs hidden xs:table-cell @(row.GoalDifference > 0 ? "text-oktext" : row.GoalDifference < 0 ? "text-clubtext" : "text-muted")">
+                                    @(row.GoalDifference > 0 ? $"+{row.GoalDifference}" : row.GoalDifference.ToString())
+                                </td>
+
+                                <!-- PTS -->
+                                <td class="py-3 text-right pr-3 font-cond font-extrabold text-sm text-ink">
+                                    @row.Points
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="text-xs text-faint px-1 text-center">
+                PJ: Partidos Jugados • PG: Ganados • PE: Empatados • PP: Perdidos • DG: Dif. de Gol • PTS: Puntos
+            </div>
+        </div>
+    }
+
+    <!-- TAB 4: EQUIPOS RIVALES DE LA LIGA -->
+    @if (_subTab == "rivals")
+    {
+        var rivals = TeamService.GetRivalTeams();
+
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <div>
+                    <h2 class="text-sm font-extrabold text-ink tracking-wide uppercase">
+                        Equipos Rivales
+                    </h2>
+                    <p class="text-xs text-muted">@rivals.Count equipos con sus camisetas</p>
+                </div>
+                @if (IsAdmin)
+                {
+                    <button @onclick="() => OnOpenCreateTeam.InvokeAsync()"
+                            class="text-xs font-bold text-clubtext hover:text-club flex items-center gap-1 bg-surface px-2.5 py-1.5 rounded-lg border border-line">
+                        <span>+</span> Cargar Equipo
+                    </button>
+                }
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                @foreach (var rival in rivals)
+                {
+                    <div class="bg-surface border border-line rounded-xl p-3.5 flex items-center justify-between hover:border-line2 transition">
+                        <div class="flex items-center gap-3">
+                            <!-- Dual Kit Shirt Shield -->
+                            <div class="w-10 h-10 rounded-lg border border-line2 flex overflow-hidden shrink-0">
+                                <div class="w-1/2 h-full flex items-center justify-center text-xs" style="background-color: @rival.PrimaryColorHex"></div>
+                                <div class="w-1/2 h-full flex items-center justify-center text-xs" style="background-color: @rival.SecondaryColorHex"></div>
+                            </div>
+
+                            <div>
+                                <div class="font-extrabold text-sm text-ink">@rival.Name</div>
+                                <div class="text-xs text-muted flex items-center gap-1 mt-0.5">
+
+                                    <span>@rival.KitDescription</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (IsAdmin)
+                        {
+                            <button @onclick="() => TeamService.DeleteRivalTeamAsync(rival.Id)"
+                                    class="text-faint hover:text-club p-1 text-xs" title="Eliminar equipo">
+                                ✕
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Tactical Board Pitch Modal -->
+    <TacticalBoardModal @bind-IsOpen="_showTacticalModal" Match="NextMatch" />
+
+</div>
+
+@code {
+    [Parameter] public EventCallback<Match> OnRecordResult { get; set; }
+    [Parameter] public EventCallback OnCreateMatch { get; set; }
+    [Parameter] public EventCallback<Match?> OnEditMatch { get; set; }
+    [Parameter] public EventCallback OnOpenCreateTeam { get; set; }
+    [Parameter] public EventCallback OnOpenCreateAnnouncement { get; set; }
+
+    private string _subTab = "next"; // "next", "fixture", "table", "rivals"
+    private string _rsvpFilter = "all"; // "all", "going", "maybe", "notgoing", "unanswered"
+    private bool _showTacticalModal = false;
+    private MatchWeatherInfo? _matchWeather;
+    private string _lastLoadedMatchId = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (NextMatch != null && NextMatch.Id != _lastLoadedMatchId)
+        {
+            _lastLoadedMatchId = NextMatch.Id;
+            _matchWeather = await TeamService.GetMatchWeatherAsync(NextMatch.MatchDate, NextMatch.LocationName, NextMatch.IsHome);
+        }
+    }
+
+    private UserProfile CurrentUser => TeamService.GetCurrentUser();
+    private bool IsAdmin => CurrentUser.Role == UserRole.Admin;
+    private bool CanManageMatches => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.FieldManager;
+    private Match? NextMatch => TeamService.GetNextMatch();
+    private static readonly System.Globalization.CultureInfo EsCulture = GetEsCulture();
+    private static System.Globalization.CultureInfo GetEsCulture()
+    {
+        try { return new System.Globalization.CultureInfo("es-ES"); }
+        catch { return System.Globalization.CultureInfo.InvariantCulture; }
+    }
+
+    private async Task SetMyRsvp(AttendanceStatus status)
+    {
+        if (NextMatch == null) return;
+        await TeamService.SetAttendanceAsync(NextMatch.Id, CurrentUser.Id, status);
+    }
+
+    private async Task ShareMatchWhatsApp()
+    {
+        if (NextMatch == null) return;
+
+        var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == NextMatch.RivalTeamId);
+        var rivalName = !string.IsNullOrEmpty(NextMatch.Opponent) ? NextMatch.Opponent : (rival?.Name ?? "Rival");
+        var attList = TeamService.GetAttendanceForMatch(NextMatch.Id);
+        var allProfiles = TeamService.GetProfiles();
+
+        var goingPlayers = attList.Where(a => a.Status == AttendanceStatus.Going)
+            .Select(a => allProfiles.FirstOrDefault(p => p.Id == a.PlayerId))
+            .Where(p => p != null).ToList();
+
+        var maybePlayers = attList.Where(a => a.Status == AttendanceStatus.Maybe)
+            .Select(a => allProfiles.FirstOrDefault(p => p.Id == a.PlayerId))
+            .Where(p => p != null).ToList();
+
+        var notGoingPlayers = attList.Where(a => a.Status == AttendanceStatus.NotGoing)
+            .Select(a => allProfiles.FirstOrDefault(p => p.Id == a.PlayerId))
+            .Where(p => p != null).ToList();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("⚽ *CONVOCATORIA · ATLÈTIC POBLENOU*");
+        sb.AppendLine($"🏆 *Competición:* {NextMatch.Competition}");
+        sb.AppendLine($"🆚 *Partido:* ATº POBLENOU vs {rivalName}");
+        sb.AppendLine($"📅 *Horario:* {NextMatch.MatchDate:dddd d MMM · HH:mm} h");
+        sb.AppendLine($"📍 *Cancha:* {NextMatch.LocationName}");
+        if (!string.IsNullOrEmpty(NextMatch.LocationUrl))
+        {
+            sb.AppendLine($"🗺️ *Ubicación:* {NextMatch.LocationUrl}");
+        }
+        sb.AppendLine($"👕 *Equipación:* Camiseta titular rojiblanca (estar 35 min antes)");
+        
+        if (!string.IsNullOrEmpty(NextMatch.Notes))
+        {
+            sb.AppendLine($"📝 *Nota:* {NextMatch.Notes}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"✅ *CONFIRMADOS ({goingPlayers.Count}):*");
+        if (goingPlayers.Any())
+        {
+            foreach (var p in goingPlayers)
+            {
+                var cap = p!.IsCaptain ? " *(C)*" : "";
+                sb.AppendLine($"• #{p.JerseyNumber?.ToString() ?? "-"} {p.FullName} ({p.Nickname}){cap}");
+            }
+        }
+        else
+        {
+            sb.AppendLine("• _Aún nadie ha confirmado_");
+        }
+
+        if (maybePlayers.Any())
+        {
+            sb.AppendLine();
+            sb.AppendLine($"❓ *EN DUDA ({maybePlayers.Count}):*");
+            foreach (var p in maybePlayers)
+            {
+                sb.AppendLine($"• #{p!.JerseyNumber?.ToString() ?? "-"} {p.Nickname}");
+            }
+        }
+
+        if (notGoingPlayers.Any())
+        {
+            sb.AppendLine();
+            sb.AppendLine($"❌ *BAJAS ({notGoingPlayers.Count}):*");
+            foreach (var p in notGoingPlayers)
+            {
+                sb.AppendLine($"• #{p!.JerseyNumber?.ToString() ?? "-"} {p.Nickname}");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("🔴⚪ *¡FORÇA ATÈTIC POBLENOU!*");
+
+        var text = sb.ToString();
+        var url = $"https://wa.me/?text={Uri.EscapeDataString(text)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task NudgePlayerWhatsApp(UserProfile player)
+    {
+        if (NextMatch == null) return;
+        var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == NextMatch.RivalTeamId);
+        var rivalName = !string.IsNullOrEmpty(NextMatch.Opponent) ? NextMatch.Opponent : (rival?.Name ?? "el rival");
+
+        var msg = $"¡Hola {player.Nickname}! 👋 ¿Confirmas si juegas este sábado con el Atlètic Poblenou vs {rivalName}? ¡Avisa en la app para armar el equipo! 🔴⚪";
+        
+        var cleanPhone = (player.Phone ?? "").Replace(" ", "").Replace("-", "").Replace("+", "");
+        var url = !string.IsNullOrEmpty(cleanPhone)
+            ? $"https://wa.me/{cleanPhone}?text={Uri.EscapeDataString(msg)}"
+            : $"https://wa.me/?text={Uri.EscapeDataString(msg)}";
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+}

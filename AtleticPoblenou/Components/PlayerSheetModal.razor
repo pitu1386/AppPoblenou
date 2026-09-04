@@ -1,0 +1,444 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen && TargetProfile != null)
+{
+    var currentUser = TeamService.GetCurrentUser();
+    var canEdit = currentUser.Role == UserRole.Admin || currentUser.Id == TargetProfile.Id;
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[92vh] overflow-y-auto relative">
+
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">Ficha de Jugador</h3>
+                        <p class="text-xs text-muted">Atletic Poblenou • Plantilla Oficial</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            @if (!_isEditing)
+            {
+                <!-- VIEW MODE: FICHA DEPORTIVA -->
+                <div class="space-y-4 text-xs">
+
+                    <!-- Player Hero Card -->
+                    <div class="bg-surface border border-line rounded-xl p-4 relative overflow-hidden flex items-center gap-4">
+                        <!-- Red/White APN Accent Top -->
+                        <div class="absolute top-0 left-0 right-0 h-1 apn-stripes"></div>
+
+                        <!-- Jersey Number Badge -->
+                        <div class="w-16 h-16 rounded-xl bg-clubbg border-2 border-club/40 flex flex-col items-center justify-center font-cond font-extrabold text-clubtext shrink-0">
+                            <span class="text-2xl leading-none">@(TargetProfile.JerseyNumber?.ToString() ?? "-")</span>
+                            <span class="text-[8px] uppercase tracking-wider text-muted mt-0.5">Dorsal</span>
+                        </div>
+
+                        <!-- Player Main Info -->
+                        <div class="flex-1 overflow-hidden">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <h4 class="text-base font-extrabold text-ink truncate">@TargetProfile.FullName</h4>
+                                @if (!TargetProfile.IsActive)
+                                {
+                                    <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-red-500/20 text-red-500 border border-red-500/40">
+                                        🚫 DESVINCULADO
+                                    </span>
+                                }
+                                @if (TargetProfile.IsCaptain)
+                                {
+                                    <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center gap-1">
+                                        🟡 CAPITÁN (C)
+                                    </span>
+                                }
+                                @if (TargetProfile.Role == UserRole.Admin)
+                                {
+                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-warnbg text-warntext border border-warn/40">
+                                        ADMIN
+                                    </span>
+                                }
+                                else if (TargetProfile.Role == UserRole.Treasurer)
+                                {
+                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-okbg text-oktext border border-ok/40">
+                                        TESORERO
+                                    </span>
+                                }
+                                else if (TargetProfile.Role == UserRole.FieldManager)
+                                {
+                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-infobg text-infotext border border-info/40">
+                                        CANCHAS
+                                    </span>
+                                }
+                            </div>
+                            <div class="text-xs text-clubtext font-bold mb-1">
+                                "@TargetProfile.Nickname"
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-muted font-medium">
+                                <span class="px-2 py-0.5 rounded-full bg-well2 border border-line2 text-ink2">
+                                    @TargetProfile.Position
+                                </span>
+                                <span>• Pie @TargetProfile.Foot</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Personal & Sport Details Grid -->
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-well p-3 rounded-lg border border-line">
+                            <div class="text-xs text-muted font-medium">Edad / Nacimiento</div>
+                            <div class="font-bold text-ink mt-0.5">
+                                @(TargetProfile.Age.HasValue ? $"{TargetProfile.Age} años" : "No indicada")
+                            </div>
+                            @if (TargetProfile.BirthDate.HasValue)
+                            {
+                                <div class="text-xs text-faint">
+                                    @TargetProfile.BirthDate.Value.ToString("dd/MM/yyyy")
+                                </div>
+                            }
+                        </div>
+
+                        <div class="bg-well p-3 rounded-lg border border-line">
+                            <div class="text-xs text-muted font-medium">Pie Hábil</div>
+                            <div class="font-bold text-ink mt-0.5">@TargetProfile.Foot</div>
+                            <div class="text-xs text-faint">Dominante</div>
+                        </div>
+
+                        <div class="bg-well p-3 rounded-lg border border-line col-span-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-xs text-muted font-medium">Teléfono / WhatsApp</div>
+                                <div class="font-bold text-ink font-cond mt-0.5">
+                                    @(string.IsNullOrEmpty(TargetProfile.Phone) ? "Sin registrar" : TargetProfile.Phone)
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(TargetProfile.Phone))
+                            {
+                                var cleanPhone = TargetProfile.Phone.Replace(" ", "").Replace("+", "");
+                                <a href="https://wa.me/@cleanPhone" target="_blank"
+                                   class="px-2.5 py-1.5 rounded-lg bg-ok hover:bg-okdeep text-white font-bold text-xs transition flex items-center gap-1">
+                                    WhatsApp
+                                </a>
+                            }
+                        </div>
+
+                        <div class="bg-well p-3 rounded-lg border border-line col-span-2">
+                            <div class="text-xs text-muted font-medium">Email de cuenta</div>
+                            <div class="font-bold text-ink font-cond mt-0.5 truncate">
+                                @TargetProfile.Email
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(TargetProfile.Dni))
+                        {
+                            <div class="bg-well p-3 rounded-lg border border-line">
+                                <div class="text-xs text-muted font-medium">DNI / NIE</div>
+                                <div class="font-bold text-ink font-cond mt-0.5">@TargetProfile.Dni</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(TargetProfile.MedicalNotes))
+                        {
+                            <div class="bg-well p-3 rounded-lg border border-line col-span-2">
+                                <div class="text-xs text-warntext font-medium">Ficha Médica / Observaciones</div>
+                                <div class="text-ink2 mt-0.5">@TargetProfile.MedicalNotes</div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Player Stats Summary in Club -->
+                    @{
+                        var goals = TeamService.GetMatchEvents().Count(e => e.PlayerId == TargetProfile.Id && e.EventType == EventType.Goal);
+                        var assists = TeamService.GetMatchEvents().Count(e => e.PlayerId == TargetProfile.Id && e.EventType == EventType.Assist);
+                        var totalPaid = TeamService.GetPaymentsForUser(TargetProfile.Id).Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
+                    }
+                    <div class="bg-well p-3 rounded-lg border border-line">
+                        <div class="text-xs font-bold text-muted mb-2 uppercase tracking-wider">Historial en el A.P.N.</div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="p-2 bg-surface rounded-lg">
+                                <div class="text-xs text-muted">Goles</div>
+                                <div class="font-extrabold text-sm text-ink font-cond">@goals</div>
+                            </div>
+                            <div class="p-2 bg-surface rounded-lg">
+                                <div class="text-xs text-muted">Asistencias</div>
+                                <div class="font-extrabold text-sm text-infotext font-cond">@assists</div>
+                            </div>
+                            <div class="p-2 bg-surface rounded-lg">
+                                <div class="text-xs text-muted">Total Pagado</div>
+                                <div class="font-extrabold text-sm text-oktext font-cond">@totalPaid:N0 €</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            }
+            else
+            {
+                <!-- EDIT MODE: FORMULARIO DE EDICIÓN -->
+                <div class="space-y-3 text-xs">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Nombre y Apellido</label>
+                            <input @bind="_editModel.FullName" type="text"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Apodo en el Equipo</label>
+                            <input @bind="_editModel.Nickname" type="text"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Posición</label>
+                            <select @bind="_editModel.Position" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                                <option value="@Position.Portero">Arquero / Portero</option>
+                                <option value="@Position.Defensa">Defensor</option>
+                                <option value="@Position.Centrocampista">Mediocampista</option>
+                                <option value="@Position.Delantero">Delantero</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Pie Hábil</label>
+                            <select @bind="_editModel.Foot" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                                <option value="@DominantFoot.Diestro">Diestro</option>
+                                <option value="@DominantFoot.Zurdo">Zurdo</option>
+                                <option value="@DominantFoot.Ambidiestro">Ambidiestro</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Dorsal (#)</label>
+                            <input @bind="_editModel.JerseyNumber" type="number" min="1" max="99"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Teléfono (WhatsApp)</label>
+                            <input @bind="_editModel.Phone" type="tel"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Fecha de Nacimiento</label>
+                            <input @bind="_editModel.BirthDate" type="date"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">DNI / NIE (Opcional)</label>
+                            <input @bind="_editModel.Dni" type="text"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                    </div>
+
+                    @if (currentUser.Role == UserRole.Admin)
+                    {
+                        <div class="space-y-2.5 bg-well p-3 rounded-lg border border-line">
+                            <div>
+                                <label class="font-bold text-warntext block mb-1">Rol en el Sistema (Permisos)</label>
+                                <select @bind="_editModel.Role" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                                    <option value="@UserRole.Player">Jugador</option>
+                                    <option value="@UserRole.FieldManager">Delegado de Canchas / Horarios</option>
+                                    <option value="@UserRole.Treasurer">Tesorero</option>
+                                    <option value="@UserRole.Admin">Administrador de la App</option>
+                                </select>
+                            </div>
+                            <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                                <input type="checkbox" @bind="_editModel.IsCaptain" class="w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                                <span class="text-xs font-bold text-amber-500 flex items-center gap-1">
+                                    🟡 Es Capitán del Equipo (Brazalete C)
+                                </span>
+                            </label>
+                        </div>
+                    }
+
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Notas Médicas o Físicas (Opcional)</label>
+                        <textarea @bind="_editModel.MedicalNotes" rows="2" placeholder="Ej: Lesión de rodilla, esguince reciente..."
+                                  class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none"></textarea>
+                    </div>
+                </div>
+            }
+
+            <!-- Bottom Actions -->
+            <div class="pt-2 border-t border-line space-y-2">
+                @if (!_isEditing)
+                {
+                    <div class="flex gap-2">
+                        <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                            Cerrar
+                        </button>
+                        @if (canEdit)
+                        {
+                            <button @onclick="StartEdit" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1">
+                                Editar Ficha
+                            </button>
+                        }
+                    </div>
+
+                    @if (currentUser.Role == UserRole.Admin && currentUser.Id != TargetProfile.Id)
+                    {
+                        @if (TargetProfile.IsActive)
+                        {
+                            <button type="button" @onclick="() => _showConfirmDeactivate = true"
+                                    class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                <span>🚫</span>
+                                <span>Dar de baja / Quitar del equipo</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" @onclick="ReactivatePlayer"
+                                    class="w-full py-2 bg-okbg hover:bg-ok/20 text-oktext border border-ok/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                <span>✓</span>
+                                <span>Reactivar jugador en el equipo</span>
+                            </button>
+                        }
+                    }
+                }
+                else
+                {
+                    <div class="flex gap-2">
+                        <button @onclick="CancelEdit" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                            Cancelar
+                        </button>
+                        <button @onclick="SaveEdit" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1">
+                            Guardar Cambios
+                        </button>
+                    </div>
+                }
+            </div>
+
+            @if (_showConfirmDeactivate)
+            {
+                <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+                    <div class="bg-surface border-2 border-red-500/50 w-full max-w-sm rounded-xl p-4 shadow-xl space-y-3">
+                        <div class="font-bold text-sm text-red-500 flex items-center gap-1.5">
+                            <span>⚠️</span>
+                            <span>¿Quitar a @TargetProfile.FullName?</span>
+                        </div>
+                        <p class="text-xs text-muted leading-relaxed">
+                            Su acceso a la aplicación quedará revocado inmediatamente. Para volver a ingresar, necesitará introducir el <strong>código de seguridad</strong> del equipo que tú le proporciones.
+                        </p>
+                        <div class="flex gap-2 pt-1">
+                            <button type="button" @onclick="() => _showConfirmDeactivate = false" class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-lg transition">
+                                Cancelar
+                            </button>
+                            <button type="button" @onclick="ConfirmDeactivatePlayer" class="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition">
+                                Sí, dar de baja
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public UserProfile? TargetProfile { get; set; }
+
+    private bool _isEditing = false;
+    private UserProfile _editModel = new();
+
+    protected override void OnParametersSet()
+    {
+        if (TargetProfile != null && !_isEditing)
+        {
+            CloneToEditModel(TargetProfile);
+        }
+    }
+
+    private void StartEdit()
+    {
+        if (TargetProfile == null) return;
+        CloneToEditModel(TargetProfile);
+        _isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _isEditing = false;
+        if (TargetProfile != null) CloneToEditModel(TargetProfile);
+    }
+
+    private void CloneToEditModel(UserProfile p)
+    {
+        _editModel = new UserProfile
+        {
+            Id = p.Id,
+            FullName = p.FullName,
+            Nickname = p.Nickname,
+            Email = p.Email,
+            Password = p.Password,
+            Phone = p.Phone,
+            JerseyNumber = p.JerseyNumber,
+            Position = p.Position,
+            Foot = p.Foot,
+            Role = p.Role,
+            IsCaptain = p.IsCaptain,
+            IsSubCaptain = p.IsSubCaptain,
+            BirthDate = p.BirthDate,
+            Dni = p.Dni,
+            MedicalNotes = p.MedicalNotes,
+            AvatarUrl = p.AvatarUrl,
+            CreatedAt = p.CreatedAt
+        };
+    }
+
+    private async Task SaveEdit()
+    {
+        if (TargetProfile == null) return;
+
+        TargetProfile.FullName = _editModel.FullName;
+        TargetProfile.Nickname = _editModel.Nickname;
+        TargetProfile.Phone = _editModel.Phone;
+        TargetProfile.JerseyNumber = _editModel.JerseyNumber;
+        TargetProfile.Position = _editModel.Position;
+        TargetProfile.Foot = _editModel.Foot;
+        TargetProfile.Role = _editModel.Role;
+        TargetProfile.IsCaptain = _editModel.IsCaptain;
+        TargetProfile.IsSubCaptain = _editModel.IsSubCaptain;
+        TargetProfile.BirthDate = _editModel.BirthDate;
+        TargetProfile.Dni = _editModel.Dni;
+        TargetProfile.MedicalNotes = _editModel.MedicalNotes;
+
+        await TeamService.SaveProfileAsync(TargetProfile);
+        _isEditing = false;
+    }
+
+    private bool _showConfirmDeactivate = false;
+
+    private async Task ConfirmDeactivatePlayer()
+    {
+        if (TargetProfile == null) return;
+        await TeamService.DeactivatePlayerAsync(TargetProfile.Id);
+        _showConfirmDeactivate = false;
+        await Close();
+    }
+
+    private async Task ReactivatePlayer()
+    {
+        if (TargetProfile == null) return;
+        await TeamService.ReactivatePlayerAsync(TargetProfile.Id);
+        TargetProfile.IsActive = true;
+        StateHasChanged();
+    }
+
+    private async Task Close()
+    {
+        _isEditing = false;
+        _showConfirmDeactivate = false;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
+

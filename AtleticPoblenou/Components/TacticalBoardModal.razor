@@ -1,0 +1,415 @@
+@inject ITeamDataService TeamService
+@inject IJSRuntime JS
+
+@if (IsOpen && Match != null)
+{
+    var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == Match.RivalTeamId);
+    var rivalName = !string.IsNullOrEmpty(Match.Opponent) ? Match.Opponent : (rival?.Name ?? "Rival");
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+
+            <!-- Modal Header -->
+            <div class="px-4 py-3 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-xl bg-okbg border border-ok/30 flex items-center justify-center text-lg shrink-0">
+                        🟢
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="font-cond font-extrabold text-ink text-base sm:text-lg tracking-wide m-0 truncate">
+                            Pizarra Táctica · 11 Titular
+                        </h3>
+                        <p class="text-xs text-muted m-0 truncate">
+                            ATº POBLENOU vs @rivalName · @Match.MatchDate.ToString("ddd d MMM · HH:mm")
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Formation Selector & Actions Strip -->
+            <div class="px-4 py-2 bg-well/60 border-b border-line flex items-center justify-between gap-2 shrink-0 flex-wrap">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-muted uppercase tracking-wider">Dibujo:</span>
+                    @foreach (var form in _availableFormations)
+                    {
+                        <button type="button" @onclick="() => SelectFormation(form)"
+                                class="px-2 py-1 rounded-lg text-xs font-bold border transition @(_selectedFormation == form ? "bg-club text-white border-club shadow-sm" : "bg-surface text-ink2 border-line hover:bg-well2")">
+                            @form
+                        </button>
+                    }
+                </div>
+
+                <button type="button" @onclick="ShareTacticalLineupWhatsApp"
+                        class="px-3 py-1 rounded-lg bg-ok hover:bg-okdeep text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                    <span>Compartir 11</span>
+                </button>
+            </div>
+
+            <!-- Content Area: Pitch & Bench -->
+            <div class="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3">
+
+                <!-- TACTICAL FOOTBALL PITCH (Cancha verde con líneas) -->
+                <div class="relative w-full aspect-[3/4] max-h-[460px] mx-auto rounded-2xl overflow-hidden shadow-inner border-2 border-emerald-700/60 select-none"
+                     style="background: radial-gradient(circle at center, #15803D 0%, #166534 65%, #14532D 100%);">
+                    
+                    <!-- Grass Strips Texture Effect -->
+                    <div class="absolute inset-0 opacity-10 pointer-events-none"
+                         style="background: repeating-linear-gradient(0deg, transparent, transparent 32px, rgba(255,255,255,0.2) 32px, rgba(255,255,255,0.2) 64px);">
+                    </div>
+
+                    <!-- White Field Markings (Lineas blancas) -->
+                    <!-- Outer Boundary -->
+                    <div class="absolute inset-3 border border-white/40 rounded-xl pointer-events-none"></div>
+                    
+                    <!-- Halfway Line -->
+                    <div class="absolute top-1/2 left-3 right-3 h-[1px] bg-white/40 pointer-events-none"></div>
+                    <!-- Center Circle -->
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white/40 rounded-full pointer-events-none"></div>
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/60 rounded-full pointer-events-none"></div>
+
+                    <!-- Top Goal Area (Opponent side) -->
+                    <div class="absolute top-3 left-1/2 -translate-x-1/2 w-32 h-14 border-b border-x border-white/40 rounded-b-lg pointer-events-none"></div>
+                    <div class="absolute top-3 left-1/2 -translate-x-1/2 w-16 h-6 border-b border-x border-white/40 pointer-events-none"></div>
+
+                    <!-- Bottom Goal Area (Our side) -->
+                    <div class="absolute bottom-3 left-1/2 -translate-x-1/2 w-32 h-14 border-t border-x border-white/40 rounded-t-lg pointer-events-none"></div>
+                    <div class="absolute bottom-3 left-1/2 -translate-x-1/2 w-16 h-6 border-t border-x border-white/40 pointer-events-none"></div>
+                    <div class="absolute bottom-11 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white/60 rounded-full pointer-events-none"></div>
+
+                    <!-- PLAYERS ON THE PITCH -->
+                    @for (int i = 0; i < 11; i++)
+                    {
+                        var slotIndex = i;
+                        var pos = GetSlotCoordinates(slotIndex, _selectedFormation);
+                        var player = slotIndex < _startingEleven.Count ? _startingEleven[slotIndex] : null;
+
+                        <div class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 hover:scale-110 z-10 text-center"
+                             style="top: @pos.Y%; left: @pos.X%;"
+                             @onclick="() => OpenPlayerSwapSelector(slotIndex)">
+                            
+                            @if (player != null)
+                            {
+                                <!-- Player Jersey Token -->
+                                <div class="relative mx-auto w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-surface border-2 @(player.IsCaptain ? "border-amber-400" : "border-club") shadow-lg flex items-center justify-center">
+                                    <!-- APN mini stripe background -->
+                                    <div class="absolute inset-0.5 rounded-full overflow-hidden opacity-90 flex">
+                                        <div class="w-1/3 h-full bg-[#E53935]"></div>
+                                        <div class="w-1/3 h-full bg-white"></div>
+                                        <div class="w-1/3 h-full bg-[#E53935]"></div>
+                                    </div>
+                                    <!-- Number -->
+                                    <span class="relative font-cond font-extrabold text-sm sm:text-base text-black drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]">
+                                        @(player.JerseyNumber?.ToString() ?? (slotIndex + 1).ToString())
+                                    </span>
+
+                                    <!-- Captain Armband Badge -->
+                                    @if (player.IsCaptain)
+                                    {
+                                        <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-black font-extrabold text-[9px] flex items-center justify-center border border-black shadow">
+                                            C
+                                        </span>
+                                    }
+                                </div>
+
+                                <!-- Player Name Tag -->
+                                <div class="mt-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-[10px] sm:text-[11px] font-bold text-white whitespace-nowrap shadow max-w-[85px] truncate">
+                                    @player.Nickname
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Empty Slot -->
+                                <div class="w-9 h-9 rounded-full bg-white/20 border-2 border-dashed border-white/50 flex items-center justify-center text-white text-xs font-bold">
+                                    +
+                                </div>
+                                <div class="mt-0.5 px-1 py-0.2 rounded bg-black/50 text-[9px] text-white/80">
+                                    Pos @(slotIndex + 1)
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- BENCH / SUPLENTES SECTION -->
+                <div class="bg-well p-3 rounded-xl border border-line space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="text-xs font-bold text-ink flex items-center gap-1.5">
+                            <span>🪑</span>
+                            <span>Banquillo de Suplentes (@_substitutes.Count)</span>
+                        </div>
+                        <span class="text-[11px] text-muted">Toca para poner de titular</span>
+                    </div>
+
+                    @if (_substitutes.Any())
+                    {
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var sub in _substitutes)
+                            {
+                                <button type="button" @onclick="() => QuickPromoteToPitch(sub)"
+                                        class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-surface border border-line2 hover:border-club transition text-xs font-semibold text-ink group">
+                                    <span class="w-5 h-5 rounded bg-well2 flex items-center justify-center font-cond font-bold text-[11px] text-ink group-hover:bg-club group-hover:text-white transition">
+                                        @(sub.JerseyNumber?.ToString() ?? "-")
+                                    </span>
+                                    <span>@sub.Nickname</span>
+                                    @if (sub.IsCaptain)
+                                    {
+                                        <span class="text-[10px] text-amber-500 font-bold">🟡(C)</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-xs text-faint">
+                            No hay más jugadores confirmados en el banquillo.
+                        </div>
+                    }
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-3 sm:p-4 border-t border-line bg-surface shrink-0 flex gap-2">
+                <button @onclick="Close" class="flex-1 py-2.5 bg-well hover:bg-well2 text-ink font-bold rounded-xl text-xs transition">
+                    Cerrar
+                </button>
+                <button @onclick="ShareTacticalLineupWhatsApp" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                    <span>Enviar al Grupo</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+<!-- Swap Modal / Selector when clicking a position -->
+@if (_swapSlotIndex.HasValue)
+{
+    <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-100">
+        <div class="bg-surface border border-line2 w-full max-w-sm rounded-xl p-4 shadow-xl space-y-3">
+            <div class="flex items-center justify-between border-b border-line pb-2">
+                <h4 class="text-sm font-bold text-ink">Elegir jugador para esta posición</h4>
+                <button @onclick="() => _swapSlotIndex = null" class="text-muted hover:text-ink">✕</button>
+            </div>
+
+            <div class="max-h-60 overflow-y-auto space-y-1">
+                @foreach (var candidate in _availablePool)
+                {
+                    var isAlreadyStarting = _startingEleven.Contains(candidate);
+                    <button type="button" @onclick="() => AssignPlayerToSlot(candidate, _swapSlotIndex.Value)"
+                            class="w-full flex items-center justify-between p-2 rounded-lg hover:bg-well text-left transition @(isAlreadyStarting ? "bg-well/60" : "")">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded bg-well2 flex items-center justify-center font-cond font-bold text-xs text-ink">
+                                @(candidate.JerseyNumber?.ToString() ?? "-")
+                            </span>
+                            <span class="text-xs font-bold text-ink">@candidate.FullName</span>
+                            @if (candidate.IsCaptain)
+                            {
+                                <span class="text-[10px] text-amber-500 font-bold">🟡(C)</span>
+                            }
+                        </div>
+                        <span class="text-[11px] text-muted">@candidate.Position</span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public Match? Match { get; set; }
+
+    private string _selectedFormation = "4-3-3";
+    private readonly string[] _availableFormations = new[] { "4-3-3", "4-4-2", "3-5-2", "4-2-3-1" };
+
+    private List<UserProfile> _startingEleven = new();
+    private List<UserProfile> _substitutes = new();
+    private List<UserProfile> _availablePool = new();
+    private int? _swapSlotIndex = null;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && Match != null)
+        {
+            InitializeLineup();
+        }
+    }
+
+    private void InitializeLineup()
+    {
+        if (Match == null) return;
+
+        var allProfiles = TeamService.GetProfiles();
+        var attendanceList = TeamService.GetAttendanceForMatch(Match.Id);
+        
+        // Prioritize players who confirmed "Going"
+        var confirmedIds = attendanceList.Where(a => a.Status == AttendanceStatus.Going).Select(a => a.PlayerId).ToHashSet();
+        
+        var confirmedPlayers = allProfiles.Where(p => confirmedIds.Contains(p.Id)).ToList();
+        var otherPlayers = allProfiles.Where(p => !confirmedIds.Contains(p.Id)).ToList();
+
+        // Sort pool: Keepers first, then defenders, midfielders, forwards
+        _availablePool = confirmedPlayers.Concat(otherPlayers).ToList();
+
+        // Take first 11 for starting eleven
+        _startingEleven = _availablePool.Take(11).ToList();
+        _substitutes = _availablePool.Skip(11).ToList();
+    }
+
+    private void SelectFormation(string formation)
+    {
+        _selectedFormation = formation;
+    }
+
+    private void OpenPlayerSwapSelector(int slotIndex)
+    {
+        _swapSlotIndex = slotIndex;
+    }
+
+    private void AssignPlayerToSlot(UserProfile player, int slotIndex)
+    {
+        // If player already in starting eleven, swap places
+        var existingIndex = _startingEleven.IndexOf(player);
+        if (existingIndex >= 0)
+        {
+            var temp = _startingEleven[slotIndex];
+            _startingEleven[slotIndex] = player;
+            _startingEleven[existingIndex] = temp;
+        }
+        else
+        {
+            var oldPlayer = slotIndex < _startingEleven.Count ? _startingEleven[slotIndex] : null;
+            if (slotIndex < _startingEleven.Count)
+            {
+                _startingEleven[slotIndex] = player;
+            }
+            else
+            {
+                _startingEleven.Add(player);
+            }
+
+            _substitutes.Remove(player);
+            if (oldPlayer != null && !_substitutes.Contains(oldPlayer))
+            {
+                _substitutes.Add(oldPlayer);
+            }
+        }
+
+        _swapSlotIndex = null;
+    }
+
+    private void QuickPromoteToPitch(UserProfile sub)
+    {
+        if (_startingEleven.Count < 11)
+        {
+            _startingEleven.Add(sub);
+            _substitutes.Remove(sub);
+        }
+        else
+        {
+            // Swap with the last forward/sub
+            var lastIndex = 10;
+            var outPlayer = _startingEleven[lastIndex];
+            _startingEleven[lastIndex] = sub;
+            _substitutes.Remove(sub);
+            _substitutes.Insert(0, outPlayer);
+        }
+    }
+
+    private (int X, int Y) GetSlotCoordinates(int index, string formation)
+    {
+        // Y: 90 is goalkeeper (bottom), 15 is striker (top)
+        // X: 50 is center, 15 is left, 85 is right
+        if (index == 0) return (50, 88); // Portero / GK
+
+        return formation switch
+        {
+            "4-4-2" => index switch
+            {
+                1 => (18, 70), 2 => (39, 72), 3 => (61, 72), 4 => (82, 70), // DF
+                5 => (18, 48), 6 => (39, 50), 7 => (61, 50), 8 => (82, 48), // MF
+                9 => (38, 22), 10 => (62, 22),                              // FW
+                _ => (50, 50)
+            },
+            "3-5-2" => index switch
+            {
+                1 => (26, 72), 2 => (50, 74), 3 => (74, 72),                // DF (3)
+                4 => (15, 48), 5 => (34, 52), 6 => (50, 48), 7 => (66, 52), 8 => (85, 48), // MF (5)
+                9 => (38, 22), 10 => (62, 22),                              // FW
+                _ => (50, 50)
+            },
+            "4-2-3-1" => index switch
+            {
+                1 => (18, 70), 2 => (39, 72), 3 => (61, 72), 4 => (82, 70), // DF
+                5 => (38, 56), 6 => (62, 56),                              // Double pivot
+                7 => (20, 38), 8 => (50, 36), 9 => (80, 38),               // Attacking trio
+                10 => (50, 18),                                             // Striker
+                _ => (50, 50)
+            },
+            _ /* 4-3-3 */ => index switch
+            {
+                1 => (18, 70), 2 => (39, 72), 3 => (61, 72), 4 => (82, 70), // DF (4)
+                5 => (30, 50), 6 => (50, 52), 7 => (70, 50),                // MF (3)
+                8 => (20, 26), 9 => (50, 20), 10 => (80, 26),               // FW (3)
+                _ => (50, 50)
+            }
+        };
+    }
+
+    private async Task ShareTacticalLineupWhatsApp()
+    {
+        if (Match == null) return;
+        var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == Match.RivalTeamId);
+        var rivalName = !string.IsNullOrEmpty(Match.Opponent) ? Match.Opponent : (rival?.Name ?? "Rival");
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("🟢 *ALINEACIÓN CONFIRMADA · ATLÈTIC POBLENOU*");
+        sb.AppendLine($"⚽ *Partido:* ATº POBLENOU vs {rivalName}");
+        sb.AppendLine($"📅 *Fecha:* {Match.MatchDate:dddd d MMM · HH:mm} h");
+        sb.AppendLine($"📐 *Sistema Táctico:* {_selectedFormation}");
+        sb.AppendLine();
+        sb.AppendLine("🧤 *11 TITULAR:*");
+
+        for (int i = 0; i < _startingEleven.Count; i++)
+        {
+            var p = _startingEleven[i];
+            var cap = p.IsCaptain ? " *(C)*" : "";
+            sb.AppendLine($"• #{p.JerseyNumber ?? (i+1)} {p.FullName} ({p.Nickname}){cap}");
+        }
+
+        if (_substitutes.Any())
+        {
+            sb.AppendLine();
+            sb.AppendLine("🪑 *BANQUILLO DE SUPLENTES:*");
+            foreach (var s in _substitutes)
+            {
+                var cap = s.IsCaptain ? " *(C)*" : "";
+                sb.AppendLine($"• #{s.JerseyNumber?.ToString() ?? "-"} {s.Nickname}{cap}");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("🔴⚪ *¡FORÇA ATÈTIC POBLENOU!*");
+
+        var text = sb.ToString();
+        var encoded = Uri.EscapeDataString(text);
+        var url = $"https://wa.me/?text={encoded}";
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
+

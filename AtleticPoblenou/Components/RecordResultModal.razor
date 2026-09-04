@@ -1,0 +1,299 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen && TargetMatch != null)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div>
+                    <h3 class="font-extrabold text-ink text-base">Acta del Partido</h3>
+                    <p class="text-xs text-muted">vs @TargetMatch.Opponent • Jornada @TargetMatch.Round</p>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <!-- RESULT SCORE INPUTS (AUTO-CALCULATED WITH MANUAL OVERRIDE) -->
+            <div class="bg-well p-4 rounded-xl border border-line text-center">
+                <div class="text-xs font-bold text-muted mb-2">Marcador Final</div>
+                <div class="flex items-center justify-center gap-4">
+                    <div class="flex-1">
+                        <div class="text-xs font-bold text-clubtext mb-1 flex items-center justify-center gap-1">
+                            <span>A.P.N. Poblenou</span>
+                            @if (_goals.Count > 0)
+                            {
+                                <span class="text-[11px] bg-clubbg text-clubtext px-1.5 py-0.2 rounded-full border border-club/40" title="Autocalculado de los goles">auto</span>
+                            }
+                        </div>
+                        <input @bind="_ourScore" type="number" min="0"
+                               class="w-16 h-14 bg-surface border border-line2 rounded-lg text-center text-2xl font-extrabold text-ink font-cond focus:border-club focus:outline-none" />
+                    </div>
+
+                    <span class="text-2xl font-extrabold text-faint">-</span>
+
+                    <div class="flex-1">
+                        <div class="text-xs font-bold text-muted mb-1">@TargetMatch.Opponent</div>
+                        <input @bind="_rivalScore" type="number" min="0"
+                               class="w-16 h-14 bg-surface border border-line2 rounded-lg text-center text-2xl font-extrabold text-ink font-cond focus:border-club focus:outline-none" />
+                    </div>
+                </div>
+                <p class="text-xs text-faint mt-2">Los goles nuestros se suman automáticamente al cargar cada gol o gol en contra.</p>
+            </div>
+
+            <!-- ADD GOALS & ASSISTS SECTION -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-xs font-bold text-ink2">
+                    <span>Goles del Atletic Poblenou (@_goals.Count)</span>
+                    <button type="button" @onclick="AddGoalRow" class="text-xs text-clubtext hover:text-club font-extrabold flex items-center gap-1">
+                        <span>+</span> Añadir Gol
+                    </button>
+                </div>
+
+                @if (_goals.Count == 0)
+                {
+                    <div class="p-3 bg-well rounded-lg border border-line text-xs text-faint text-center">
+                        Toca "+ Añadir Gol" para registrar quién anotó o si fue gol en contra.
+                    </div>
+                }
+
+                @foreach (var g in _goals)
+                {
+                    <div class="bg-well p-2.5 rounded-xl border @(g.IsOwnGoal ? "border-warn/40 bg-warnbg" : "border-line") space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm">@(g.IsOwnGoal ? "": "")</span>
+
+                            @if (g.IsOwnGoal)
+                            {
+                                <div class="flex-1 bg-warnbg border border-warn/40 rounded-lg px-2.5 py-1.5 text-xs text-warntext font-bold flex items-center justify-between">
+                                    <span>Gol en contra del rival</span>
+                                    <span class="text-[11px] text-warntext font-normal">Suma a nuestro favor</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <select @bind="g.PlayerId" class="flex-1 bg-surface border border-line2 rounded-lg px-2.5 py-1.5 text-xs text-ink">
+                                    <option value="">Selecciona goleador</option>
+                                    @foreach (var p in TeamService.GetProfiles())
+                                    {
+                                        <option value="@p.Id">@p.Nickname (#@p.JerseyNumber)</option>
+                                    }
+                                </select>
+                            }
+
+                            <input @bind="g.Minute" type="number" placeholder="Min" class="w-12 bg-surface border border-line2 rounded-lg py-1.5 text-xs text-ink font-cond text-center shrink-0" />
+
+                            <!-- Toggle button for Gol en contra -->
+                            <button type="button" @onclick="() => ToggleOwnGoal(g)"
+                                    class="px-2 py-1 rounded-lg text-xs font-bold border transition shrink-0 @(g.IsOwnGoal ? "bg-warn text-black border-warn font-extrabold" : "bg-surface text-muted border-line2 hover:text-white")"
+                                    title="Marcar como autogol / gol en contra">
+                                 En contra
+                            </button>
+
+                            <button type="button" @onclick="() => RemoveGoal(g)" class="text-faint hover:text-club px-1 text-xs shrink-0">✕</button>
+                        </div>
+
+                        @if (!g.IsOwnGoal)
+                        {
+                            <!-- Direct Assist selector linked to the goal -->
+                            <div class="flex items-center gap-2 pl-6">
+                                <span class="text-xs text-infotext font-bold shrink-0">Asistencia:</span>
+                                <select @bind="g.AssistPlayerId" class="flex-1 bg-surface border border-line2 rounded-lg px-2 py-1 text-xs text-ink">
+                                    <option value="">(Sin asistencia / Jugada individual)</option>
+                                    @foreach (var p in TeamService.GetProfiles().Where(p => p.Id != g.PlayerId))
+                                    {
+                                        <option value="@p.Id">@p.Nickname (#@p.JerseyNumber)</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- MVP SELECTOR -->
+            <div class="space-y-1">
+                <label class="text-xs font-bold text-warntext block">MVP del Partido</label>
+                <select @bind="_mvpPlayerId" class="w-full bg-well border border-line2 rounded-lg p-2.5 text-xs text-ink">
+                    <option value="">Sin MVP asignado</option>
+                    @foreach (var p in TeamService.GetProfiles())
+                    {
+                        <option value="@p.Id">@p.Nickname (#@p.JerseyNumber)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- CARDS SECTION WITH REAL CSS COLORED CARDS (AMARILLA / ROJA) -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-xs font-bold text-ink2">
+                    <span>Tarjetas Disciplinarias</span>
+                    <button type="button" @onclick="AddCardRow" class="text-xs text-warntext hover:text-warn font-extrabold">+ Añadir Tarjeta</button>
+                </div>
+
+                @foreach (var c in _cards)
+                {
+                    <div class="flex items-center gap-2 bg-well p-2 rounded-lg border border-line">
+                        <select @bind="c.PlayerId" class="flex-1 bg-surface border border-line2 rounded-lg p-1.5 text-xs text-ink">
+                            <option value="">Selecciona jugador</option>
+                            @foreach (var p in TeamService.GetProfiles())
+                            {
+                                <option value="@p.Id">@p.Nickname (#@p.JerseyNumber)</option>
+                            }
+                        </select>
+
+                        <!-- Card Type Selector: Real CSS Colored Cards (Amarilla / Roja) -->
+                        <div class="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-line2 shrink-0">
+                            <button type="button" @onclick="() => c.IsRed = false"
+                                    class="px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 @(!c.IsRed ? "bg-warn text-black font-extrabold" : "text-muted hover:text-white")">
+                                <span class="w-2.5 h-3.5 bg-warn border border-warn rounded-[2px] inline-block"></span>
+                                <span class="text-xs">Amarilla</span>
+                            </button>
+                            <button type="button" @onclick="() => c.IsRed = true"
+                                    class="px-2 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 @(c.IsRed ? "bg-club text-white font-extrabold" : "text-muted hover:text-white")">
+                                <span class="w-2.5 h-3.5 bg-club border border-club rounded-[2px] inline-block"></span>
+                                <span class="text-xs">Roja</span>
+                            </button>
+                        </div>
+
+                        <button type="button" @onclick="() => _cards.Remove(c)" class="text-faint hover:text-club px-1 text-xs">✕</button>
+                    </div>
+                }
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-line">
+                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                    Cancelar
+                </button>
+                <button @onclick="SaveResult" class="flex-1 py-2.5 bg-warn hover:bg-warn text-black font-extrabold rounded-lg text-xs transition">
+                    Guardar Acta y Resultado
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public Match? TargetMatch { get; set; }
+
+    private int _ourScore = 0;
+    private int _rivalScore = 0;
+    private string _mvpPlayerId = "";
+
+    private class GoalEntry
+    {
+        public string PlayerId { get; set; } = "";
+        public string AssistPlayerId { get; set; } = "";
+        public int? Minute { get; set; }
+        public bool IsOwnGoal { get; set; } = false;
+    }
+
+    private class CardEntry
+    {
+        public string PlayerId { get; set; } = "";
+        public bool IsRed { get; set; }
+    }
+
+    private List<GoalEntry> _goals = new();
+    private List<CardEntry> _cards = new();
+
+    protected override void OnParametersSet()
+    {
+        if (TargetMatch != null && IsOpen)
+        {
+            _ourScore = TargetMatch.OurScore ?? 0;
+            _rivalScore = TargetMatch.RivalScore ?? 0;
+        }
+    }
+
+    private void AddGoalRow()
+    {
+        _goals.Add(new GoalEntry());
+        _ourScore = _goals.Count;
+    }
+
+    private void RemoveGoal(GoalEntry g)
+    {
+        _goals.Remove(g);
+        _ourScore = _goals.Count;
+    }
+
+    private void ToggleOwnGoal(GoalEntry g)
+    {
+        g.IsOwnGoal = !g.IsOwnGoal;
+        if (g.IsOwnGoal)
+        {
+            g.PlayerId = "";
+            g.AssistPlayerId = "";
+        }
+    }
+
+    private void AddCardRow() => _cards.Add(new CardEntry());
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveResult()
+    {
+        if (TargetMatch == null) return;
+
+        var events = new List<MatchEvent>();
+
+        // 1. Process Goals & Linked Assists
+        foreach (var g in _goals)
+        {
+            if (!g.IsOwnGoal && !string.IsNullOrEmpty(g.PlayerId))
+            {
+                events.Add(new MatchEvent
+                {
+                    MatchId = TargetMatch.Id,
+                    PlayerId = g.PlayerId,
+                    EventType = EventType.Goal,
+                    Minute = g.Minute
+                });
+
+                if (!string.IsNullOrEmpty(g.AssistPlayerId))
+                {
+                    events.Add(new MatchEvent
+                    {
+                        MatchId = TargetMatch.Id,
+                        PlayerId = g.AssistPlayerId,
+                        EventType = EventType.Assist,
+                        Minute = g.Minute
+                    });
+                }
+            }
+        }
+
+        // 3. Process Cards
+        foreach (var c in _cards.Where(x => !string.IsNullOrEmpty(x.PlayerId)))
+        {
+            events.Add(new MatchEvent
+            {
+                MatchId = TargetMatch.Id,
+                PlayerId = c.PlayerId,
+                EventType = c.IsRed ? EventType.RedCard : EventType.YellowCard
+            });
+        }
+
+        // 4. Process MVP
+        if (!string.IsNullOrEmpty(_mvpPlayerId))
+        {
+            events.Add(new MatchEvent
+            {
+                MatchId = TargetMatch.Id,
+                PlayerId = _mvpPlayerId,
+                EventType = EventType.Mvp
+            });
+        }
+
+        await TeamService.UpdateMatchResultAsync(TargetMatch.Id, _ourScore, _rivalScore, events);
+        await Close();
+    }
+}

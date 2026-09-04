@@ -1,0 +1,183 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-clubbg border border-club/30 flex items-center justify-center text-xl shrink-0">
+                        👥
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Roles y Capitanes del Equipo
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            Asigna permisos del sistema y brazaletes de capitán
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Compact Role Info Badge Strip -->
+            <div class="px-5 py-2.5 bg-well/50 border-b border-line flex items-center gap-2 flex-wrap text-[11px] shrink-0">
+                <span class="font-bold text-muted uppercase tracking-wider">Permisos:</span>
+                <span class="px-2 py-0.5 rounded-md bg-warnbg text-warntext border border-warn/30 font-semibold">🛡️ Admin (Todo)</span>
+                <span class="px-2 py-0.5 rounded-md bg-okbg text-oktext border border-ok/30 font-semibold">💶 Tesorero (Caja)</span>
+                <span class="px-2 py-0.5 rounded-md bg-infobg text-infotext border border-info/30 font-semibold">📍 Canchas (Horarios)</span>
+                <span class="px-2 py-0.5 rounded-md bg-well border border-line text-muted font-semibold">⚽ Jugador (Base)</span>
+            </div>
+
+            <!-- Search & Counter Toolbar -->
+            <div class="p-4 pb-2 shrink-0">
+                <div class="relative flex items-center">
+                    <svg class="w-4 h-4 text-muted absolute left-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input @bind="_searchQuery" @bind:event="oninput" type="text"
+                           placeholder="Buscar jugador por nombre, apodo o dorsal..."
+                           class="w-full bg-well border border-line2 rounded-xl pl-9 pr-8 py-2 text-xs text-ink placeholder-faint focus:border-club focus:outline-none transition" />
+                    @if (!string.IsNullOrEmpty(_searchQuery))
+                    {
+                        <button @onclick='() => _searchQuery = ""' class="absolute right-2.5 text-xs text-muted hover:text-ink">
+                            ✕
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Players List with Clean 2-Tier Card Layout -->
+            <div class="p-4 pt-1 space-y-2.5 overflow-y-auto flex-1">
+                @{
+                    var currentUserId = TeamService.GetCurrentUser().Id;
+                    var filteredPlayers = TeamService.GetProfiles()
+                        .Where(p => string.IsNullOrWhiteSpace(_searchQuery) ||
+                                    p.FullName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                    p.Nickname.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                    (p.JerseyNumber.HasValue && p.JerseyNumber.Value.ToString().Contains(_searchQuery)))
+                        .ToList();
+                }
+
+                @if (!filteredPlayers.Any())
+                {
+                    <div class="py-8 text-center text-xs text-muted">
+                        No se encontró ningún compañero con ese nombre.
+                    </div>
+                }
+
+                @foreach (var player in filteredPlayers)
+                {
+                    var isMe = player.Id == currentUserId;
+
+                    <div class="bg-well/70 border border-line hover:border-line2 rounded-xl p-3 space-y-2.5 transition">
+                        
+                        <!-- Top line: Player Details & Captain Toggle -->
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-8 h-8 rounded-lg bg-surface border border-line2 flex items-center justify-center font-cond font-bold text-xs text-ink shrink-0">
+                                    @(player.JerseyNumber?.ToString() ?? "-")
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="font-bold text-xs text-ink truncate">@player.FullName</span>
+                                        @if (isMe)
+                                        {
+                                            <span class="text-[10px] bg-club text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">TÚ</span>
+                                        }
+                                    </div>
+                                    <div class="text-[11px] text-muted truncate">
+                                        "@player.Nickname" · <span class="text-faint font-medium">@player.Position</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Captain Armband Toggle Button -->
+                            <button type="button" @onclick="() => ToggleCaptain(player)"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shrink-0 flex items-center gap-1.5 @(player.IsCaptain ? "bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm" : "bg-surface text-muted border-line hover:border-amber-500/40 hover:text-amber-500")"
+                                    title="@(player.IsCaptain ? "Quitar brazalete de capitán" : "Nombrar capitán")">
+                                <span>🟡</span>
+                                <span>@(player.IsCaptain ? "Capitán (C) ✓" : "+ Capitán")</span>
+                            </button>
+                        </div>
+
+                        <!-- Bottom line: Modern 4-Segmented Role Switcher -->
+                        <div class="grid grid-cols-4 gap-1 p-1 bg-surface rounded-lg border border-line">
+                            <!-- Jugador -->
+                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Player)"
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Player ? "bg-well2 text-ink shadow-sm" : "text-muted hover:text-ink")"
+                                    title="Rol base: Jugador">
+                                ⚽ Jugador
+                            </button>
+
+                            <!-- Canchas -->
+                            <button type="button" @onclick="() => ChangeRole(player, UserRole.FieldManager)"
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.FieldManager ? "bg-info text-white shadow-sm" : "text-muted hover:text-infotext")"
+                                    title="Anotar horarios y canchas">
+                                📍 Canchas
+                            </button>
+
+                            <!-- Tesorero -->
+                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Treasurer)"
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Treasurer ? "bg-ok text-white shadow-sm" : "text-muted hover:text-oktext")"
+                                    title="Cargar cobros y gastos">
+                                💶 Tesorero
+                            </button>
+
+                            <!-- Admin -->
+                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Admin)"
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Admin ? "bg-warn text-black shadow-sm font-extrabold" : "text-muted hover:text-warntext")"
+                                    title="Control total">
+                                🛡️ Admin
+                            </button>
+                        </div>
+
+                    </div>
+                }
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-line bg-surface shrink-0">
+                <button @onclick="Close" class="w-full py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm">
+                    <span>✓</span>
+                    <span>Listo · Guardar y Cerrar</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string _searchQuery = "";
+
+    private async Task ToggleCaptain(UserProfile player)
+    {
+        player.IsCaptain = !player.IsCaptain;
+        await TeamService.SaveProfileAsync(player);
+    }
+
+    private async Task ChangeRole(UserProfile player, UserRole newRole)
+    {
+        if (player.Role == newRole) return;
+
+        player.Role = newRole;
+        await TeamService.SaveProfileAsync(player);
+        StateHasChanged();
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

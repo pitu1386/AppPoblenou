@@ -1,0 +1,145 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">Publicar Comunicado</h3>
+                        <p class="text-xs text-muted">Novedades o encuestas para el equipo</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <div class="space-y-3.5 text-xs">
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Título del Comunicado</label>
+                    <input @bind="_title"type="text"placeholder="Ej:  Asado del equipo este sábado post-partido"
+                           class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                </div>
+
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Mensaje / Información</label>
+                    <textarea @bind="_content" rows="3" placeholder="Explicación, horario, lugar o detalles para los compañeros..."
+                              class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none"></textarea>
+                </div>
+
+                <!-- Include Poll Checkbox -->
+                <div class="p-3 bg-well rounded-xl border border-line space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <input @bind="_hasPoll" type="checkbox" id="hasPollCheck" class="rounded accent-red-600 w-4 h-4" />
+                            <label for="hasPollCheck" class="font-bold text-ink cursor-pointer">
+                                 Incluir Encuesta Interactiva
+                            </label>
+                        </div>
+                        <span class="text-xs text-muted font-semibold">Para que el equipo vote</span>
+                    </div>
+
+                    @if (_hasPoll)
+                    {
+                        <div class="space-y-2 pt-1 border-t border-line">
+                            <label class="text-xs text-muted block font-semibold">Opciones de votación:</label>
+
+                            @for (int i = 0; i < _options.Count; i++)
+                            {
+                                int idx = i;
+                                <div class="flex items-center gap-2">
+                                    <span class="w-5 text-center font-bold text-faint text-xs">@(idx + 1).</span>
+                                    <input @bind="_options[idx]" type="text"
+                                           class="flex-1 bg-surface border border-line2 rounded-lg px-3 py-1.5 text-ink text-xs focus:border-club focus:outline-none" />
+                                    @if (_options.Count > 2)
+                                    {
+                                        <button type="button" @onclick="() => _options.RemoveAt(idx)" class="text-faint hover:text-club text-xs px-1">✕</button>
+                                    }
+                                </div>
+                            }
+
+                            <div class="pt-1 flex justify-between items-center">
+                                <button type="button" @onclick='() => _options.Add("Otra opción")' class="text-xs text-infotext hover:text-info font-bold">
+                                    + Agregar otra opción
+                                </button>
+
+                                <!-- Fast presets -->
+                                <button type="button" @onclick="ResetAsadoPreset" class="text-xs text-warntext hover:underline">
+                                    Preset: Asado
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="flex items-center gap-2 px-1">
+                    <input @bind="_isPinned" type="checkbox" id="isPinnedCheck" class="rounded accent-red-600 w-4 h-4" />
+                    <label for="isPinnedCheck" class="font-semibold text-ink2 cursor-pointer text-xs">
+                         Fijar este comunicado arriba de todo en la portada
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-line">
+                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                    Cancelar
+                </button>
+                <button @onclick="SaveAnnouncement" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
+                    Publicar en Portada
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string _title = "Asado del equipo este sábado post-partido";
+    private string _content = "Muchachos, después de terminar la jornada organizamos un asado en la parrilla del club. ¡Confirmen en la encuesta de abajo!";
+    private bool _hasPoll = true;
+    private bool _isPinned = true;
+    private List<string>_options = new() { "Me sumo al asado ", "En duda / aviso el viernes ", "No llego "};
+
+    private void ResetAsadoPreset()
+    {
+        _title = "Asado del equipo este sábado post-partido";
+        _content = "Muchachos, después del partido prendemos el fuego en el club. Voten para calcular la carne y bebidas.";
+        _options = new() { "Me sumo al asado ", "En duda / aviso el viernes ", "No llego "};
+        _hasPoll = true;
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveAnnouncement()
+    {
+        if (string.IsNullOrWhiteSpace(_title)) return;
+
+        var user = TeamService.GetCurrentUser();
+        var announcement = new TeamAnnouncement
+        {
+            Title = _title.Trim(),
+            Content = _content.Trim(),
+            AuthorName = $"{user.Nickname} ({user.Role})",
+            HasPoll = _hasPoll,
+            PollOptions = _hasPoll ? _options.Where(o => !string.IsNullOrWhiteSpace(o)).ToList() : new(),
+            IsPinned = _isPinned,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await TeamService.AddAnnouncementAsync(announcement);
+        await Close();
+    }
+}
+

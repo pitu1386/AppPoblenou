@@ -1,0 +1,82 @@
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-lg rounded-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+
+                    <div>
+                        <h3 class="font-extrabold text-ink text-base">PostgreSQL & Supabase</h3>
+                        <p class="text-xs text-infotext">Base de Datos del Club</p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <!-- STATUS NOTICE -->
+            <div class="bg-infobg border border-info/40 p-4 rounded-xl text-xs space-y-2">
+                <div class="flex items-center gap-2 font-bold text-infotext text-sm">
+                    <span class="w-2.5 h-2.5 rounded-full bg-ok animate-ping"></span>
+                    ¡PostgreSQL 17 detectado en tu máquina!
+                </div>
+                <p class="text-ink2 text-xs leading-relaxed">
+                    El servicio <strong>postgresql-x64-17</strong> está en ejecución en tu PC. El archivo <code>supabase_schema.sql</code> en la raíz contiene el esquema completo con tablas de jugadores, partidos, asistencias, cobros y estadísticas.
+                </p>
+            </div>
+
+            <!-- OPTIONS EXPLANATION -->
+            <div class="space-y-3 text-xs">
+                <div class="p-3 bg-well rounded-xl border border-line">
+                    <div class="font-bold text-ink text-xs mb-1">¿Cómo se conectan los jugadores desde el celular / móvil?</div>
+                    <ul class="space-y-1.5 text-muted text-xs list-disc list-inside">
+                        <li>
+                            <strong class="text-ink">En la nube (Supabase - Gratis):</strong> Supabase es literalmente PostgreSQL alojado con API REST y autenticación. Creas un proyecto gratuito, pegas el script SQL y cualquier jugador desde su móvil en cualquier cancha de Barcelona tiene acceso en vivo.
+                        </li>
+                        <li>
+                            <strong class="text-ink">Localmente (en tu PC):</strong> Ejecutando el esquema SQL en tu pgAdmin o psql para desarrollo local o conectándolo con una Web API de C#.
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="p-3 bg-well rounded-xl border border-line">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-ink text-xs">Esquema SQL Preparado:</span>
+                        <span class="text-xs text-faint font-cond">supabase_schema.sql</span>
+                    </div>
+                    <div class="p-2.5 bg-surface rounded-lg font-cond text-xs text-ink2 max-h-32 overflow-y-auto select-all">
+-- CLUB ATLÈTIC POBLENOU SCHEMA<br/>
+CREATE TABLE profiles (id UUID PRIMARY KEY, full_name TEXT, nickname TEXT, jersey_number INT, role TEXT);<br/>
+CREATE TABLE matches (id UUID PRIMARY KEY, match_date TIMESTAMPTZ, opponent TEXT, location_name TEXT, our_score INT, rival_score INT);<br/>
+CREATE TABLE attendance (id UUID PRIMARY KEY, match_id UUID, player_id UUID, status TEXT);<br/>
+CREATE TABLE payments (id UUID PRIMARY KEY, player_id UUID, concept TEXT, amount NUMERIC, status TEXT);<br/>
+CREATE TABLE team_expenses (id UUID PRIMARY KEY, concept TEXT, amount NUMERIC, expense_date DATE);<br/>
+CREATE TABLE match_events (id UUID PRIMARY KEY, match_id UUID, player_id UUID, event_type TEXT);
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button @onclick="Close" class="w-full py-2.5 bg-well2 hover:bg-well2 text-ink font-bold rounded-lg text-xs transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
