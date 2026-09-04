@@ -12,7 +12,8 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
     Write-Host "npm no encontrado: se usa wwwroot/css/tailwind.css tal cual esta en el repositorio." -ForegroundColor Yellow
 }
 
-# 2. Publicacion .NET
+# 2. Publicacion .NET (carpeta limpia: dotnet publish no borra archivos de versiones anteriores)
+if (Test-Path .\publish_output) { Remove-Item .\publish_output -Recurse -Force }
 Write-Host "Compilando version de produccion..." -ForegroundColor Cyan
 dotnet publish .\AtleticPoblenou\AtleticPoblenou.csproj -c Release -o .\publish_output
 
