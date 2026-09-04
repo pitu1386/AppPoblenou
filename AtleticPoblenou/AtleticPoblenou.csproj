@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <CodePage>65001</CodePage>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <Version>2.3.0</Version>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
