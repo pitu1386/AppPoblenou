@@ -93,11 +93,13 @@ public class TeamDataService : ITeamDataService
             if (!string.IsNullOrEmpty(jsonMatches))
             {
                 _matches = JsonSerializer.Deserialize<List<Match>>(jsonMatches) ?? new();
+                _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
             }
 
             if (!string.IsNullOrEmpty(jsonAttendance))
             {
                 _attendance = JsonSerializer.Deserialize<List<Attendance>>(jsonAttendance) ?? new();
+                _attendance.RemoveAll(a => a.MatchId == "match-1" || a.MatchId == "match-2");
             }
 
             if (!string.IsNullOrEmpty(jsonPayments)) _payments = JsonSerializer.Deserialize<List<Payment>>(jsonPayments) ?? GetInitialPayments();
@@ -141,6 +143,7 @@ public class TeamDataService : ITeamDataService
                 var sbMatches = await _supabase.FetchMatchesAsync();
                 if (sbMatches != null)
                 {
+                    sbMatches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
                     _matches = sbMatches;
                     await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
                 }
@@ -148,6 +151,7 @@ public class TeamDataService : ITeamDataService
                 var sbAttendance = await _supabase.FetchAttendanceAsync();
                 if (sbAttendance != null)
                 {
+                    sbAttendance.RemoveAll(a => a.MatchId == "match-1" || a.MatchId == "match-2");
                     _attendance = sbAttendance;
                     await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
                 }
@@ -691,17 +695,57 @@ public class TeamDataService : ITeamDataService
 
     public async Task DeleteMatchAsync(string matchId)
     {
-        _matches.RemoveAll(m => m.Id == matchId);
+        _matches.RemoveAll(m => m.Id == matchId || m.Id == "match-1" || m.Id == "match-2");
         _attendance.RemoveAll(a => a.MatchId == matchId);
         _matchEvents.RemoveAll(e => e.MatchId == matchId);
 
-        await SaveMatchesAsync();
-        await SaveAttendanceAsync();
-        await SaveEventsAsync();
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", JsonSerializer.Serialize(_matchEvents));
 
-        _ = _supabase.DeleteRowAsync("matches", matchId);
-        _ = _supabase.DeleteRowsWhereAsync("attendance", "match_id", matchId);
-        _ = _supabase.DeleteRowsWhereAsync("match_events", "match_id", matchId);
+        try
+        {
+            await _supabase.DeleteRowsWhereAsync("attendance", "match_id", matchId);
+            await _supabase.DeleteRowsWhereAsync("match_events", "match_id", matchId);
+            await _supabase.DeleteRowAsync("matches", matchId);
+        }
+        catch
+        {
+            // Fallback silencioso si no hay conexión
+        }
+
+        NotifyStateChanged();
+    }
+
+    public async Task ClearAllMatchesAsync()
+    {
+        var matchIds = _matches.Select(m => m.Id).ToList();
+        _matches.Clear();
+        _attendance.Clear();
+        _matchEvents.Clear();
+
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", "[]");
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", "[]");
+        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_events", "[]");
+
+        foreach (var id in matchIds)
+        {
+            try
+            {
+                await _supabase.DeleteRowsWhereAsync("attendance", "match_id", id);
+                await _supabase.DeleteRowsWhereAsync("match_events", "match_id", id);
+                await _supabase.DeleteRowAsync("matches", id);
+            }
+            catch { }
+        }
+
+        // Asegurar que los mocks viejos también se borren en Supabase
+        try
+        {
+            await _supabase.DeleteRowAsync("matches", "match-1");
+            await _supabase.DeleteRowAsync("matches", "match-2");
+        }
+        catch { }
 
         NotifyStateChanged();
     }
@@ -922,8 +966,12 @@ public class TeamDataService : ITeamDataService
 
     private async Task SaveMatchesAsync()
     {
+        _matches.RemoveAll(m => m.Id == "match-1" || m.Id == "match-2");
         await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-        _ = _supabase.UpsertMatchesBatchAsync(_matches);
+        if (_matches.Count > 0)
+        {
+            _ = _supabase.UpsertMatchesBatchAsync(_matches);
+        }
     }
 
     private async Task SaveAttendanceAsync()

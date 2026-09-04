@@ -51,6 +51,7 @@ public interface ITeamDataService
     Task UpdateMatchDetailsAsync(Match match);
     Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events);
     Task DeleteMatchAsync(string matchId);
+    Task ClearAllMatchesAsync();
     Task SaveBatchRoundResultsAsync(int round, List<Match> matches);
     Task AddLeagueMatchAsync(Match match);
     List<Attendance> GetAttendanceForMatch(string matchId);
