@@ -31,14 +31,19 @@ if ($wasmJs) {
 Copy-Item -Path $indexPath -Destination ".\publish_output\wwwroot\404.html" -Force
 
 Write-Host "Desplegando en la rama gh-pages de GitHub..." -ForegroundColor Cyan
-Push-Location ".\publish_output\wwwroot"
+$tempDeploy = Join-Path $env:TEMP "apn_ghpages_deploy"
+if (Test-Path $tempDeploy) { Remove-Item $tempDeploy -Recurse -Force }
+Copy-Item ".\publish_output\wwwroot" -Destination $tempDeploy -Recurse -Force
+
+Push-Location $tempDeploy
 git init -b gh-pages
 git add -A
-git commit -m "Deploy produccion: seguridad y nuevo historial de comunicados"
+git commit -m "Deploy produccion"
 git remote add origin https://github.com/pitu1386/AppPoblenou.git
 git push -f origin gh-pages
-Remove-Item -Path ".git" -Recurse -Force
 Pop-Location
+
+Remove-Item $tempDeploy -Recurse -Force
 
 Write-Host "Despliegue completado con exito en gh-pages!" -ForegroundColor Green
 Write-Host "URL: https://pitu1386.github.io/AppPoblenou/" -ForegroundColor Yellow
