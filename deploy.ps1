@@ -1,4 +1,4 @@
-﻿Write-Host "Compilando version de produccion..." -ForegroundColor Cyan
+Write-Host "Compilando version de produccion..." -ForegroundColor Cyan
 dotnet publish .\AtleticPoblenou\AtleticPoblenou.csproj -c Release -o .\publish_output
 
 if ($LASTEXITCODE -ne 0) {
@@ -10,9 +10,9 @@ Write-Host "Configurando GitHub Pages (base href, .nojekyll, 404.html)..." -Fore
 New-Item -ItemType File -Force -Path ".\publish_output\wwwroot\.nojekyll" | Out-Null
 
 $indexPath = ".\publish_output\wwwroot\index.html"
-$content = Get-Content -Path $indexPath -Raw
+$content = [System.IO.File]::ReadAllText($indexPath, [System.Text.Encoding]::UTF8)
 $content = $content.Replace('<base href="/" />', '<base href="/AppPoblenou/" />')
-Set-Content -Path $indexPath -Value $content -Encoding UTF8
+[System.IO.File]::WriteAllText($indexPath, $content, [System.Text.Encoding]::UTF8)
 Copy-Item -Path $indexPath -Destination ".\publish_output\wwwroot\404.html" -Force
 
 Write-Host "Desplegando en la rama gh-pages de GitHub..." -ForegroundColor Cyan
