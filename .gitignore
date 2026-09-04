@@ -30,3 +30,6 @@ desktop.ini
 *.tmp
 *.temp
 *.log
+
+publish_output/
+
