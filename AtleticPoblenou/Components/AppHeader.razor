@@ -1,5 +1,6 @@
 @inject ITeamDataService TeamService
 @inject ThemeService Theme
+@inject IJSRuntime JS
 @implements IDisposable
 
 <header class="sticky top-0 z-30 bg-surface/95 backdrop-blur-md">
@@ -59,6 +60,10 @@
                         <button @onclick="HandleOpenInstall" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
                             <svg class="w-5 h-5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"></rect><path d="M12 17h.01"></path></svg>
                             Instalar en el móvil
+                        </button>
+                        <button @onclick="ForceUpdateApp" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
+                            <span class="text-base">🔄</span>
+                            Actualizar app (Borrar caché)
                         </button>
                         @if (IsSuperOwner())
                         {
@@ -134,6 +139,12 @@
     {
         _showUserMenu = false;
         await OnOpenInstall.InvokeAsync();
+    }
+
+    private async Task ForceUpdateApp()
+    {
+        _showUserMenu = false;
+        await JS.InvokeVoidAsync("forceAppUpdate");
     }
 
     private async Task HandleOpenDb()

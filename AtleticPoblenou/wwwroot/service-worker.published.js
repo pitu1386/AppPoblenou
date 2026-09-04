@@ -2,8 +2,15 @@
 // offline support. See https://aka.ms/blazor-offline-considerations
 
 self.importScripts('./service-worker-assets.js');
-self.addEventListener('install', event => event.waitUntil(onInstall(event)));
-self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
+self.addEventListener('install', event => {
+    self.skipWaiting();
+    event.waitUntil(onInstall(event));
+});
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        onActivate(event).then(() => self.clients.claim())
+    );
+});
 self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
 
 const cacheNamePrefix = 'offline-cache-';
@@ -38,18 +45,29 @@ async function onActivate(event) {
 }
 
 async function onFetch(event) {
-    let cachedResponse = null;
     if (event.request.method === 'GET') {
-        // For all navigation requests, try to serve index.html from cache,
-        // unless that request is for an offline resource.
-        // If you need some URLs to be server-rendered, edit the following check to exclude those URLs
         const shouldServeIndexHtml = event.request.mode === 'navigate'
             && !manifestUrlList.some(url => url === event.request.url);
 
-        const request = shouldServeIndexHtml ? 'index.html' : event.request;
+        if (shouldServeIndexHtml) {
+            try {
+                const networkResponse = await fetch(event.request);
+                if (networkResponse.ok) {
+                    return networkResponse;
+                }
+            } catch (err) {
+                // Offline fallback
+            }
+            const cache = await caches.open(cacheName);
+            return (await cache.match('index.html')) || fetch(event.request);
+        }
+
         const cache = await caches.open(cacheName);
-        cachedResponse = await cache.match(request);
+        const cachedResponse = await cache.match(event.request);
+        if (cachedResponse) {
+            return cachedResponse;
+        }
     }
 
-    return cachedResponse || fetch(event.request);
+    return fetch(event.request);
 }

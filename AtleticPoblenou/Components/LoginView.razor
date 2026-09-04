@@ -1,4 +1,5 @@
 @inject ITeamDataService TeamService
+@inject IJSRuntime JS
 
 <div class="min-h-screen flex flex-col justify-center items-center p-4 bg-app text-ink">
     <div class="w-full max-w-md bg-surface border border-line rounded-xl p-6 sm:p-8 shadow-xl  relative overflow-hidden">
@@ -175,6 +176,14 @@
             </form>
         }
 
+        <div class="mt-4 pt-3 border-t border-line/60 flex items-center justify-between text-[11px] text-muted">
+            <span class="font-cond font-bold tracking-wider">v2.2 · ATLETIC POBLENOU</span>
+            <button type="button" @onclick="ForceAppUpdate"
+                    class="text-amber-500 hover:text-amber-400 font-bold flex items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20 transition">
+                <span>🔄</span> Actualizar versión
+            </button>
+        </div>
+
     </div>
 </div>
 
@@ -229,6 +238,11 @@
         {
             _errorMessage = result.ErrorMessage;
         }
+    }
+
+    private async Task ForceAppUpdate()
+    {
+        await JS.InvokeVoidAsync("forceAppUpdate");
     }
 }
 
