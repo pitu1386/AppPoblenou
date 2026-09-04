@@ -1,4 +1,4 @@
-﻿Write-Host "Compilando version de produccion..." -ForegroundColor Cyan
+Write-Host "Compilando version de produccion..." -ForegroundColor Cyan
 dotnet publish .\AtleticPoblenou\AtleticPoblenou.csproj -c Release -o .\publish_output
 
 if ($LASTEXITCODE -ne 0) {
@@ -34,7 +34,7 @@ Write-Host "Desplegando en la rama gh-pages de GitHub..." -ForegroundColor Cyan
 Push-Location ".\publish_output\wwwroot"
 git init -b gh-pages
 git add -A
-git commit -m "Fix blazor.webassembly.js and SRI integrity for GitHub Pages"
+git commit -m "Deploy produccion: seguridad y nuevo historial de comunicados"
 git remote add origin https://github.com/pitu1386/AppPoblenou.git
 git push -f origin gh-pages
 Remove-Item -Path ".git" -Recurse -Force
