@@ -100,23 +100,12 @@
                             </div>
 
                             <!-- Captain Armband Toggle Button -->
-                            @if (TeamService.IsOwnerAdmin(player))
-                            {
-                                <div class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold border bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm shrink-0 flex items-center gap-1.5"
-                                     title="Capitán permanente del club">
-                                    <span>👑</span>
-                                    <span>Capitán (C) 🔒</span>
-                                </div>
-                            }
-                            else
-                            {
-                                <button type="button" @onclick="() => ToggleCaptain(player)"
-                                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shrink-0 flex items-center gap-1.5 @(player.IsCaptain ? "bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm" : "bg-surface text-muted border-line hover:border-amber-500/40 hover:text-amber-500")"
-                                        title="@(player.IsCaptain ? "Quitar brazalete de capitán" : "Nombrar capitán")">
-                                    <span>🟡</span>
-                                    <span>@(player.IsCaptain ? "Capitán (C) ✓" : "+ Capitán")</span>
-                                </button>
-                            }
+                            <button type="button" @onclick="() => ToggleCaptain(player)"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition shrink-0 flex items-center gap-1.5 @(player.IsCaptain ? "bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm" : "bg-surface text-muted border-line hover:border-amber-500/40 hover:text-amber-500")"
+                                    title="@(player.IsCaptain ? "Quitar brazalete de capitán" : "Nombrar capitán")">
+                                <span>🟡</span>
+                                <span>@(player.IsCaptain ? "Capitán (C) ✓" : "+ Capitán")</span>
+                            </button>
                         </div>
 
                         <!-- Bottom line: Modern 5-Segmented Role Switcher or Protected Banner -->
@@ -194,8 +183,6 @@
 
     private async Task ToggleCaptain(UserProfile player)
     {
-        if (TeamService.IsOwnerAdmin(player)) return;
-
         player.IsCaptain = !player.IsCaptain;
         await TeamService.SaveProfileAsync(player);
     }

@@ -245,7 +245,6 @@ public class TeamDataService : ITeamDataService
         foreach (var p in _profiles.Where(IsOwnerAdmin))
         {
             p.Role = UserRole.Admin;
-            p.IsCaptain = true;
             p.IsActive = true;
         }
     }
@@ -255,12 +254,11 @@ public class TeamDataService : ITeamDataService
         var user = _profiles.FirstOrDefault(p => p.Id == _currentUserId) 
             ?? _profiles.FirstOrDefault(IsOwnerAdmin)
             ?? _profiles.FirstOrDefault() 
-            ?? new UserProfile { Id = "user-1", FullName = "Sergio \"Pitu\"", Nickname = "pitu1386", Email = "pitu1386@gmail.com", Role = UserRole.Admin, IsCaptain = true, Position = Position.Centrocampista };
+            ?? new UserProfile { Id = "user-1", FullName = "Sergio \"Pitu\"", Nickname = "pitu1386", Email = "pitu1386@gmail.com", Role = UserRole.Admin, IsCaptain = false, Position = Position.Centrocampista };
 
         if (IsOwnerAdmin(user))
         {
             user.Role = UserRole.Admin;
-            user.IsCaptain = true;
             user.IsActive = true;
         }
 
@@ -398,7 +396,6 @@ public class TeamDataService : ITeamDataService
         if (IsOwnerAdmin(profile))
         {
             profile.Role = UserRole.Admin;
-            profile.IsCaptain = true;
             profile.IsActive = true;
         }
 
@@ -1009,7 +1006,7 @@ public class TeamDataService : ITeamDataService
     // Datos iniciales en Español
     private List<UserProfile> GetInitialProfiles() => new()
     {
-        new UserProfile { Id = "user-1", FullName = "Pitu", Nickname = "pitu1386", JerseyNumber = 10, Position = Position.Centrocampista, Foot = DominantFoot.Diestro, Role = UserRole.Admin, IsCaptain = true, Phone = "+34 600 00 00 00", Email = "pitu1386@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 5, 14), Dni = "47891234X" },
+        new UserProfile { Id = "user-1", FullName = "Pitu", Nickname = "pitu1386", JerseyNumber = 10, Position = Position.Centrocampista, Foot = DominantFoot.Diestro, Role = UserRole.Admin, IsCaptain = false, Phone = "+34 600 00 00 00", Email = "pitu1386@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 5, 14), Dni = "47891234X" },
         new UserProfile { Id = "user-2", FullName = "Carles Puig", Nickname = "Carles", JerseyNumber = 4, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Treasurer, IsCaptain = true, Phone = "+34 622 33 44 55", Email = "carles@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1985, 11, 23), Dni = "46543210Y" },
         new UserProfile { Id = "user-3", FullName = "Marc Rovira", Nickname = "Marc", JerseyNumber = 1, Position = Position.Portero, Foot = DominantFoot.Diestro, Role = UserRole.FieldManager, IsCaptain = false, Phone = "+34 633 44 55 66", Email = "marc@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1989, 2, 8) },
         new UserProfile { Id = "user-4", FullName = "Jordi Soler", Nickname = "Jordi", JerseyNumber = 2, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 644 55 66 77", Email = "jordi@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1986, 9, 30) },

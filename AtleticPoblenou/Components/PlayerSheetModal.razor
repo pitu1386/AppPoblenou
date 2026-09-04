@@ -245,21 +245,21 @@
 
                     @if (currentUser.Role == UserRole.Admin)
                     {
-                        @if (TeamService.IsOwnerAdmin(TargetProfile))
-                        {
-                            <div class="space-y-1.5 bg-amber-500/10 border border-amber-500/30 p-3 rounded-lg">
-                                <div class="flex items-center gap-2 text-amber-400 font-extrabold text-xs">
-                                    <span>👑</span>
-                                    <span>Administrador Principal y Capitán Permanente</span>
+                        <div class="space-y-2.5 bg-well p-3 rounded-lg border border-line">
+                            @if (TeamService.IsOwnerAdmin(TargetProfile))
+                            {
+                                <div class="space-y-1 bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-lg">
+                                    <div class="flex items-center gap-1.5 text-amber-400 font-extrabold text-xs">
+                                        <span>🛡️</span>
+                                        <span>Rol: Administrador Principal (Fijo)</span>
+                                    </div>
+                                    <p class="text-[10px] text-muted m-0">
+                                        Este usuario es el creador de la app y su rol de Administrador es permanente.
+                                    </p>
                                 </div>
-                                <p class="text-[11px] text-muted m-0 leading-relaxed">
-                                    Este perfil corresponde al creador y administrador del Atletic Poblenou. El rol de Administrador y el brazalete de capitán están blindados permanentemente.
-                                </p>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="space-y-2.5 bg-well p-3 rounded-lg border border-line">
+                            }
+                            else
+                            {
                                 <div>
                                     <label class="font-bold text-warntext block mb-1">Rol en el Sistema (Permisos)</label>
                                     <select @bind="_editModel.Role" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
@@ -270,14 +270,14 @@
                                         <option value="@UserRole.Admin">🛡️ Administrador del Club</option>
                                     </select>
                                 </div>
-                                <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
-                                    <input type="checkbox" @bind="_editModel.IsCaptain" class="w-4 h-4 accent-amber-500 rounded cursor-pointer" />
-                                    <span class="text-xs font-bold text-amber-500 flex items-center gap-1">
-                                        🟡 Es Capitán del Equipo (Brazalete C)
-                                    </span>
-                                </label>
-                            </div>
-                        }
+                            }
+                            <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                                <input type="checkbox" @bind="_editModel.IsCaptain" class="w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                                <span class="text-xs font-bold text-amber-500 flex items-center gap-1">
+                                    🟡 Es Capitán del Equipo (Brazalete C)
+                                </span>
+                            </label>
+                        </div>
                     }
 
                     <div>
@@ -428,16 +428,16 @@
         TargetProfile.Position = _editModel.Position;
         TargetProfile.Foot = _editModel.Foot;
 
+        TargetProfile.IsCaptain = _editModel.IsCaptain;
+
         if (TeamService.IsOwnerAdmin(TargetProfile))
         {
             TargetProfile.Role = UserRole.Admin;
-            TargetProfile.IsCaptain = true;
             TargetProfile.IsActive = true;
         }
         else
         {
             TargetProfile.Role = _editModel.Role;
-            TargetProfile.IsCaptain = _editModel.IsCaptain;
         }
 
         TargetProfile.IsSubCaptain = _editModel.IsSubCaptain;
