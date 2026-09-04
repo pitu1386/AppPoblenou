@@ -36,8 +36,11 @@ public interface ITeamDataService
 
     // Announcements & Polls
     List<TeamAnnouncement> GetAnnouncements();
+    List<TeamAnnouncement> GetAllAnnouncements();
     Task AddAnnouncementAsync(TeamAnnouncement announcement);
     Task VoteAnnouncementPollAsync(string announcementId, string playerId, int optionIndex);
+    Task ArchiveAnnouncementAsync(string announcementId);
+    Task RestoreAnnouncementAsync(string announcementId);
     Task DeleteAnnouncementAsync(string announcementId);
 
     // Matches & RSVP

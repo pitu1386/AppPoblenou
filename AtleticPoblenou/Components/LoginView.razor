@@ -76,7 +76,6 @@
                 <div>
                     <div class="flex items-center justify-between mb-1">
                         <label class="font-bold text-ink2">Contraseña</label>
-                        <span class="text-xs text-faint">Demo: 1234</span>
                     </div>
                     <input @bind="_loginModel.Password" type="password" placeholder="Tu contraseña"
                            class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
@@ -88,33 +87,6 @@
                     <span>→</span>
                 </button>
             </form>
-
-            <!-- Demo Quick-Access Profiles (Ocultable para producción) -->
-            @if (TeamService.GetClubSettings().ShowDemoShortcuts)
-            {
-                <div class="mt-6 pt-4 border-t border-line">
-                    <div class="text-xs uppercase tracking-wider font-bold text-muted mb-2 text-center">
-                        Acceso rápido de prueba (1 toque):
-                    </div>
-                    <div class="grid grid-cols-3 gap-1.5 text-xs">
-                        <button @onclick='() => QuickLogin("user-1")'
-                                class="p-2 bg-well hover:bg-well2 border border-line rounded-lg text-center transition">
-                            <div class="font-extrabold text-warntext">pitu1386</div>
-                            <div class="text-[11px] text-faint">Admin</div>
-                        </button>
-                        <button @onclick='() => QuickLogin("user-2")'
-                                class="p-2 bg-well hover:bg-well2 border border-line rounded-lg text-center transition">
-                            <div class="font-extrabold text-oktext">Carles</div>
-                            <div class="text-[11px] text-faint">Tesorero</div>
-                        </button>
-                        <button @onclick='() => QuickLogin("user-3")'
-                                class="p-2 bg-well hover:bg-well2 border border-line rounded-lg text-center transition">
-                            <div class="font-extrabold text-ink">Marc</div>
-                            <div class="text-[11px] text-faint">Arquero</div>
-                        </button>
-                    </div>
-                </div>
-            }
         }
         else
         {
@@ -213,7 +185,7 @@
     private string _reactivationCode = "";
     private string _reactivationError = "";
 
-    private LoginModel _loginModel = new() { EmailOrNickname = "dani@atleticpoblenou.cat", Password = "1234" };
+    private LoginModel _loginModel = new() { EmailOrNickname = "", Password = "" };
     private RegisterModel _registerModel = new() { TeamCode = "", Position = Position.Centrocampista, Foot = DominantFoot.Diestro };
 
     private async Task HandleLogin()
@@ -257,11 +229,6 @@
         {
             _errorMessage = result.ErrorMessage;
         }
-    }
-
-    private async Task QuickLogin(string userId)
-    {
-        await TeamService.SetCurrentUserIdAsync(userId);
     }
 }
 

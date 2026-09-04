@@ -177,33 +177,6 @@
                     </div>
                 </div>
 
-                <!-- DEMO MODE / SHORTCUTS SWITCH (ACTIVAR/DESACTIVAR ACCESO RÁPIDO) -->
-                <div class="bg-well p-3.5 rounded-xl border border-line space-y-2">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="font-bold text-ink block">Atajos de Prueba y Demo</span>
-                            <span class="text-[11px] text-muted block">Muestra botones rápidos de acceso en el login y cambio de usuario en la cabecera.</span>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" @bind="_settings.ShowDemoShortcuts" class="sr-only peer" />
-                            <div class="w-11 h-6 bg-well2 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-club"></div>
-                        </label>
-                    </div>
-                    @if (!_settings.ShowDemoShortcuts)
-                    {
-                        <div class="p-2.5 bg-okbg border border-ok/30 rounded-lg text-xs text-oktext font-semibold flex items-center gap-2">
-                            <span>✓</span>
-                            <span><b>Modo Producción Activo:</b> Los accesos directos están ocultos. Los jugadores deben iniciar sesión con su email/apodo y contraseña.</span>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="text-[11px] text-warntext font-medium">
-                            ⚠️ Los atajos de 1 toque están visibles para facilitar las pruebas. Desactívalos antes de compartir la app con el plantel.
-                        </div>
-                    }
-                </div>
-
                 @if (_savedSuccessfully)
                 {
                     <div class="p-2.5 bg-okbg border border-ok/40 rounded-lg text-oktext font-bold text-center flex items-center justify-center gap-1.5 animate-in fade-in">

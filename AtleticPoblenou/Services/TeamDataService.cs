@@ -398,6 +398,9 @@ public class TeamDataService : ITeamDataService
     public List<TeamAnnouncement> GetAnnouncements() => 
         _announcements.Where(a => a.IsActive).OrderByDescending(a => a.IsPinned).ThenByDescending(a => a.CreatedAt).ToList();
 
+    public List<TeamAnnouncement> GetAllAnnouncements() =>
+        _announcements.OrderByDescending(a => a.CreatedAt).ToList();
+
     public async Task AddAnnouncementAsync(TeamAnnouncement announcement)
     {
         _announcements.Insert(0, announcement);
@@ -411,6 +414,28 @@ public class TeamDataService : ITeamDataService
         if (ann != null)
         {
             ann.Votes[playerId] = optionIndex;
+            await SaveAnnouncementsAsync();
+            NotifyStateChanged();
+        }
+    }
+
+    public async Task ArchiveAnnouncementAsync(string announcementId)
+    {
+        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
+        if (ann != null)
+        {
+            ann.IsActive = false;
+            await SaveAnnouncementsAsync();
+            NotifyStateChanged();
+        }
+    }
+
+    public async Task RestoreAnnouncementAsync(string announcementId)
+    {
+        var ann = _announcements.FirstOrDefault(a => a.Id == announcementId);
+        if (ann != null)
+        {
+            ann.IsActive = true;
             await SaveAnnouncementsAsync();
             NotifyStateChanged();
         }
@@ -701,6 +726,17 @@ public class TeamDataService : ITeamDataService
             },
             IsPinned = true,
             IsActive = true
+        },
+        new TeamAnnouncement
+        {
+            Id = "ann-archived-1",
+            Title = "👕 Nuevas Camisetas Oficiales y Cierre de Pretemporada",
+            Content = "Compañeros, ya llegaron todas las camisetas titulares (rojiblancas) y alternativas con los dorsales estampados. ¡A darlo todo en el debut liguero!",
+            AuthorName = "pitu1386 (Capitán)",
+            CreatedAt = DateTime.UtcNow.AddDays(-10),
+            HasPoll = false,
+            IsPinned = false,
+            IsActive = false
         }
     };
 

@@ -69,50 +69,11 @@
                         }
                     </div>
 
-                    @if (TeamService.GetClubSettings().ShowDemoShortcuts)
-                    {
-                        <div class="px-3 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-faint">
-                            Cambiar de jugador (pruebas)
-                        </div>
-                        <div class="max-h-56 overflow-y-auto">
-                            @foreach (var player in TeamService.GetProfiles())
-                            {
-                                var isMe = player.Id == CurrentUser.Id;
-                                <button @onclick="() => SwitchUser(player.Id)"
-                                        class="w-full h-11 px-3 flex items-center gap-3 text-left hover:bg-well transition @(isMe ? "bg-well" : "")">
-                                    <span class="w-7 h-7 rounded-lg bg-well2 flex items-center justify-center text-xs font-cond font-bold text-ink shrink-0">
-                                        @(player.JerseyNumber?.ToString() ?? "-")
-                                    </span>
-                                    <span class="flex-1 min-w-0">
-                                        <span class="block text-sm font-semibold text-ink truncate">
-                                            @player.Nickname
-                                            @if (player.IsCaptain)
-                                            {
-                                                <span class="text-amber-500 font-bold ml-1">🟡 (C)</span>
-                                            }
-                                        </span>
-                                        <span class="block text-[11px] @GetRoleColor(player.Role)">@GetRoleBadge(player.Role) · @player.Position</span>
-                                    </span>
-                                    @if (isMe)
-                                    {
-                                        <svg class="w-4 h-4 text-clubtext shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
-                                    }
-                                </button>
-                            }
-                        </div>
-                    }
-
                     <div class="p-1.5 border-t border-line">
                         <button @onclick="HandleLogout" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-clubtext hover:bg-clubbg transition flex items-center gap-3">
                             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
                             Cerrar sesión
                         </button>
-                        @if (TeamService.GetClubSettings().ShowDemoShortcuts)
-                        {
-                            <button @onclick="ResetDefaults" class="w-full h-9 px-3 rounded-lg text-left text-xs text-faint hover:text-ink transition">
-                                Restaurar datos de prueba
-                            </button>
-                        }
                     </div>
                 </div>
             }
@@ -146,12 +107,6 @@
     private Task ToggleTheme() => Theme.ToggleAsync();
 
     private void ToggleUserMenu() => _showUserMenu = !_showUserMenu;
-
-    private async Task SwitchUser(string userId)
-    {
-        await TeamService.SetCurrentUserIdAsync(userId);
-        _showUserMenu = false;
-    }
 
     private string GetRoleBadge(UserRole role) => role switch
     {
@@ -191,12 +146,6 @@
     {
         _showUserMenu = false;
         await TeamService.LogoutAsync();
-    }
-
-    private async Task ResetDefaults()
-    {
-        await TeamService.ResetToDemoAsync();
-        _showUserMenu = false;
     }
 
     private bool IsSuperOwner()

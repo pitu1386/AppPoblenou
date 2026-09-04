@@ -12,7 +12,7 @@ public class ClubSettings
     public string HomeVenueName { get; set; } = "Camp Municipal Agapito Fernández";
     public string HomeVenueMapsUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
     public decimal SeasonFeePerPlayer { get; set; } = 200;
-    public bool ShowDemoShortcuts { get; set; } = true;
+    public bool ShowDemoShortcuts { get; set; } = false;
     public List<SeasonArchive> SeasonHistory { get; set; } = new();
 }
 

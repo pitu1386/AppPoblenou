@@ -1,0 +1,367 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen)
+{
+    var allAnnouncements = TeamService.GetAllAnnouncements();
+    var activeCount = allAnnouncements.Count(a => a.IsActive);
+    var archivedCount = allAnnouncements.Count(a => !a.IsActive);
+
+    var baseList = _filterTab == "active" ? allAnnouncements.Where(a => a.IsActive) :
+                   _filterTab == "archived" ? allAnnouncements.Where(a => !a.IsActive) :
+                   allAnnouncements;
+
+    var filteredList = baseList.Where(a =>
+        string.IsNullOrWhiteSpace(_searchQuery) ||
+        a.Title.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+        a.Content.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+        a.AuthorName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
+    ).ToList();
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div class="bg-surface border border-line2 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-clubbg border border-club/30 flex items-center justify-center text-xl shrink-0">
+                        📢
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Historial de Comunicados
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            Registro de anuncios, histórico de votaciones y gestión de cartelera
+                        </p>
+                    </div>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Stats Ribbon -->
+            <div class="px-5 py-2.5 bg-well/50 border-b border-line grid grid-cols-3 gap-2 text-center text-xs shrink-0">
+                <div class="py-1">
+                    <span class="text-muted text-[11px] block">Total Histórico</span>
+                    <span class="font-cond font-bold text-base text-ink">@allAnnouncements.Count</span>
+                </div>
+                <div class="py-1 border-x border-line">
+                    <span class="text-oktext text-[11px] block font-semibold">🟢 En Portada</span>
+                    <span class="font-cond font-bold text-base text-oktext">@activeCount</span>
+                </div>
+                <div class="py-1">
+                    <span class="text-amber-500 text-[11px] block font-semibold">📦 Archivados</span>
+                    <span class="font-cond font-bold text-base text-amber-500">@archivedCount</span>
+                </div>
+            </div>
+
+            <!-- Search & Filters Toolbar -->
+            <div class="p-4 pb-2 space-y-2.5 shrink-0 bg-surface">
+                <!-- Search Bar -->
+                <div class="relative flex items-center">
+                    <input @bind="_searchQuery" @bind:event="oninput" type="text"
+                           placeholder="Buscar por título, contenido o autor..."
+                           class="w-full bg-well border border-line2 rounded-xl pl-9 pr-8 py-2 text-xs text-ink placeholder-muted focus:border-club focus:outline-none" />
+                    <span class="absolute left-3 text-muted text-xs">🔍</span>
+                    @if (!string.IsNullOrEmpty(_searchQuery))
+                    {
+                        <button @onclick='() => _searchQuery = ""'
+                                class="absolute right-2.5 text-muted hover:text-ink text-xs p-1">
+                            ✕
+                        </button>
+                    }
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="flex items-center gap-1.5 p-1 bg-well rounded-xl border border-line">
+                    <button @onclick='() => _filterTab = "all"'
+                            class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 @(_filterTab == "all" ? "bg-surface text-ink shadow-sm border border-line" : "text-muted hover:text-ink")">
+                        <span>Todos</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-well2 text-muted font-extrabold">@allAnnouncements.Count</span>
+                    </button>
+
+                    <button @onclick='() => _filterTab = "active"'
+                            class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 @(_filterTab == "active" ? "bg-surface text-ink shadow-sm border border-line" : "text-muted hover:text-ink")">
+                        <span>🟢 En Portada</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-okbg text-oktext font-extrabold">@activeCount</span>
+                    </button>
+
+                    <button @onclick='() => _filterTab = "archived"'
+                            class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 @(_filterTab == "archived" ? "bg-surface text-ink shadow-sm border border-line" : "text-muted hover:text-ink")">
+                        <span>📦 Archivados</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-600 font-extrabold">@archivedCount</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Feedback Notification -->
+            @if (!string.IsNullOrEmpty(_feedbackMessage))
+            {
+                <div class="mx-4 mb-2 p-2.5 rounded-xl bg-okbg border border-ok/30 text-oktext text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-in fade-in">
+                    <div class="flex items-center gap-2">
+                        <span>✓</span>
+                        <span>@_feedbackMessage</span>
+                    </div>
+                    <button @onclick='() => _feedbackMessage = null' class="text-xs text-oktext hover:opacity-75">✕</button>
+                </div>
+            }
+
+            <!-- Announcements List -->
+            <div class="flex-1 overflow-y-auto p-4 pt-1 space-y-3">
+                @if (!filteredList.Any())
+                {
+                    <div class="p-8 text-center bg-well/40 rounded-xl border border-line space-y-2">
+                        <div class="text-3xl">📭</div>
+                        <div class="font-bold text-ink text-sm">No se encontraron comunicados</div>
+                        <p class="text-xs text-muted max-w-xs mx-auto">
+                            @(string.IsNullOrWhiteSpace(_searchQuery)
+                                ? "No hay registros en este filtro del historial."
+                                : "No hay comunicados que coincidan con la búsqueda.")
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var ann in filteredList)
+                    {
+                        var totalVotes = ann.Votes.Count;
+                        var isExpanded = _expandedVoters.Contains(ann.Id);
+                        var isConfirmingDelete = _confirmDeleteId == ann.Id;
+
+                        <div class="bg-surface border @(ann.IsActive ? "border-line" : "border-line/60 opacity-90") rounded-xl p-4 space-y-3 relative hover:border-line2 transition">
+
+                            <!-- Status & Badges -->
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    @if (ann.IsActive)
+                                    {
+                                        <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-okbg text-oktext border border-ok/30 flex items-center gap-1">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-ok animate-pulse"></span>
+                                            EN PORTADA
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                                            📦 ARCHIVADO EN HISTORIAL
+                                        </span>
+                                    }
+
+                                    @if (ann.IsPinned)
+                                    {
+                                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-clubbg text-clubtext border border-club/30">
+                                            📌 Fijado
+                                        </span>
+                                    }
+
+                                    @if (ann.HasPoll)
+                                    {
+                                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-infobg text-infotext border border-info/30">
+                                            📊 Con Encuesta (@totalVotes @(totalVotes == 1 ? "voto" : "votos"))
+                                        </span>
+                                    }
+                                </div>
+
+                                <div class="text-[11px] text-muted font-medium">
+                                    @ann.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy · HH:mm")h
+                                </div>
+                            </div>
+
+                            <!-- Title & Author -->
+                            <div>
+                                <h4 class="font-extrabold text-ink text-sm leading-snug m-0">
+                                    @ann.Title
+                                </h4>
+                                <div class="text-xs text-muted mt-0.5">
+                                    Publicado por <strong class="text-ink2">@ann.AuthorName</strong>
+                                </div>
+                            </div>
+
+                            <!-- Message Content -->
+                            @if (!string.IsNullOrWhiteSpace(ann.Content))
+                            {
+                                <p class="text-xs text-ink2 bg-well p-3 rounded-xl border border-line leading-relaxed whitespace-pre-line m-0">
+                                    @ann.Content
+                                </p>
+                            }
+
+                            <!-- Poll Breakdown Section -->
+                            @if (ann.HasPoll && ann.PollOptions.Any())
+                            {
+                                <div class="bg-well/70 rounded-xl p-3 border border-line space-y-2 text-xs">
+                                    <div class="flex items-center justify-between font-bold text-muted text-[11px] uppercase tracking-wider">
+                                        <span>Resultado de la Votación</span>
+                                        <span>@totalVotes participantes</span>
+                                    </div>
+
+                                    <div class="space-y-1.5">
+                                        @for (int i = 0; i < ann.PollOptions.Count; i++)
+                                        {
+                                            int optionIndex = i;
+                                            var optionText = ann.PollOptions[i];
+                                            var optionVotes = ann.Votes.Count(kv => kv.Value == optionIndex);
+                                            var percent = totalVotes > 0 ? (int)Math.Round((double)optionVotes / totalVotes * 100) : 0;
+
+                                            <div class="space-y-1">
+                                                <div class="flex items-center justify-between text-xs font-semibold">
+                                                    <span class="text-ink">@optionText</span>
+                                                    <span class="font-cond font-bold text-muted">@optionVotes <span class="opacity-75">(@percent%)</span></span>
+                                                </div>
+                                                <div class="w-full h-2 bg-well2 rounded-full overflow-hidden border border-line2/50">
+                                                    <div class="h-full bg-club rounded-full transition-all" style="width: @percent%"></div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    @if (totalVotes > 0)
+                                    {
+                                        <div class="pt-1 border-t border-line/60">
+                                            <button type="button" @onclick="() => ToggleVoters(ann.Id)"
+                                                    class="text-xs text-muted hover:text-ink font-bold flex items-center gap-1">
+                                                <span>@(isExpanded ? "▾ Ocultar votantes" : "▸ Ver nombres de votantes")</span>
+                                            </button>
+
+                                            @if (isExpanded)
+                                            {
+                                                <div class="mt-2 p-2.5 bg-surface rounded-lg border border-line space-y-2 text-xs">
+                                                    @for (int i = 0; i < ann.PollOptions.Count; i++)
+                                                    {
+                                                        int optionIndex = i;
+                                                        var voters = ann.Votes.Where(kv => kv.Value == optionIndex).Select(kv => kv.Key).ToList();
+
+                                                        @if (voters.Any())
+                                                        {
+                                                            <div class="space-y-1">
+                                                                <div class="font-bold text-muted text-[11px]">
+                                                                    @ann.PollOptions[optionIndex] (@voters.Count):
+                                                                </div>
+                                                                <div class="flex flex-wrap gap-1">
+                                                                    @foreach (var vId in voters)
+                                                                    {
+                                                                        var profile = TeamService.GetProfileById(vId);
+                                                                        <span class="px-2 py-0.5 rounded-md bg-well border border-line text-[11px] font-semibold text-ink">
+                                                                            @(profile?.Nickname ?? "Jugador")
+                                                                        </span>
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            <!-- Management Actions -->
+                            <div class="pt-2 border-t border-line flex items-center justify-between gap-2 flex-wrap text-xs">
+                                <div class="flex items-center gap-2">
+                                    @if (ann.IsActive)
+                                    {
+                                        <button type="button" @onclick="() => HandleArchive(ann)"
+                                                class="px-3 py-1.5 rounded-lg bg-well hover:bg-well2 text-ink font-bold border border-line flex items-center gap-1.5 transition shadow-xs">
+                                            <span>📦</span>
+                                            <span>Archivar (Quitar de portada)</span>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" @onclick="() => HandleRestore(ann)"
+                                                class="px-3 py-1.5 rounded-lg bg-ok hover:bg-okdeep text-white font-extrabold flex items-center gap-1.5 transition shadow-xs">
+                                            <span>🟢</span>
+                                            <span>Volver a Publicar en Portada</span>
+                                        </button>
+                                    }
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    @if (isConfirmingDelete)
+                                    {
+                                        <span class="text-xs text-club font-bold">¿Seguro?</span>
+                                        <button type="button" @onclick="() => ConfirmDelete(ann.Id)"
+                                                class="px-2.5 py-1 rounded-lg bg-club hover:bg-clubdeep text-white font-extrabold text-xs transition">
+                                            Sí, eliminar
+                                        </button>
+                                        <button type="button" @onclick='() => _confirmDeleteId = null'
+                                                class="px-2 py-1 rounded-lg bg-well hover:bg-well2 text-ink text-xs transition">
+                                            Cancelar
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" @onclick='() => _confirmDeleteId = ann.Id'
+                                                class="text-xs text-faint hover:text-club font-medium transition"
+                                                title="Eliminar definitivamente del registro">
+                                            Eliminar definitivamente
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="px-5 py-3 border-t border-line bg-surface flex items-center justify-between shrink-0">
+                <span class="text-xs text-muted">
+                    Los comunicados archivados se conservan en este historial y pueden reactivarse en cualquier momento.
+                </span>
+                <button @onclick="Close" class="px-4 py-2 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-xl border border-line transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string _filterTab = "all"; // all, active, archived
+    private string _searchQuery = "";
+    private string? _feedbackMessage;
+    private string? _confirmDeleteId;
+    private HashSet<string> _expandedVoters = new();
+
+    private void ToggleVoters(string annId)
+    {
+        if (_expandedVoters.Contains(annId))
+            _expandedVoters.Remove(annId);
+        else
+            _expandedVoters.Add(annId);
+    }
+
+    private async Task HandleArchive(TeamAnnouncement ann)
+    {
+        await TeamService.ArchiveAnnouncementAsync(ann.Id);
+        _feedbackMessage = $"Comunicado '{ann.Title}' archivado. Ya no se mostrará en la portada.";
+    }
+
+    private async Task HandleRestore(TeamAnnouncement ann)
+    {
+        await TeamService.RestoreAnnouncementAsync(ann.Id);
+        _feedbackMessage = $"Comunicado '{ann.Title}' reactivado y visible en la portada.";
+    }
+
+    private async Task ConfirmDelete(string annId)
+    {
+        _confirmDeleteId = null;
+        await TeamService.DeleteAnnouncementAsync(annId);
+        _feedbackMessage = "Comunicado eliminado definitivamente.";
+    }
+
+    private async Task Close()
+    {
+        _feedbackMessage = null;
+        _confirmDeleteId = null;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
