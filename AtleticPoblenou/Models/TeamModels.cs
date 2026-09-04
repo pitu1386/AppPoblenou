@@ -18,18 +18,20 @@ public class ClubSettings
 
 public enum UserRole
 {
-    Admin,
-    Treasurer,
-    FieldManager,
-    Player
+    Admin = 0,
+    Treasurer = 1,
+    FieldManager = 2, // Delegado (gestión de partidos y canchas)
+    Player = 3,       // Jugador
+    Coach = 4         // Director Técnico (DT) / Entrenador
 }
 
 public enum Position
 {
-    Portero,
-    Defensa,
-    Centrocampista,
-    Delantero
+    Portero = 0,
+    Defensa = 1,
+    Centrocampista = 2,
+    Delantero = 3,
+    CuerpoTecnico = 4 // Cuerpo Técnico / DT
 }
 
 public enum DominantFoot

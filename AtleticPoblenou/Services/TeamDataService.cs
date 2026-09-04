@@ -88,17 +88,13 @@ public class TeamDataService : ITeamDataService
 
             if (!string.IsNullOrEmpty(jsonMatches))
             {
-                var loadedM = JsonSerializer.Deserialize<List<Match>>(jsonMatches);
-                if (loadedM != null && loadedM.Any(m => m.Opponent == "FONTETAS"))
-                    _matches = loadedM;
-                else
-                {
-                    _matches = GetInitialMatches();
-                    await SaveMatchesAsync();
-                }
+                _matches = JsonSerializer.Deserialize<List<Match>>(jsonMatches) ?? new();
             }
 
-            if (!string.IsNullOrEmpty(jsonAttendance)) _attendance = JsonSerializer.Deserialize<List<Attendance>>(jsonAttendance) ?? GetInitialAttendance();
+            if (!string.IsNullOrEmpty(jsonAttendance))
+            {
+                _attendance = JsonSerializer.Deserialize<List<Attendance>>(jsonAttendance) ?? new();
+            }
 
             if (!string.IsNullOrEmpty(jsonPayments)) _payments = JsonSerializer.Deserialize<List<Payment>>(jsonPayments) ?? GetInitialPayments();
 
@@ -140,29 +136,15 @@ public class TeamDataService : ITeamDataService
                 var sbMatches = await _supabase.FetchMatchesAsync();
                 if (sbMatches != null)
                 {
-                    if (sbMatches.Count > 0)
-                    {
-                        _matches = sbMatches;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
-                    }
-                    else
-                    {
-                        _ = _supabase.UpsertMatchesBatchAsync(_matches);
-                    }
+                    _matches = sbMatches;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_matches", JsonSerializer.Serialize(_matches));
                 }
 
                 var sbAttendance = await _supabase.FetchAttendanceAsync();
                 if (sbAttendance != null)
                 {
-                    if (sbAttendance.Count > 0)
-                    {
-                        _attendance = sbAttendance;
-                        await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
-                    }
-                    else if (_attendance.Count > 0)
-                    {
-                        _ = _supabase.UpsertAttendanceBatchAsync(_attendance);
-                    }
+                    _attendance = sbAttendance;
+                    await _js.InvokeVoidAsync("blazorLocalStorage.set", "apn_attendance", JsonSerializer.Serialize(_attendance));
                 }
 
                 var sbPayments = await _supabase.FetchPaymentsAsync();
@@ -983,55 +965,9 @@ public class TeamDataService : ITeamDataService
         new UserProfile { Id = "user-10", FullName = "Gerard Mas", Nickname = "Geri", JerseyNumber = 5, Position = Position.Defensa, Foot = DominantFoot.Diestro, Role = UserRole.Player, IsCaptain = false, Phone = "+34 612 34 56 78", Email = "gerard@atleticpoblenou.cat", Password = "1234", BirthDate = new DateTime(1988, 10, 5) }
     };
 
-    private List<Match> GetInitialMatches()
-    {
-        var now = DateTime.UtcNow;
-        var daysUntilSaturday = ((int)DayOfWeek.Saturday - (int)now.DayOfWeek + 7) % 7;
-        if (daysUntilSaturday == 0) daysUntilSaturday = 7;
-        var nextSat = now.Date.AddDays(daysUntilSaturday).AddHours(18).AddMinutes(30);
+    private List<Match> GetInitialMatches() => new();
 
-        return new List<Match>
-        {
-            new Match
-            {
-                Id = "match-1",
-                MatchDate = nextSat,
-                Opponent = "FONTETAS",
-                Competition = "Sábados División Honor - J1",
-                LocationName = "Camp Agapito Fernández (Poblenou)",
-                LocationUrl = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona",
-                IsHome = true,
-                Status = MatchStatus.Upcoming,
-                Notes = "Camiseta titular rojiblanca. Por favor, estar 40 minutos antes para calentar y armar el equipo."
-            },
-            new Match
-            {
-                Id = "match-2",
-                MatchDate = nextSat.AddDays(7),
-                Opponent = "LA PEÑA",
-                Competition = "Sábados División Honor - J2",
-                LocationName = "CEM Poblenou - Can Felipa",
-                LocationUrl = "https://maps.google.com/?q=Can+Felipa+Poblenou+Barcelona",
-                IsHome = false,
-                Status = MatchStatus.Upcoming,
-                Notes = "Llevar camiseta suplente por si coinciden colores. Confirmar asistencia."
-            }
-        };
-    }
-
-    private List<Attendance> GetInitialAttendance() => new()
-    {
-        new Attendance { Id = "att-1", MatchId = "match-1", PlayerId = "user-1", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-2", MatchId = "match-1", PlayerId = "user-2", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-3", MatchId = "match-1", PlayerId = "user-3", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-4", MatchId = "match-1", PlayerId = "user-4", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-5", MatchId = "match-1", PlayerId = "user-5", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-6", MatchId = "match-1", PlayerId = "user-6", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-7", MatchId = "match-1", PlayerId = "user-7", Status = AttendanceStatus.Maybe, Note = "Salgo tarde del trabajo, llego para el 2do tiempo" },
-        new Attendance { Id = "att-8", MatchId = "match-1", PlayerId = "user-8", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-9", MatchId = "match-1", PlayerId = "user-9", Status = AttendanceStatus.Going },
-        new Attendance { Id = "att-10", MatchId = "match-1", PlayerId = "user-10", Status = AttendanceStatus.NotGoing, Note = "Sobrecarga muscular en el gemelo" }
-    };
+    private List<Attendance> GetInitialAttendance() => new();
 
     private List<Payment> GetInitialPayments() => new();
 

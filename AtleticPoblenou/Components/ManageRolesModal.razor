@@ -27,11 +27,12 @@
 
             <!-- Compact Role Info Badge Strip -->
             <div class="px-5 py-2.5 bg-well/50 border-b border-line flex items-center gap-2 flex-wrap text-[11px] shrink-0">
-                <span class="font-bold text-muted uppercase tracking-wider">Permisos:</span>
-                <span class="px-2 py-0.5 rounded-md bg-warnbg text-warntext border border-warn/30 font-semibold">🛡️ Admin (Todo)</span>
-                <span class="px-2 py-0.5 rounded-md bg-okbg text-oktext border border-ok/30 font-semibold">💶 Tesorero (Caja)</span>
-                <span class="px-2 py-0.5 rounded-md bg-infobg text-infotext border border-info/30 font-semibold">📍 Canchas (Horarios)</span>
-                <span class="px-2 py-0.5 rounded-md bg-well border border-line text-muted font-semibold">⚽ Jugador (Base)</span>
+                <span class="font-bold text-muted uppercase tracking-wider">Roles:</span>
+                <span class="px-2 py-0.5 rounded-md bg-warnbg text-warntext border border-warn/30 font-semibold">🛡️ Admin</span>
+                <span class="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-semibold">📋 DT</span>
+                <span class="px-2 py-0.5 rounded-md bg-infobg text-infotext border border-info/30 font-semibold">📍 Delegado</span>
+                <span class="px-2 py-0.5 rounded-md bg-okbg text-oktext border border-ok/30 font-semibold">💶 Tesorero</span>
+                <span class="px-2 py-0.5 rounded-md bg-well border border-line text-muted font-semibold">⚽ Jugador</span>
             </div>
 
             <!-- Search & Counter Toolbar -->
@@ -107,33 +108,40 @@
                             </button>
                         </div>
 
-                        <!-- Bottom line: Modern 4-Segmented Role Switcher -->
-                        <div class="grid grid-cols-4 gap-1 p-1 bg-surface rounded-lg border border-line">
+                        <!-- Bottom line: Modern 5-Segmented Role Switcher -->
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-surface rounded-lg border border-line">
                             <!-- Jugador -->
                             <button type="button" @onclick="() => ChangeRole(player, UserRole.Player)"
                                     class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Player ? "bg-well2 text-ink shadow-sm" : "text-muted hover:text-ink")"
-                                    title="Rol base: Jugador">
+                                    title="Rol: Jugador de campo">
                                 ⚽ Jugador
                             </button>
 
-                            <!-- Canchas -->
+                            <!-- DT -->
+                            <button type="button" @onclick="() => ChangeRole(player, UserRole.Coach)"
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Coach ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-muted hover:text-purple-400")"
+                                    title="Rol: Director Técnico (DT) / Entrenador">
+                                📋 DT
+                            </button>
+
+                            <!-- Delegado -->
                             <button type="button" @onclick="() => ChangeRole(player, UserRole.FieldManager)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.FieldManager ? "bg-info text-white shadow-sm" : "text-muted hover:text-infotext")"
-                                    title="Anotar horarios y canchas">
-                                📍 Canchas
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.FieldManager ? "bg-info text-white shadow-sm font-extrabold" : "text-muted hover:text-infotext")"
+                                    title="Rol: Delegado de equipo / Canchas">
+                                📍 Delegado
                             </button>
 
                             <!-- Tesorero -->
                             <button type="button" @onclick="() => ChangeRole(player, UserRole.Treasurer)"
-                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Treasurer ? "bg-ok text-white shadow-sm" : "text-muted hover:text-oktext")"
-                                    title="Cargar cobros y gastos">
+                                    class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Treasurer ? "bg-ok text-white shadow-sm font-extrabold" : "text-muted hover:text-oktext")"
+                                    title="Rol: Tesorero de caja">
                                 💶 Tesorero
                             </button>
 
                             <!-- Admin -->
                             <button type="button" @onclick="() => ChangeRole(player, UserRole.Admin)"
                                     class="py-1 px-1 text-center rounded-md text-[11px] font-bold transition @(player.Role == UserRole.Admin ? "bg-warn text-black shadow-sm font-extrabold" : "text-muted hover:text-warntext")"
-                                    title="Control total">
+                                    title="Control total de la app">
                                 🛡️ Admin
                             </button>
                         </div>

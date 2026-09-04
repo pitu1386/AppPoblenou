@@ -60,16 +60,22 @@
                                         ADMIN
                                     </span>
                                 }
-                                else if (TargetProfile.Role == UserRole.Treasurer)
+                                else if (TargetProfile.Role == UserRole.Coach)
                                 {
-                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-okbg text-oktext border border-ok/40">
-                                        TESORERO
+                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/40">
+                                        📋 DT
                                     </span>
                                 }
                                 else if (TargetProfile.Role == UserRole.FieldManager)
                                 {
                                     <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-infobg text-infotext border border-info/40">
-                                        CANCHAS
+                                        DELEGADO
+                                    </span>
+                                }
+                                else if (TargetProfile.Role == UserRole.Treasurer)
+                                {
+                                    <span class="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-okbg text-oktext border border-ok/40">
+                                        TESORERO
                                     </span>
                                 }
                             </div>
@@ -198,6 +204,7 @@
                                 <option value="@Position.Defensa">Defensor</option>
                                 <option value="@Position.Centrocampista">Mediocampista</option>
                                 <option value="@Position.Delantero">Delantero</option>
+                                <option value="@Position.CuerpoTecnico">Cuerpo Técnico / DT</option>
                             </select>
                         </div>
                         <div>
@@ -242,10 +249,11 @@
                             <div>
                                 <label class="font-bold text-warntext block mb-1">Rol en el Sistema (Permisos)</label>
                                 <select @bind="_editModel.Role" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
-                                    <option value="@UserRole.Player">Jugador</option>
-                                    <option value="@UserRole.FieldManager">Delegado de Canchas / Horarios</option>
-                                    <option value="@UserRole.Treasurer">Tesorero</option>
-                                    <option value="@UserRole.Admin">Administrador de la App</option>
+                                    <option value="@UserRole.Player">⚽ Jugador</option>
+                                    <option value="@UserRole.Coach">📋 Director Técnico (DT) / Entrenador</option>
+                                    <option value="@UserRole.FieldManager">📍 Delegado (Canchas y Planillas)</option>
+                                    <option value="@UserRole.Treasurer">💶 Tesorero (Cobros y Gastos)</option>
+                                    <option value="@UserRole.Admin">🛡️ Administrador del Club</option>
                                 </select>
                             </div>
                             <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">

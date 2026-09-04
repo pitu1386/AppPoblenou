@@ -711,7 +711,7 @@
 
     private UserProfile CurrentUser => TeamService.GetCurrentUser();
     private bool IsAdmin => CurrentUser.Role == UserRole.Admin;
-    private bool CanManageMatches => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.FieldManager;
+    private bool CanManageMatches => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.FieldManager || CurrentUser.Role == UserRole.Coach;
     private Match? NextMatch => TeamService.GetNextMatch();
     private static readonly System.Globalization.CultureInfo EsCulture = GetEsCulture();
     private static System.Globalization.CultureInfo GetEsCulture()

@@ -116,16 +116,18 @@
     private string GetRoleBadge(UserRole role) => role switch
     {
         UserRole.Admin => "Admin",
+        UserRole.Coach => "DT / Entrenador",
+        UserRole.FieldManager => "Delegado",
         UserRole.Treasurer => "Tesorero",
-        UserRole.FieldManager => "Canchas",
         _ => "Jugador"
     };
 
     private string GetRoleColor(UserRole role) => role switch
     {
         UserRole.Admin => "text-warntext",
-        UserRole.Treasurer => "text-oktext",
+        UserRole.Coach => "text-purple-400",
         UserRole.FieldManager => "text-infotext",
+        UserRole.Treasurer => "text-oktext",
         _ => "text-muted"
     };
 

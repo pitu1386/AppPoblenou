@@ -64,8 +64,12 @@
             {
                 var posName = pos == Position.Portero ? "Porteros" :
                               pos == Position.Defensa ? "Defensas" :
-                              pos == Position.Centrocampista ? "Mediocampistas" : "Delanteros";
-                var dot = pos == Position.Portero ? "bg-warn" : pos == Position.Defensa ? "bg-info" : pos == Position.Centrocampista ? "bg-ok" : "bg-club";
+                              pos == Position.Centrocampista ? "Mediocampistas" :
+                              pos == Position.Delantero ? "Delanteros" : "Cuerpo Técnico & DT";
+                var dot = pos == Position.Portero ? "bg-warn" :
+                          pos == Position.Defensa ? "bg-info" :
+                          pos == Position.Centrocampista ? "bg-ok" :
+                          pos == Position.Delantero ? "bg-club" : "bg-purple-500";
 
                 <div class="space-y-1.5">
                     <div class="flex items-baseline gap-2 px-0.5">
@@ -81,7 +85,7 @@
                                  class="h-[52px] flex items-center gap-3 cursor-pointer select-none group">
 
                                 <div class="w-8 h-8 rounded-lg bg-well flex items-center justify-center font-cond font-bold text-[15px] text-ink shrink-0">
-                                    @(player.JerseyNumber?.ToString() ?? "-")
+                                    @(player.JerseyNumber?.ToString() ?? (player.Role == UserRole.Coach ? "DT" : "-"))
                                 </div>
 
                                 <div class="flex-1 min-w-0 flex items-center gap-2">
@@ -96,13 +100,17 @@
                                     {
                                         <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-clubbg text-clubtext shrink-0">ADMIN</span>
                                     }
-                                    else if (player.Role == UserRole.Treasurer)
+                                    else if (player.Role == UserRole.Coach)
                                     {
-                                        <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-okbg text-oktext shrink-0">TESORERO</span>
+                                        <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 shrink-0">📋 DT</span>
                                     }
                                     else if (player.Role == UserRole.FieldManager)
                                     {
-                                        <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-infobg text-infotext shrink-0">CANCHAS</span>
+                                        <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-infobg text-infotext border border-info/30 shrink-0">DELEGADO</span>
+                                    }
+                                    else if (player.Role == UserRole.Treasurer)
+                                    {
+                                        <span class="text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-okbg text-oktext shrink-0">TESORERO</span>
                                     }
                                 </div>
 
