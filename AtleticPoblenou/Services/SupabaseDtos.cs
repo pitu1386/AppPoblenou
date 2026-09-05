@@ -98,6 +98,13 @@ public class SupabaseEventDto
     public string? notes { get; set; }
 }
 
+public class SupabaseMatchLineupDto
+{
+    public string match_id { get; set; } = "";
+    public string formation { get; set; } = "4-3-3";
+    public List<string?>? starting_player_ids { get; set; }
+}
+
 public class SupabaseAnnouncementDto
 {
     public string id { get; set; } = "";
@@ -353,6 +360,20 @@ public static class SupabaseMappers
         EventType = (EventType)d.event_type,
         Minute = d.minute,
         Notes = d.notes ?? ""
+    };
+
+    public static SupabaseMatchLineupDto ToDto(MatchLineup l) => new()
+    {
+        match_id = l.MatchId,
+        formation = l.Formation,
+        starting_player_ids = l.StartingPlayerIds
+    };
+
+    public static MatchLineup FromDto(SupabaseMatchLineupDto d) => new()
+    {
+        MatchId = d.match_id,
+        Formation = string.IsNullOrWhiteSpace(d.formation) ? "4-3-3" : d.formation,
+        StartingPlayerIds = d.starting_player_ids ?? new()
     };
 
     public static SupabaseAnnouncementDto ToDto(TeamAnnouncement a) => new()

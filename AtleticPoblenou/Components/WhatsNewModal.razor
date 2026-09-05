@@ -1,0 +1,72 @@
+@inject IJSRuntime JS
+
+@if (_visible)
+{
+    <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
+        <div class="bg-surface border border-line2 w-full max-w-sm rounded-xl p-5 shadow-xl space-y-4">
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-xl bg-clubbg border border-club/30 flex items-center justify-center text-xl shrink-0">🆕</div>
+                <div>
+                    <h3 class="font-extrabold text-ink text-base m-0">Novedades de la app</h3>
+                    <p class="text-xs text-muted m-0">Esto cambió desde la última vez que entraste</p>
+                </div>
+            </div>
+
+            <div class="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                @foreach (var entry in _entries)
+                {
+                    <div>
+                        <div class="text-[11px] font-cond font-extrabold text-clubtext tracking-wider mb-1">v@(entry.Version)</div>
+                        <ul class="space-y-1.5">
+                            @foreach (var change in entry.Changes)
+                            {
+                                <li class="text-xs text-ink2 leading-relaxed">@change</li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+
+            <button type="button" @onclick="Dismiss"
+                    class="w-full py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
+                Entendido
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private const string StorageKey = "apn_last_seen_version";
+    /// <summary>Línea base para el primer arranque de esta función: nadie tenía nada guardado todavía,
+    /// así que se asume que el navegador ya vio hasta esta versión y se muestra solo lo posterior.</summary>
+    private const string BaselineVersion = "2.4";
+
+    private bool _visible;
+    private List<(string Version, string[] Changes)> _entries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("blazorLocalStorage.get", StorageKey);
+            if (Version.TryParse(string.IsNullOrWhiteSpace(stored) ? BaselineVersion : stored, out var lastSeen))
+            {
+                _entries = AppInfo.ReleaseNotes
+                    .Where(e => Version.TryParse(e.Version, out var v) && v > lastSeen)
+                    .ToList();
+                _visible = _entries.Count > 0;
+            }
+
+            await JS.InvokeVoidAsync("blazorLocalStorage.set", StorageKey, AppInfo.Version);
+        }
+        catch
+        {
+            // Sin localStorage disponible, simplemente no se muestra el aviso.
+        }
+    }
+
+    private void Dismiss()
+    {
+        _visible = false;
+    }
+}

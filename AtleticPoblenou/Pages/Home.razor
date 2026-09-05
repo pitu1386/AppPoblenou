@@ -18,6 +18,8 @@ else if (!TeamService.IsAuthenticated)
 }
 else
 {
+    <WhatsNewModal />
+
     <AppHeader OnOpenInstall="() => _showInstallModal = true"
                OnOpenDbModal="() => _showDbModal = true"
                OnOpenMySheet="OpenPlayerSheet" />

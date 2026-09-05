@@ -82,7 +82,7 @@
                     </div>
 
                     <div class="py-1.5 px-3 bg-well border-t border-line text-center">
-                        <span class="text-[10px] text-muted font-cond font-bold tracking-wider">v@AppInfo.Version · ATLETIC POBLENOU</span>
+                        <span class="text-[10px] text-muted font-cond font-bold tracking-wider">v@(AppInfo.Version) · ATLETIC POBLENOU</span>
                         <span class="block text-[10px] font-medium @(TeamService.IsCloudConnected ? "text-oktext" : "text-clubtext")">
                             @(TeamService.IsCloudConnected ? (TeamService.IsRealtimeConnected ? "● Nube conectada · tiempo real" : "● Nube conectada") : "● Sin conexión con la nube")
                         </span>

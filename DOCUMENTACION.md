@@ -10,7 +10,8 @@ Este documento contiene la arquitectura, modelos de datos, reglas de negocio, se
 - **Propósito:** PWA para la gestión del equipo de fútbol veterano: convocatorias y asistencia, cuotas y caja común, roles de plantilla, tablón con encuestas, resultados, clasificación y estadísticas.
 - **Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
 - **Repositorio:** `https://github.com/pitu1386/AppPoblenou.git` (código en `main`, hosting en `gh-pages`)
-- **Versión activa:** `v2.4` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
+- **Versión activa:** `v2.5` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
+- **Regla:** cualquier cambio que se despliegue a producción sube el número de versión (al menos el minor, `2.X.0`) en `AtleticPoblenou.csproj` y en `AtleticPoblenou/package.json`, y añade una entrada nueva al principio de `AppInfo.ReleaseNotes`. Sin esto, `WhatsNewModal` no tiene nada que avisar y el club no distingue una versión de otra.
 
 ---
 
@@ -50,7 +51,8 @@ Requisito en el Dashboard: **Authentication → Providers → Email → "Confirm
 6. `match_events`: goles, asistencias, tarjetas y MVP.
 7. `rival_teams`: rivales de la liga.
 8. `announcements`: comunicados, fijados y encuestas (`votes` JSONB `{playerId: opción}`).
-9. `club_settings`: fila única `'current'` con identidad del club, cuota, `team_secret_code` e historial de temporadas.
+9. `club_settings`: fila única `'current'` con identidad del club, cuota, `team_secret_code`, la segunda equipación (`away_kit_*`) e historial de temporadas.
+10. `match_lineups`: alineación de la pizarra táctica por partido (`match_id` es la clave primaria). `formation` y `starting_player_ids` (JSONB, 11 huecos en orden; `null` = hueco vacío). El banquillo no se guarda: se recalcula cada vez a partir de la asistencia confirmada menos quien ya está en la XI.
 
 ### 3.4. Permisos (RLS)
 Funciones de apoyo: `my_profile_id()`, `my_role()`, `is_member()`, `is_admin()` (rol 0), `is_staff()` (0, 2 Delegado, 4 DT), `is_treasury()` (0, 1 Tesorero).
@@ -63,6 +65,7 @@ Funciones de apoyo: `my_profile_id()`, `my_role()`, `is_member()`, `is_admin()` 
 | payments, team_expenses | miembros | tesorería |
 | announcements | miembros | staff (votos vía `vote_poll()`) |
 | club_settings | miembros | admin |
+| match_lineups | miembros | staff |
 
 Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`, impide su borrado) y `prevent_privilege_escalation` (un no-admin no puede cambiar rol, capitanía, estado, email ni `auth_uid`).
 
@@ -135,10 +138,14 @@ Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`
 4. **Seguridad (v2.3 y anteriores):** base abierta con `anon`, contraseñas en claro y contraseña maestra `1234`. Sustituido por Supabase Auth + RLS. La migración conserva las contraseñas antiguas hasheándolas; quien no tuviera contraseña recibe `1234` y debe cambiarla.
 5. **Caché del Service Worker:** botón *Actualizar app (Borrar caché)* en login y cabecera (`window.forceAppUpdate`).
 6. **Clasificación vacía:** `GetStandings` no añadía filas a la tabla. Ahora parte de nuestro equipo y todos los rivales.
+7. **Pizarra táctica sin guardar, ciega a las posiciones, con gente que no confirmó y sin forma de revisarla después:** `TacticalBoardModal` no persistía nada (se perdía al cerrar el modal), el reparto automático tomaba los primeros 11 jugadores sin mirar su posición real, si faltaba gente de una posición completaba con cualquiera de la plantilla aunque no hubiera confirmado que va, y el único botón para abrirla apuntaba siempre a `NextMatch` (imposible volver a ver la alineación de un partido ya jugado). Ahora la alineación se guarda en `match_lineups` en cada cambio y se recarga al reabrir; el pool de titulares y banquillo se arma solo con quienes tienen asistencia confirmada (`AttendanceStatus.Going`, sin cuerpo técnico); el reparto automático (al abrir el partido o al cambiar de dibujo) asigna cada hueco según la posición real del jugador dentro de ese pool (`AutoAssignByPosition`), dejando el hueco vacío si no hay nadie confirmado de esa posición; y cada partido del fixture (`MatchesTab`) tiene su propio botón "Ver Alineación" que abre la pizarra para ESE partido, no solo el próximo. Un partido `Finished`, o quien no es staff (`CanEdit="false"`), la ve de solo lectura; si el partido ya se jugó y nunca se guardó nada, se muestra un estado vacío explícito en vez de inventar una sugerencia sobre un partido que ya pasó.
 
 ---
 
 ## 7. Guía de Ejecución y Despliegue
+
+### 7.0. Aviso de novedades (`WhatsNewModal`)
+Cada navegador guarda en `localStorage` (`apn_last_seen_version`) la última versión que vio. Al entrar, si `AppInfo.Version` subió desde entonces, `WhatsNewModal.razor` muestra un modal con las entradas de `AppInfo.ReleaseNotes` posteriores a esa versión (puede mostrar varias de golpe si el jugador estuvo días sin abrir la app) y luego actualiza el valor guardado. Si nunca hubo un valor guardado (primer arranque de esta función en ese navegador), se asume `BaselineVersion = "2.4"` para no repetir novedades ya vividas y sí mostrar las de esta tanda de cambios.
 
 ### 7.1. Preparar la base de datos
 1. Supabase Dashboard → SQL Editor.

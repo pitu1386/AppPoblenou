@@ -149,6 +149,7 @@ public class SupabaseClientService
     public async Task<List<TeamExpense>> FetchExpensesAsync() => (await GetAsync<SupabaseExpenseDto>("team_expenses")).Select(SupabaseMappers.FromDto).ToList();
     public async Task<List<MatchEvent>> FetchMatchEventsAsync() => (await GetAsync<SupabaseEventDto>("match_events")).Select(SupabaseMappers.FromDto).ToList();
     public async Task<List<TeamAnnouncement>> FetchAnnouncementsAsync() => (await GetAsync<SupabaseAnnouncementDto>("announcements")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<MatchLineup>> FetchMatchLineupsAsync() => (await GetAsync<SupabaseMatchLineupDto>("match_lineups")).Select(SupabaseMappers.FromDto).ToList();
 
     public async Task<ClubSettings?> FetchClubSettingsAsync()
     {
@@ -170,6 +171,7 @@ public class SupabaseClientService
     public Task UpsertExpenseAsync(TeamExpense e) => UpsertRowAsync("team_expenses", SupabaseMappers.ToDto(e));
     public Task UpsertMatchEventsAsync(IEnumerable<MatchEvent> evs) => UpsertAsync("match_events", evs.Select(SupabaseMappers.ToDto));
     public Task UpsertAnnouncementAsync(TeamAnnouncement a) => UpsertRowAsync("announcements", SupabaseMappers.ToDto(a));
+    public Task UpsertMatchLineupAsync(MatchLineup l) => UpsertRowAsync("match_lineups", SupabaseMappers.ToDto(l));
     public Task UpsertClubSettingsAsync(ClubSettings s) => UpsertRowAsync("club_settings", SupabaseMappers.ToDto(s));
 
     public Task DeleteByIdAsync(string table, string id) => DeleteAsync(table, $"id=eq.{Uri.EscapeDataString(id)}");

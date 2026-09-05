@@ -165,7 +165,7 @@
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
                         <span>Convocatoria WhatsApp</span>
                     </button>
-                    <button type="button" @onclick="() => _showTacticalModal = true"
+                    <button type="button" @onclick="() => OpenTacticalBoard(NextMatch)"
                             class="h-10 rounded-xl bg-surface border border-line2 hover:border-club text-ink text-xs font-bold transition flex items-center justify-center gap-1.5 hover:bg-well">
                         <span class="text-base">🟢</span>
                         <span>Pizarra Táctica (11)</span>
@@ -505,6 +505,17 @@
                         <span>@(match.IsOurMatch ? (match.IsHome ? "Local" : "Visitante") : "Liga")</span>
                     </div>
 
+                    @if (match.IsOurMatch)
+                    {
+                        <div class="mt-2 pt-2 border-t border-line">
+                            <button type="button" @onclick="() => OpenTacticalBoard(match)"
+                                    class="text-xs font-bold text-ink2 hover:text-club flex items-center gap-1.5">
+                                <span>🟢</span>
+                                <span>@(match.Status == MatchStatus.Finished ? "Ver Alineación" : "Ver / Armar Alineación")</span>
+                            </button>
+                        </div>
+                    }
+
                     <!-- Match actions: Canchas / Admin -->
                     @if (CanManageMatches || IsAdmin)
                     {
@@ -722,7 +733,7 @@
     }
 
     <!-- Tactical Board Pitch Modal -->
-    <TacticalBoardModal @bind-IsOpen="_showTacticalModal" Match="NextMatch" />
+    <TacticalBoardModal @bind-IsOpen="_showTacticalModal" Match="_tacticalMatch" CanEdit="CanManageMatches" />
 
 </div>
 
@@ -739,6 +750,14 @@
     private string _fixtureFilter = "all"; // "all", "apn"
     private int _fixtureRoundFilter = 0; // 0 = all rounds
     private bool _showTacticalModal = false;
+    private Match? _tacticalMatch;
+
+    private void OpenTacticalBoard(Match? match)
+    {
+        if (match == null) return;
+        _tacticalMatch = match;
+        _showTacticalModal = true;
+    }
     private MatchWeatherInfo? _matchWeather;
     private string _lastLoadedMatchId = "";
     private string? _confirmDeleteMatchId = null;

@@ -285,6 +285,15 @@ public class MatchEvent
     public string Notes { get; set; } = string.Empty;
 }
 
+/// <summary>Alineación guardada de la pizarra táctica de un partido. Vive en Supabase, no solo en memoria.</summary>
+public class MatchLineup
+{
+    public string MatchId { get; set; } = string.Empty;
+    public string Formation { get; set; } = "4-3-3";
+    /// <summary>11 huecos en el mismo orden que la pizarra. Null en un hueco = sin asignar.</summary>
+    public List<string?> StartingPlayerIds { get; set; } = new();
+}
+
 public class TeamAnnouncement
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();

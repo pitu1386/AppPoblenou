@@ -1,5 +1,5 @@
 -- =========================================================================
--- ATLÈTIC POBLENOU · MIGRACIÓN A SUPABASE AUTH + ROW LEVEL SECURITY (v2.4)
+-- ATLÈTIC POBLENOU · MIGRACIÓN A SUPABASE AUTH + ROW LEVEL SECURITY
 -- Copia y pega TODO este archivo en: Supabase Dashboard -> SQL Editor -> Run
 --
 -- Es idempotente: se puede ejecutar varias veces sin romper nada.
@@ -39,6 +39,14 @@ alter table public.matches add constraint check_no_mock_matches check (id not in
 alter table public.club_settings add column if not exists away_kit_primary_color_hex text default '#141210';
 alter table public.club_settings add column if not exists away_kit_secondary_color_hex text default '#FFFFFF';
 alter table public.club_settings add column if not exists away_kit_description text default '';
+
+-- Alineación guardada de cada partido: la pizarra táctica no persistía nada antes de esto.
+create table if not exists public.match_lineups (
+    match_id text primary key references public.matches(id) on delete cascade,
+    formation text not null default '4-3-3',
+    starting_player_ids jsonb not null default '[]'::jsonb, -- 11 huecos en orden; null = hueco vacío
+    updated_at timestamptz default now()
+);
 
 alter table public.team_expenses alter column category type text using category::text;
 alter table public.team_expenses alter column category set default 'Otros';
@@ -228,7 +236,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups'] loop
         execute format('alter table public.%I enable row level security', t);
         execute format('alter table public.%I force row level security', t);
         execute format('drop policy if exists "Permiso Total Anon" on public.%I', t);
@@ -268,6 +276,12 @@ create policy "apn_select" on public.match_events for select to authenticated us
 create policy "apn_insert" on public.match_events for insert to authenticated with check (public.is_staff());
 create policy "apn_update" on public.match_events for update to authenticated using (public.is_staff()) with check (public.is_staff());
 create policy "apn_delete" on public.match_events for delete to authenticated using (public.is_staff());
+
+-- match_lineups: lectura miembros, escritura staff (mismo criterio que los partidos).
+create policy "apn_select" on public.match_lineups for select to authenticated using (public.is_member());
+create policy "apn_insert" on public.match_lineups for insert to authenticated with check (public.is_staff());
+create policy "apn_update" on public.match_lineups for update to authenticated using (public.is_staff()) with check (public.is_staff());
+create policy "apn_delete" on public.match_lineups for delete to authenticated using (public.is_staff());
 
 -- attendance: cada jugador su propia asistencia; staff cualquiera.
 create policy "apn_select" on public.attendance for select to authenticated using (public.is_member());
@@ -472,7 +486,7 @@ grant execute on function public.close_season(jsonb, text, numeric) to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups'] loop
         if not exists (
             select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
         ) then
@@ -491,3 +505,4 @@ alter table public.match_events replica identity full;
 alter table public.rival_teams replica identity full;
 alter table public.announcements replica identity full;
 alter table public.club_settings replica identity full;
+alter table public.match_lineups replica identity full;

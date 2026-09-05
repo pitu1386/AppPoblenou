@@ -6,6 +6,7 @@
 -- ==========================================================
 
 DROP TABLE IF EXISTS public.match_events CASCADE;
+DROP TABLE IF EXISTS public.match_lineups CASCADE;
 DROP TABLE IF EXISTS public.attendance CASCADE;
 DROP TABLE IF EXISTS public.payments CASCADE;
 DROP TABLE IF EXISTS public.team_expenses CASCADE;
@@ -104,6 +105,14 @@ CREATE TABLE public.match_events (
     minute INTEGER,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6b. MATCH LINEUPS (Alineación guardada de la pizarra táctica de cada partido)
+CREATE TABLE public.match_lineups (
+    match_id TEXT PRIMARY KEY REFERENCES public.matches(id) ON DELETE CASCADE,
+    formation TEXT NOT NULL DEFAULT '4-3-3',
+    starting_player_ids JSONB NOT NULL DEFAULT '[]'::jsonb, -- 11 huecos en orden; null = hueco vacío
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 7. RIVAL TEAMS (Equipos Rivales)

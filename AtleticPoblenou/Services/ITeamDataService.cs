@@ -66,6 +66,10 @@ public interface ITeamDataService
     Task RestoreAnnouncementAsync(string announcementId);
     Task DeleteAnnouncementAsync(string announcementId);
 
+    // Tactical lineups
+    MatchLineup? GetLineupForMatch(string matchId);
+    Task SaveLineupAsync(MatchLineup lineup);
+
     // Matches & RSVP
     List<Match> GetMatches();
     Match? GetNextMatch();

@@ -17,7 +17,7 @@
                     </div>
                     <div class="min-w-0">
                         <h3 class="font-cond font-extrabold text-ink text-base sm:text-lg tracking-wide m-0 truncate">
-                            Pizarra Táctica · 11 Titular
+                            Pizarra Táctica · 11 Titular @(IsReadOnly ? "(solo lectura)" : "")
                         </h3>
                         <p class="text-xs text-muted m-0 truncate">
                             ATº POBLENOU vs @rivalName · @Match.MatchDate.ToString("ddd d MMM · HH:mm")
@@ -35,8 +35,8 @@
                     <span class="text-xs font-bold text-muted uppercase tracking-wider">Dibujo:</span>
                     @foreach (var form in _availableFormations)
                     {
-                        <button type="button" @onclick="() => SelectFormation(form)"
-                                class="px-2 py-1 rounded-lg text-xs font-bold border transition @(_selectedFormation == form ? "bg-club text-white border-club shadow-sm" : "bg-surface text-ink2 border-line hover:bg-well2")">
+                        <button type="button" @onclick="() => SelectFormation(form)" disabled="@IsReadOnly"
+                                class="px-2 py-1 rounded-lg text-xs font-bold border transition disabled:opacity-50 @(_selectedFormation == form ? "bg-club text-white border-club shadow-sm" : "bg-surface text-ink2 border-line hover:bg-well2")">
                             @form
                         </button>
                     }
@@ -52,6 +52,18 @@
             <!-- Content Area: Pitch & Bench -->
             <div class="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3">
 
+            @if (_emptyHistorical)
+            {
+                <div class="bg-well border border-line rounded-xl p-8 text-center space-y-2">
+                    <div class="text-3xl">🟢</div>
+                    <div class="font-extrabold text-ink text-sm">No se guardó una alineación para este partido</div>
+                    <p class="text-xs text-muted max-w-xs mx-auto">
+                        Este partido ya se jugó y nadie armó la pizarra táctica antes, así que no hay un once para mostrar.
+                    </p>
+                </div>
+            }
+            else
+            {
                 <!-- TACTICAL FOOTBALL PITCH (Cancha verde con líneas) -->
                 <div class="relative w-full aspect-[3/4] max-h-[460px] mx-auto rounded-2xl overflow-hidden shadow-inner border-2 border-emerald-700/60 select-none"
                      style="background: radial-gradient(circle at center, #15803D 0%, #166534 65%, #14532D 100%);">
@@ -85,9 +97,9 @@
                     {
                         var slotIndex = i;
                         var pos = GetSlotCoordinates(slotIndex, _selectedFormation);
-                        var player = slotIndex < _startingEleven.Count ? _startingEleven[slotIndex] : null;
+                        var player = _startingEleven[slotIndex];
 
-                        <div class="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 hover:scale-110 z-10 text-center"
+                        <div class="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 z-10 text-center @(IsReadOnly ? "cursor-default" : "cursor-pointer hover:scale-110")"
                              style="top: @pos.Y%; left: @pos.X%;"
                              @onclick="() => OpenPlayerSwapSelector(slotIndex)">
                             
@@ -141,7 +153,10 @@
                             <span>🪑</span>
                             <span>Banquillo de Suplentes (@_substitutes.Count)</span>
                         </div>
-                        <span class="text-[11px] text-muted">Toca para poner de titular</span>
+                        @if (!IsReadOnly)
+                        {
+                            <span class="text-[11px] text-muted">Toca para poner de titular</span>
+                        }
                     </div>
 
                     @if (_substitutes.Any())
@@ -149,8 +164,8 @@
                         <div class="flex flex-wrap gap-1.5">
                             @foreach (var sub in _substitutes)
                             {
-                                <button type="button" @onclick="() => QuickPromoteToPitch(sub)"
-                                        class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-surface border border-line2 hover:border-club transition text-xs font-semibold text-ink group">
+                                <button type="button" @onclick="() => QuickPromoteToPitch(sub)" disabled="@IsReadOnly"
+                                        class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-surface border border-line2 hover:border-club transition text-xs font-semibold text-ink group disabled:opacity-70 disabled:hover:border-line2">
                                     <span class="w-5 h-5 rounded bg-well2 flex items-center justify-center font-cond font-bold text-[11px] text-ink group-hover:bg-club group-hover:text-white transition">
                                         @(sub.JerseyNumber?.ToString() ?? "-")
                                     </span>
@@ -170,6 +185,7 @@
                         </div>
                     }
                 </div>
+            }
 
             </div>
 
@@ -226,20 +242,34 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
     [Parameter] public Match? Match { get; set; }
+    /// <summary>Si quien mira puede armar/editar la alineación (normalmente staff). Además de esto, un
+    /// partido ya finalizado siempre se ve de solo lectura: es historia, no se retoca.</summary>
+    [Parameter] public bool CanEdit { get; set; } = true;
+
+    private bool IsReadOnly => Match == null || Match.Status == MatchStatus.Finished || !CanEdit;
 
     private string _selectedFormation = "4-3-3";
     private readonly string[] _availableFormations = new[] { "4-3-3", "4-4-2", "3-5-2", "4-2-3-1" };
 
-    private List<UserProfile> _startingEleven = new();
+    /// <summary>11 huecos en orden fijo; null = hueco sin asignar. Un jugador de cuerpo técnico nunca ocupa un hueco.</summary>
+    private List<UserProfile?> _startingEleven = new(new UserProfile?[11]);
     private List<UserProfile> _substitutes = new();
     private List<UserProfile> _availablePool = new();
     private int? _swapSlotIndex = null;
+    private string? _loadedForMatchId = null;
+    /// <summary>Partido ya finalizado sin ninguna alineación guardada: no hay nada que mostrar ni que auto-armar.</summary>
+    private bool _emptyHistorical = false;
 
     protected override void OnParametersSet()
     {
-        if (IsOpen && Match != null)
+        if (IsOpen && Match != null && Match.Id != _loadedForMatchId)
         {
+            _loadedForMatchId = Match.Id;
             InitializeLineup();
+        }
+        else if (!IsOpen)
+        {
+            _loadedForMatchId = null;
         }
     }
 
@@ -247,55 +277,132 @@
     {
         if (Match == null) return;
 
-        var allProfiles = TeamService.GetProfiles();
+        _emptyHistorical = false;
+
+        // El cuerpo técnico no juega, y quien no confirmó asistencia (o dijo que no va / está en duda)
+        // tampoco entra en la pizarra: ni como titular automático ni como candidato del banquillo.
+        var allProfiles = TeamService.GetProfiles().Where(p => p.Position != Position.CuerpoTecnico).ToList();
         var attendanceList = TeamService.GetAttendanceForMatch(Match.Id);
-        
-        // Prioritize players who confirmed "Going"
         var confirmedIds = attendanceList.Where(a => a.Status == AttendanceStatus.Going).Select(a => a.PlayerId).ToHashSet();
-        
-        var confirmedPlayers = allProfiles.Where(p => confirmedIds.Contains(p.Id)).ToList();
-        var otherPlayers = allProfiles.Where(p => !confirmedIds.Contains(p.Id)).ToList();
+        var pool = allProfiles.Where(p => confirmedIds.Contains(p.Id)).ToList();
+        _availablePool = pool;
 
-        // Sort pool: Keepers first, then defenders, midfielders, forwards
-        _availablePool = confirmedPlayers.Concat(otherPlayers).ToList();
+        var saved = TeamService.GetLineupForMatch(Match.Id);
+        if (saved != null)
+        {
+            _selectedFormation = saved.Formation;
+            _startingEleven = saved.StartingPlayerIds
+                .Select(id => string.IsNullOrEmpty(id) ? null : TeamService.GetProfileById(id))
+                .ToList();
+            while (_startingEleven.Count < 11) _startingEleven.Add(null);
+            if (_startingEleven.Count > 11) _startingEleven = _startingEleven.Take(11).ToList();
+        }
+        else if (Match.Status == MatchStatus.Finished)
+        {
+            // Partido ya jugado y nadie armó la pizarra en su momento: no hay nada que reconstruir,
+            // armar "una sugerencia" de un partido que ya pasó no tendría sentido.
+            _startingEleven = new List<UserProfile?>(new UserProfile?[11]);
+            _emptyHistorical = true;
+        }
+        else
+        {
+            _startingEleven = AutoAssignByPosition(pool, _selectedFormation);
+        }
 
-        // Take first 11 for starting eleven
-        _startingEleven = _availablePool.Take(11).ToList();
-        _substitutes = _availablePool.Skip(11).ToList();
+        RecomputeBench(pool);
     }
 
-    private void SelectFormation(string formation)
+    private void RecomputeBench(List<UserProfile> pool)
     {
+        var startingIds = _startingEleven.Where(p => p != null).Select(p => p!.Id).ToHashSet();
+        _substitutes = pool.Where(p => !startingIds.Contains(p.Id)).ToList();
+    }
+
+    /// <summary>Reparte jugadores por su posición real: arquero al arco, defensas atrás, etc. Si falta gente de una
+    /// posición, el hueco se completa con quien quede disponible para no dejar la pizarra vacía.</summary>
+    private static List<UserProfile?> AutoAssignByPosition(List<UserProfile> pool, string formation)
+    {
+        var starters = new UserProfile?[11];
+        var used = new HashSet<string>();
+
+        for (int slot = 0; slot < 11; slot++)
+        {
+            var needed = GetSlotPosition(slot, formation);
+            var candidate = pool.FirstOrDefault(p => !used.Contains(p.Id) && p.Position == needed);
+            if (candidate != null)
+            {
+                starters[slot] = candidate;
+                used.Add(candidate.Id);
+            }
+        }
+
+        foreach (var extra in pool.Where(p => !used.Contains(p.Id)))
+        {
+            var emptySlot = Array.IndexOf(starters, null);
+            if (emptySlot < 0) break;
+            starters[emptySlot] = extra;
+            used.Add(extra.Id);
+        }
+
+        return starters.ToList();
+    }
+
+    /// <summary>Posición que le corresponde a cada hueco de la pizarra según el dibujo elegido. Debe reflejar
+    /// exactamente los mismos grupos que <see cref="GetSlotCoordinates"/>.</summary>
+    private static Position GetSlotPosition(int index, string formation)
+    {
+        if (index == 0) return Position.Portero;
+
+        return formation switch
+        {
+            "4-4-2" => index is 1 or 2 or 3 or 4 ? Position.Defensa
+                     : index is 9 or 10 ? Position.Delantero
+                     : Position.Centrocampista,
+            "3-5-2" => index is 1 or 2 or 3 ? Position.Defensa
+                     : index is 9 or 10 ? Position.Delantero
+                     : Position.Centrocampista,
+            "4-2-3-1" => index is 1 or 2 or 3 or 4 ? Position.Defensa
+                       : index == 10 ? Position.Delantero
+                       : Position.Centrocampista,
+            _ /* 4-3-3 */ => index is 1 or 2 or 3 or 4 ? Position.Defensa
+                            : index is 8 or 9 or 10 ? Position.Delantero
+                            : Position.Centrocampista
+        };
+    }
+
+    private async Task SelectFormation(string formation)
+    {
+        if (IsReadOnly || _selectedFormation == formation) return;
         _selectedFormation = formation;
+
+        // Al cambiar el dibujo, se reordena el mismo grupo (titulares + banquillo) para que cada
+        // uno caiga en un hueco de su posición real bajo la nueva formación.
+        var combinedPool = _startingEleven.Where(p => p != null).Cast<UserProfile>().Concat(_substitutes).ToList();
+        _startingEleven = AutoAssignByPosition(combinedPool, formation);
+        RecomputeBench(combinedPool);
+
+        await SaveLineupAsync();
     }
 
     private void OpenPlayerSwapSelector(int slotIndex)
     {
+        if (IsReadOnly) return;
         _swapSlotIndex = slotIndex;
     }
 
-    private void AssignPlayerToSlot(UserProfile player, int slotIndex)
+    private async Task AssignPlayerToSlot(UserProfile player, int slotIndex)
     {
-        // If player already in starting eleven, swap places
+        if (IsReadOnly) return;
         var existingIndex = _startingEleven.IndexOf(player);
         if (existingIndex >= 0)
         {
-            var temp = _startingEleven[slotIndex];
-            _startingEleven[slotIndex] = player;
-            _startingEleven[existingIndex] = temp;
+            // Ya está en la XI: se intercambian los dos huecos.
+            (_startingEleven[slotIndex], _startingEleven[existingIndex]) = (_startingEleven[existingIndex], _startingEleven[slotIndex]);
         }
         else
         {
-            var oldPlayer = slotIndex < _startingEleven.Count ? _startingEleven[slotIndex] : null;
-            if (slotIndex < _startingEleven.Count)
-            {
-                _startingEleven[slotIndex] = player;
-            }
-            else
-            {
-                _startingEleven.Add(player);
-            }
-
+            var oldPlayer = _startingEleven[slotIndex];
+            _startingEleven[slotIndex] = player;
             _substitutes.Remove(player);
             if (oldPlayer != null && !_substitutes.Contains(oldPlayer))
             {
@@ -304,24 +411,42 @@
         }
 
         _swapSlotIndex = null;
+        await SaveLineupAsync();
     }
 
-    private void QuickPromoteToPitch(UserProfile sub)
+    private async Task QuickPromoteToPitch(UserProfile sub)
     {
-        if (_startingEleven.Count < 11)
+        if (IsReadOnly) return;
+        var emptySlot = _startingEleven.FindIndex(p => p == null);
+        if (emptySlot >= 0)
         {
-            _startingEleven.Add(sub);
-            _substitutes.Remove(sub);
+            _startingEleven[emptySlot] = sub;
         }
         else
         {
-            // Swap with the last forward/sub
-            var lastIndex = 10;
+            const int lastIndex = 10;
             var outPlayer = _startingEleven[lastIndex];
             _startingEleven[lastIndex] = sub;
-            _substitutes.Remove(sub);
-            _substitutes.Insert(0, outPlayer);
+            if (outPlayer != null && !_substitutes.Contains(outPlayer))
+            {
+                _substitutes.Insert(0, outPlayer);
+            }
         }
+
+        _substitutes.Remove(sub);
+        await SaveLineupAsync();
+    }
+
+    private async Task SaveLineupAsync()
+    {
+        if (Match == null || IsReadOnly) return;
+        var lineup = new MatchLineup
+        {
+            MatchId = Match.Id,
+            Formation = _selectedFormation,
+            StartingPlayerIds = _startingEleven.Select(p => p?.Id).ToList()
+        };
+        await TeamService.SaveLineupAsync(lineup);
     }
 
     private (int X, int Y) GetSlotCoordinates(int index, string formation)
@@ -381,6 +506,7 @@
         for (int i = 0; i < _startingEleven.Count; i++)
         {
             var p = _startingEleven[i];
+            if (p == null) continue;
             var cap = p.IsCaptain ? " *(C)*" : "";
             sb.AppendLine($"• #{p.JerseyNumber ?? (i+1)} {p.FullName} ({p.Nickname}){cap}");
         }

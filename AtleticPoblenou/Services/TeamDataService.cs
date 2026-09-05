@@ -18,7 +18,7 @@ public class TeamDataService : ITeamDataService, IDisposable
 
     private static readonly string[] Tables =
     {
-        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements"
+        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements", "match_lineups"
     };
 
     private readonly IJSRuntime _js;
@@ -40,6 +40,7 @@ public class TeamDataService : ITeamDataService, IDisposable
     private List<Payment> _payments = new();
     private List<TeamExpense> _expenses = new();
     private List<MatchEvent> _matchEvents = new();
+    private List<MatchLineup> _matchLineups = new();
 
     public TeamDataService(IJSRuntime js, SupabaseAuthService auth, SupabaseClientService supabase)
     {
@@ -167,6 +168,9 @@ public class TeamDataService : ITeamDataService, IDisposable
                     break;
                 case "match_events":
                     _matchEvents = await _supabase.FetchMatchEventsAsync();
+                    break;
+                case "match_lineups":
+                    _matchLineups = await _supabase.FetchMatchLineupsAsync();
                     break;
                 case "announcements":
                     _announcements = await _supabase.FetchAnnouncementsAsync();
@@ -314,6 +318,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             _payments = await ReadCacheAsync<List<Payment>>("payments") ?? new();
             _expenses = await ReadCacheAsync<List<TeamExpense>>("team_expenses") ?? new();
             _matchEvents = await ReadCacheAsync<List<MatchEvent>>("match_events") ?? new();
+            _matchLineups = await ReadCacheAsync<List<MatchLineup>>("match_lineups") ?? new();
             _announcements = await ReadCacheAsync<List<TeamAnnouncement>>("announcements") ?? new();
         }
         catch
@@ -340,6 +345,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             "payments" => _payments,
             "team_expenses" => _expenses,
             "match_events" => _matchEvents,
+            "match_lineups" => _matchLineups,
             "announcements" => _announcements,
             _ => new()
         };
@@ -365,6 +371,7 @@ public class TeamDataService : ITeamDataService, IDisposable
         _payments = new();
         _expenses = new();
         _matchEvents = new();
+        _matchLineups = new();
         _announcements = new();
     }
 
@@ -828,6 +835,19 @@ public class TeamDataService : ITeamDataService, IDisposable
         _announcements.RemoveAll(a => a.Id == announcementId);
         NotifyStateChanged();
         await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("announcements", announcementId), "announcements");
+    }
+
+    // ==========================================
+    // ALINEACIONES (PIZARRA TÁCTICA)
+    // ==========================================
+    public MatchLineup? GetLineupForMatch(string matchId) => _matchLineups.FirstOrDefault(l => l.MatchId == matchId);
+
+    public async Task SaveLineupAsync(MatchLineup lineup)
+    {
+        var idx = _matchLineups.FindIndex(l => l.MatchId == lineup.MatchId);
+        if (idx >= 0) _matchLineups[idx] = lineup; else _matchLineups.Add(lineup);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertMatchLineupAsync(lineup), "match_lineups");
     }
 
     // ==========================================
