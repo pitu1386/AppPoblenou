@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <script>
+        // Tema visual: "light" = Editorial rojiblanco, "dark" = Noche de partido.
+        // Se aplica antes de pintar para evitar el parpadeo al cargar.
+        (function () {
+            var KEY = 'apn-theme';
+            var colors = { light: '#FFFFFF', dark: '#0B0B0C' };
+            function apply(theme) {
+                var dark = theme === 'dark';
+                document.documentElement.classList.toggle('dark', dark);
+                var meta = document.querySelector('meta[name="theme-color"]');
+                if (meta) meta.setAttribute('content', dark ? colors.dark : colors.light);
+            }
+            var stored = null;
+            try { stored = localStorage.getItem(KEY); } catch (e) { }
+            var current = stored === 'dark' ? 'dark' : 'light';
+            window.apnTheme = {
+                get: function () { return current; },
+                set: function (theme) {
+                    current = theme === 'dark' ? 'dark' : 'light';
+                    try { localStorage.setItem(KEY, current); } catch (e) { }
+                    apply(current);
+                }
+            };
+            document.addEventListener('DOMContentLoaded', function () { apply(current); });
+            apply(current);
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Atlètic Poblenou - App de Veteranos</title>
+    <base href="/AppPoblenou/" />
+    <link rel="icon" type="image/png" href="escudo.png" />
+    <link rel="apple-touch-icon" href="escudo.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="A.P.N. Poblenou" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <link href="manifest.webmanifest" rel="manifest" />
+
+    <!-- Tipografías: Barlow Condensed para fechas, horas y números; Barlow para el resto -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Tailwind compilado con la CLI (npm run build:css). Los tokens de color viven en css/app.css -->
+    <link rel="stylesheet" href="css/tailwind.css" />
+    <link rel="stylesheet" href="css/app.css" />
+
+    <!-- Confetti para celebraciones -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <!-- Cliente Supabase solo para Realtime (los datos van por REST desde C#) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+</head>
+
+<body class="bg-app text-ink antialiased selection:bg-club selection:text-white min-h-screen">
+    <div id="app">
+        <!-- Pantalla de carga -->
+        <div class="fixed inset-0 bg-app flex flex-col items-center justify-center p-6 text-center z-50">
+            <div class="w-24 h-28 mb-5 animate-pulse">
+                <img src="escudo.png" alt="Escudo Atlètic Poblenou" class="w-full h-full object-contain" />
+            </div>
+            <h1 class="font-cond font-extrabold text-[30px] leading-none tracking-wide text-ink mb-1.5">ATL&Egrave;TIC POBLENOU</h1>
+            <p class="text-[13px] font-medium text-muted mb-6">Veteranos · Liga de Barcelona · desde 1929</p>
+            <div class="w-40 h-1.5 apn-stripes rounded-full overflow-hidden animate-pulse"></div>
+            <p class="text-xs text-faint mt-4">Cargando la plantilla...</p>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" class="hidden">
+        Ha ocurrido un error inesperado.
+        <a href="." class="reload text-clubtext underline">Recargar</a>
+    </div>
+
+    <script src="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' }).then(reg => {
+                reg.update();
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    if (installingWorker) {
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('Nueva versión detectada, recargando...');
+                                window.location.reload();
+                            }
+                        };
+                    }
+                };
+            });
+
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                }
+            });
+        }
+
+        window.forceAppUpdate = async () => {
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+            }
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const reg of registrations) {
+                    await reg.unregister();
+                }
+            }
+            window.location.reload();
+        };
+
+        window.triggerConfetti = () => {
+            if (window.confetti) {
+                window.confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+            }
+        };
+
+        window.blazorLocalStorage = {
+            get: (key) => { try { return localStorage.getItem(key); } catch (e) { return null; } },
+            set: (key, value) => { try { localStorage.setItem(key, value); } catch (e) { } },
+            remove: (key) => { try { localStorage.removeItem(key); } catch (e) { } }
+        };
+
+        // Puente Realtime: cualquier cambio en las tablas del club avisa a C# (TeamDataService.OnCloudChange)
+        // para que vuelva a leer solo esa tabla. Al volver a la app (pestaña visible) se fuerza un refresco completo.
+        window.apnRealtime = (function () {
+            let client = null;
+            let channel = null;
+            let dotnet = null;
+            let timers = {};
+            let visibilityHooked = false;
+
+            function notify(table) {
+                if (!dotnet) return;
+                clearTimeout(timers[table]);
+                timers[table] = setTimeout(() => {
+                    dotnet.invokeMethodAsync('OnCloudChange', table).catch(() => { });
+                }, 400);
+            }
+
+            function status(connected) {
+                if (dotnet) dotnet.invokeMethodAsync('OnRealtimeStatus', connected).catch(() => { });
+            }
+
+            return {
+                start: function (url, anonKey, accessToken, dotnetRef) {
+                    dotnet = dotnetRef;
+                    if (!visibilityHooked) {
+                        visibilityHooked = true;
+                        document.addEventListener('visibilitychange', () => {
+                            if (document.visibilityState === 'visible' && dotnet) {
+                                dotnet.invokeMethodAsync('OnAppResumed').catch(() => { });
+                            }
+                        });
+                        window.addEventListener('online', () => {
+                            if (dotnet) dotnet.invokeMethodAsync('OnAppResumed').catch(() => { });
+                        });
+                    }
+
+                    if (!window.supabase || !window.supabase.createClient) {
+                        status(false);
+                        return false;
+                    }
+
+                    this.stop();
+                    client = window.supabase.createClient(url, anonKey, {
+                        auth: { persistSession: false, autoRefreshToken: false },
+                        realtime: { params: { eventsPerSecond: 5 } }
+                    });
+                    if (accessToken) client.realtime.setAuth(accessToken);
+
+                    channel = client.channel('apn-club')
+                        .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                            notify(payload.table);
+                        })
+                        .subscribe((state) => {
+                            status(state === 'SUBSCRIBED');
+                        });
+                    return true;
+                },
+                setAuth: function (accessToken) {
+                    if (client && accessToken) client.realtime.setAuth(accessToken);
+                },
+                stop: function () {
+                    if (channel && client) { try { client.removeChannel(channel); } catch (e) { } }
+                    channel = null;
+                    client = null;
+                    status(false);
+                }
+            };
+        })();
+    </script>
+</body>
+
+</html>
