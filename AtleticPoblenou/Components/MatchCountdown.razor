@@ -1,0 +1,60 @@
+@implements IDisposable
+
+@{
+    var (text, tone) = Compute();
+    var cls = tone switch
+    {
+        "live" => "bg-clubbg text-clubtext border-club/40",
+        "soon" => "bg-warnbg text-warntext border-warn/40",
+        _ => "bg-well text-ink2 border-line"
+    };
+}
+
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[13px] font-bold font-cond tracking-wide @cls">
+    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+    <span>@text</span>
+</div>
+
+@code {
+    /// <summary>Fecha y hora del partido tal como se muestra en la app (hora local del club).</summary>
+    [Parameter] public DateTime MatchDate { get; set; }
+
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        // Se refresca cada 30 s para que los minutos no se queden viejos.
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private (string Text, string Tone) Compute()
+    {
+        var target = DateTime.SpecifyKind(MatchDate, DateTimeKind.Unspecified);
+        var diff = target - DateTime.Now;
+
+        if (diff.TotalMinutes <= 0)
+        {
+            return diff.TotalHours > -2 ? ("En juego", "live") : ("Finalizado", "past");
+        }
+
+        if (diff.TotalDays >= 1)
+        {
+            var d = diff.Days;
+            var h = diff.Hours;
+            var dias = d == 1 ? "1 día" : $"{d} días";
+            return h > 0 ? ($"Faltan {dias} y {h} h", "far") : ($"Faltan {dias}", "far");
+        }
+
+        if (diff.TotalHours >= 1)
+        {
+            return ($"Faltan {diff.Hours} h {diff.Minutes:00} min", "soon");
+        }
+
+        return ($"¡Faltan {Math.Max(1, diff.Minutes)} min!", "live");
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

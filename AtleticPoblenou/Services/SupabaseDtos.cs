@@ -122,6 +122,9 @@ public class SupabaseClubSettingsDto
     public string? primary_color_hex { get; set; }
     public string? secondary_color_hex { get; set; }
     public string? kit_description { get; set; }
+    public string? away_kit_primary_color_hex { get; set; }
+    public string? away_kit_secondary_color_hex { get; set; }
+    public string? away_kit_description { get; set; }
     public string? home_venue_name { get; set; }
     public string? home_venue_maps_url { get; set; }
     public decimal season_fee_per_player { get; set; }
@@ -390,6 +393,9 @@ public static class SupabaseMappers
         primary_color_hex = s.PrimaryColorHex,
         secondary_color_hex = s.SecondaryColorHex,
         kit_description = s.KitDescription,
+        away_kit_primary_color_hex = s.AwayKitPrimaryColorHex,
+        away_kit_secondary_color_hex = s.AwayKitSecondaryColorHex,
+        away_kit_description = s.AwayKitDescription,
         home_venue_name = s.HomeVenueName,
         home_venue_maps_url = s.HomeVenueMapsUrl,
         season_fee_per_player = s.SeasonFeePerPlayer,
@@ -406,6 +412,9 @@ public static class SupabaseMappers
         PrimaryColorHex = d.primary_color_hex ?? "#E53935",
         SecondaryColorHex = d.secondary_color_hex ?? "#FFFFFF",
         KitDescription = d.kit_description ?? "Rojiblanca a rayas verticales",
+        AwayKitPrimaryColorHex = d.away_kit_primary_color_hex ?? "#141210",
+        AwayKitSecondaryColorHex = d.away_kit_secondary_color_hex ?? "#FFFFFF",
+        AwayKitDescription = d.away_kit_description ?? "",
         HomeVenueName = d.home_venue_name ?? "Camp Municipal Agapito Fernández",
         HomeVenueMapsUrl = d.home_venue_maps_url ?? "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona",
         SeasonFeePerPlayer = d.season_fee_per_player > 0 ? d.season_fee_per_player : 200,

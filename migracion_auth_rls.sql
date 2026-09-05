@@ -36,6 +36,10 @@ delete from public.matches where id in ('match-1', 'match-2');
 alter table public.matches drop constraint if exists check_no_mock_matches;
 alter table public.matches add constraint check_no_mock_matches check (id not in ('match-1', 'match-2'));
 
+alter table public.club_settings add column if not exists away_kit_primary_color_hex text default '#141210';
+alter table public.club_settings add column if not exists away_kit_secondary_color_hex text default '#FFFFFF';
+alter table public.club_settings add column if not exists away_kit_description text default '';
+
 alter table public.team_expenses alter column category type text using category::text;
 alter table public.team_expenses alter column category set default 'Otros';
 alter table public.team_expenses add column if not exists paid_by text;

@@ -9,6 +9,11 @@ public class ClubSettings
     public string PrimaryColorHex { get; set; } = "#E53935";
     public string SecondaryColorHex { get; set; } = "#FFFFFF";
     public string KitDescription { get; set; } = "Rojiblanca a rayas verticales";
+    /// <summary>Segunda equipación (alternativa), para cuando la titular coincide con la del rival. Vacía = no configurada.</summary>
+    public string AwayKitPrimaryColorHex { get; set; } = "#141210";
+    public string AwayKitSecondaryColorHex { get; set; } = "#FFFFFF";
+    public string AwayKitDescription { get; set; } = "";
+    public bool HasAwayKit => !string.IsNullOrWhiteSpace(AwayKitDescription);
     public string HomeVenueName { get; set; } = "Camp Municipal Agapito Fernández";
     public string HomeVenueMapsUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
     public decimal SeasonFeePerPlayer { get; set; } = 200;

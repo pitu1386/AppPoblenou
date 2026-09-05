@@ -1,4 +1,5 @@
 @inject ITeamDataService TeamService
+@using AtleticPoblenou.Services
 
 @if (IsOpen)
 {
@@ -48,6 +49,23 @@
                                 <div class="w-1/2 h-full" style="background-color: @_selectedRival.SecondaryColorHex"></div>
                             </div>
                         </div>
+
+                        @if (_rivalKitWarning != null && _rivalKitWarning.IsClash)
+                        {
+                            <div class="mt-1.5 p-2.5 rounded-lg border @(_rivalKitWarning.UsingAwayKit ? "bg-warnbg border-warn/40" : "bg-clubbg border-club/40") space-y-1">
+                                <div class="flex items-center gap-2 text-xs font-bold @(_rivalKitWarning.UsingAwayKit ? "text-warntext" : "text-clubtext")">
+                                    <span>⚠️</span>
+                                    <span>@(_rivalKitWarning.UsingAwayKit ? "Coincide con la titular: llevar la alternativa" : "Coincide con la titular y no hay alternativa configurada")</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-5 h-5 rounded-md border border-line2 flex overflow-hidden shrink-0">
+                                        <div class="w-1/2 h-full" style="background-color: @_rivalKitWarning.PrimaryColorHex"></div>
+                                        <div class="w-1/2 h-full" style="background-color: @_rivalKitWarning.SecondaryColorHex"></div>
+                                    </div>
+                                    <span class="text-xs text-ink2">@_rivalKitWarning.Description</span>
+                                </div>
+                            </div>
+                        }
                     }
                 </div>
 
@@ -179,6 +197,7 @@
     private string _opponent = "";
     private string? _selectedRivalId = null;
     private RivalTeam? _selectedRival = null;
+    private KitRecommendation? _rivalKitWarning = null;
     private int _round = 5;
     private DateTime _matchDate = DateTime.Today.AddDays(3);
     private TimeOnly _matchTime = new TimeOnly(18, 30);
@@ -209,6 +228,7 @@
                 _opponent = TargetMatch.Opponent;
                 _selectedRivalId = TargetMatch.RivalTeamId;
                 _selectedRival = !string.IsNullOrEmpty(_selectedRivalId) ? TeamService.GetRivalTeamById(_selectedRivalId) : null;
+                _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
                 _round = TargetMatch.Round;
                 _matchDate = TargetMatch.MatchDate.ToLocalTime().Date;
                 _matchTime = TimeOnly.FromDateTime(TargetMatch.MatchDate.ToLocalTime());
@@ -257,6 +277,14 @@
         else
         {
             _selectedRival = null;
+        }
+
+        _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
+
+        // Solo se autocompletan las notas al crear un partido nuevo; al editar uno existente no se pisan.
+        if (TargetMatch == null)
+        {
+            _notes = $"Camiseta {_rivalKitWarning.Description}. Estar 40 minutos antes.";
         }
     }
 

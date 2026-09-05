@@ -55,6 +55,9 @@
                     </div>
                 </div>
 
+                <!-- CUENTA ATRÁS HASTA EL PITIDO INICIAL -->
+                <MatchCountdown MatchDate="NextMatch.MatchDate" />
+
                 <div>
                     <div class="flex items-center gap-2.5 py-2 border-b border-line">
                         <img src="escudo.png" alt="" class="w-6 h-7 object-contain shrink-0" />
@@ -80,6 +83,24 @@
                         Cómo llegar
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"></path></svg>
                     </a>
+                </div>
+
+                <!-- CAMISETA A USAR (avisa si coincide con la del rival) -->
+                @{ var kit = KitAdvisor.Recommend(TeamService.GetClubSettings(), rival); }
+                <div class="flex items-center gap-2.5 p-2.5 rounded-xl @(kit.IsClash ? (kit.UsingAwayKit ? "bg-warnbg border border-warn/30" : "bg-clubbg border border-club/30") : "bg-well/60 border border-line") text-xs">
+                    <div class="w-6 h-7 rounded-[5px] border border-line2 flex overflow-hidden shrink-0">
+                        <div class="w-1/2 h-full" style="background-color: @kit.PrimaryColorHex"></div>
+                        <div class="w-1/2 h-full" style="background-color: @kit.SecondaryColorHex"></div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold @(kit.IsClash ? (kit.UsingAwayKit ? "text-warntext" : "text-clubtext") : "text-ink")">
+                            @(kit.UsingAwayKit ? "Camiseta alternativa" : "Camiseta titular"): @kit.Description
+                        </div>
+                        @if (kit.IsClash)
+                        {
+                            <div class="text-[11px] text-muted">Coincide con la equipación de @NextMatch.Opponent</div>
+                        }
+                    </div>
                 </div>
 
                 <!-- PRONÓSTICO DEL CLIMA DINÁMICO (FECHA, HORA Y CANCHA DEL PARTIDO) -->
@@ -793,7 +814,8 @@
         {
             sb.AppendLine($"🗺️ *Ubicación:* {NextMatch.LocationUrl}");
         }
-        sb.AppendLine($"👕 *Equipación:* Camiseta titular rojiblanca (estar 35 min antes)");
+        var kitForShare = KitAdvisor.Recommend(TeamService.GetClubSettings(), rival);
+        sb.AppendLine($"👕 *Equipación:* Camiseta {kitForShare.Description} (estar 35 min antes)");
         
         if (!string.IsNullOrEmpty(NextMatch.Notes))
         {
