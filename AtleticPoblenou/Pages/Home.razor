@@ -31,7 +31,8 @@ else
                 <MatchesTab OnCreateMatch="() => OpenMatchModal(null)"
                             OnEditMatch="OpenMatchModal"
                             OnRecordResult="OpenRecordResult"
-                            OnOpenCreateTeam="() => _showCreateTeamModal = true"
+                            OnOpenCreateTeam="OpenCreateTeam"
+                            OnOpenEditTeam="OpenEditTeam"
                             OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
                             OnOpenRoundResults="() => _showRoundResultsModal = true" />
                 break;
@@ -52,7 +53,7 @@ else
             case "admin":
                 <AdminTab OnCreateMatch="() => OpenMatchModal(null)"
                           OnRecordPayment="() => OpenDirectPayment(null)"
-                          OnOpenCreateTeam="() => _showCreateTeamModal = true"
+                          OnOpenCreateTeam="OpenCreateTeam"
                           OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
                           OnAddExpense="() => _showAddExpenseModal = true"
                           OnOpenDbModal="() => _showDbModal = true"
@@ -69,7 +70,7 @@ else
     <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
     <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="_selectedPlayerForPayment" />
     <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
-    <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" />
+    <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" TargetTeam="_selectedRivalForEdit" />
     <CreateAnnouncementModal @bind-IsOpen="_showCreateAnnouncementModal" />
     <AddExpenseModal @bind-IsOpen="_showAddExpenseModal" />
     <DbConfigModal @bind-IsOpen="_showDbModal" />
@@ -112,6 +113,7 @@ else
     private Match? _selectedMatchForEdit;
     private string? _selectedPlayerForPayment;
     private UserProfile? _selectedProfileForSheet;
+    private RivalTeam? _selectedRivalForEdit;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,6 +165,18 @@ else
     {
         _selectedProfileForSheet = profile;
         _showPlayerSheetModal = true;
+    }
+
+    private void OpenCreateTeam()
+    {
+        _selectedRivalForEdit = null;
+        _showCreateTeamModal = true;
+    }
+
+    private void OpenEditTeam(RivalTeam team)
+    {
+        _selectedRivalForEdit = team;
+        _showCreateTeamModal = true;
     }
 
     public void Dispose()

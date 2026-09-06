@@ -10,8 +10,8 @@
                 <div class="flex items-center gap-2">
 
                     <div>
-                        <h3 class="font-extrabold text-ink text-base">@(TargetMatch != null ? "Editar Horario y Cancha" : "Programar Partido de Liga")</h3>
-                        <p class="text-xs text-muted">Atletic Poblenou • Canchas y Horarios</p>
+                        <h3 class="font-extrabold text-ink text-base">@(TargetMatch != null ? "Editar Partido" : "Programar Partido")</h3>
+                        <p class="text-xs text-muted">@(TargetMatch?.Status == MatchStatus.Finished ? "Partido jugado • competición, marcador y datos" : "Atletic Poblenou • Canchas y Horarios")</p>
                     </div>
                 </div>
                 <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
@@ -20,6 +20,37 @@
             </div>
 
             <div class="space-y-3 text-xs">
+                <!-- Competición: Liga / Copa / Amistoso -->
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Competición</label>
+                    <div class="grid grid-cols-3 gap-1 bg-well p-1 rounded-xl border border-line">
+                        @foreach (var k in new[] { MatchKind.Liga, MatchKind.Copa, MatchKind.Amistoso })
+                        {
+                            <button type="button" @onclick="() => SetKind(k)"
+                                    class="py-1.5 rounded-lg font-bold transition @(_kind == k ? "bg-club text-white shadow-xs" : "text-muted hover:text-ink")">
+                                @KindLabel(k)
+                            </button>
+                        }
+                    </div>
+                    @if (_kind == MatchKind.Amistoso)
+                    {
+                        <p class="text-[11px] text-muted mt-1">El amistoso se ve en el fixture pero no cuenta para ninguna tabla.</p>
+                    }
+                    else if (_kind == MatchKind.Copa)
+                    {
+                        <p class="text-[11px] text-muted mt-1">La copa tiene su propio fixture y su propia tabla, aparte de la liga.</p>
+                    }
+                </div>
+
+                @if (_kind != MatchKind.Amistoso)
+                {
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Nombre de la competición</label>
+                        <input @bind="_competitionName" type="text" placeholder="@(_kind == MatchKind.Copa ? "Ej: Copa Primavera 26/27" : "Ej: Sábados División Honor")"
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                }
+
                 <!-- Select Rival Team from Registered or Custom -->
                 <div>
                     <div class="flex items-center justify-between mb-1">
@@ -69,12 +100,15 @@
                     }
                 </div>
 
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="col-span-1">
-                        <label class="font-bold text-ink2 block mb-1">Jornada (#)</label>
-                        <input @bind="_round" type="number" min="1" max="38"
-                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none text-center" />
-                    </div>
+                <div class="grid @(_kind == MatchKind.Amistoso ? "grid-cols-2" : "grid-cols-3") gap-2">
+                    @if (_kind != MatchKind.Amistoso)
+                    {
+                        <div class="col-span-1">
+                            <label class="font-bold text-ink2 block mb-1">@(_kind == MatchKind.Copa ? "Jornada copa" : "Jornada") (#)</label>
+                            <input @bind="_round" type="number" min="1" max="38"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none text-center" />
+                        </div>
+                    }
                     <div class="col-span-1">
                         <label class="font-bold text-ink2 block mb-1">Fecha</label>
                         <input @bind="_matchDate" type="date"
@@ -152,7 +186,7 @@
                     Cancelar
                 </button>
                 <button @onclick="SaveMatch" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    @(TargetMatch != null ? "Guardar Cambios de Cancha" : "Crear y Convocar")
+                    @(TargetMatch != null ? "Guardar Cambios" : "Crear y Convocar")
                 </button>
             </div>
 
@@ -203,7 +237,8 @@
     private TimeOnly _matchTime = new TimeOnly(18, 30);
     private string _locationName = "Camp Agapito Fernández (Poblenou)";
     private string _locationUrl = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
-    private string _competition = "Liga Veteranos Barcelona";
+    private MatchKind _kind = MatchKind.Liga;
+    private string _competitionName = "";
     private bool _isHome = true;
     private string _notes = "Camiseta titular rojiblanca. Estar 40 minutos antes.";
     private bool _showDeleteConfirm = false;
@@ -229,18 +264,21 @@
                 _selectedRivalId = TargetMatch.RivalTeamId;
                 _selectedRival = !string.IsNullOrEmpty(_selectedRivalId) ? TeamService.GetRivalTeamById(_selectedRivalId) : null;
                 _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
-                _round = TargetMatch.Round;
+                _kind = TargetMatch.Kind;
+                _round = TargetMatch.Round > 0 ? TargetMatch.Round : 1;
                 _matchDate = TargetMatch.MatchDate.ToLocalTime().Date;
                 _matchTime = TimeOnly.FromDateTime(TargetMatch.MatchDate.ToLocalTime());
                 _locationName = TargetMatch.LocationName;
                 _locationUrl = TargetMatch.LocationUrl ?? "";
-                _competition = TargetMatch.Competition;
+                _competitionName = _kind == MatchKind.Amistoso ? "" : StripRound(TargetMatch.Competition);
                 _isHome = TargetMatch.IsHome;
                 _notes = TargetMatch.Notes;
             }
             else
             {
                 var club = TeamService.GetClubSettings();
+                _kind = MatchKind.Liga;
+                _competitionName = !string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga";
                 _locationName = club.HomeVenueName;
                 _locationUrl = club.HomeVenueMapsUrl;
                 _notes = $"Camiseta {club.KitDescription}. Estar 40 minutos antes.";
@@ -252,6 +290,34 @@
     {
         _locationName = name;
         _locationUrl = url;
+    }
+
+    private static string KindLabel(MatchKind k) => k switch
+    {
+        MatchKind.Copa => "Copa",
+        MatchKind.Amistoso => "Amistoso",
+        _ => "Liga"
+    };
+
+    private void SetKind(MatchKind k)
+    {
+        if (_kind == k) return;
+        var club = TeamService.GetClubSettings();
+        // Al cambiar de competición proponemos un nombre por defecto si el campo está vacío o traía el de otra.
+        var defaults = new[] { !string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga", "Copa" };
+        if (string.IsNullOrWhiteSpace(_competitionName) || defaults.Contains(_competitionName))
+        {
+            _competitionName = k == MatchKind.Copa ? "Copa" : (!string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga");
+        }
+        _kind = k;
+    }
+
+    private static string StripRound(string competition)
+    {
+        if (string.IsNullOrEmpty(competition)) return "";
+        var i = competition.IndexOf(" · J", StringComparison.Ordinal);
+        if (i < 0) i = competition.IndexOf(" - J", StringComparison.Ordinal);
+        return i > 0 ? competition[..i].Trim() : competition.Trim();
     }
 
     private void OnLocationChanged()
@@ -305,15 +371,25 @@
             _locationUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(_locationName +" Barcelona")}";
         }
 
+        int round = _kind == MatchKind.Amistoso ? 0 : Math.Max(1, _round);
+        string competition = _kind switch
+        {
+            MatchKind.Amistoso => "Amistoso",
+            MatchKind.Copa => string.IsNullOrWhiteSpace(_competitionName) ? "Copa" : _competitionName.Trim(),
+            _ => string.IsNullOrWhiteSpace(_competitionName) ? "Liga" : _competitionName.Trim()
+        };
+
         if (TargetMatch != null)
         {
+            TargetMatch.IsHome = _isHome;   // primero: define a qué lado van nombre y marcador
             TargetMatch.Opponent = _opponent.Trim();
             TargetMatch.RivalTeamId = _selectedRivalId;
-            TargetMatch.Round = _round;
+            TargetMatch.Kind = _kind;
+            TargetMatch.Round = round;
+            TargetMatch.Competition = competition;
             TargetMatch.MatchDate = fullDate;
             TargetMatch.LocationName = _locationName;
             TargetMatch.LocationUrl = _locationUrl;
-            TargetMatch.IsHome = _isHome;
             TargetMatch.Notes = _notes;
 
             await TeamService.UpdateMatchDetailsAsync(TargetMatch);
@@ -324,11 +400,12 @@
             {
                 Opponent = _opponent.Trim(),
                 RivalTeamId = _selectedRivalId,
-                Round = _round,
+                Kind = _kind,
+                Round = round,
                 MatchDate = fullDate,
                 LocationName = _locationName,
                 LocationUrl = _locationUrl,
-                Competition = $"{_competition} - J{_round}",
+                Competition = competition,
                 IsHome = _isHome,
                 Notes = _notes,
                 Status = MatchStatus.Upcoming

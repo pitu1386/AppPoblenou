@@ -46,6 +46,7 @@ CREATE TABLE public.matches (
     opponent TEXT NOT NULL,
     rival_team_id TEXT,
     competition TEXT DEFAULT 'Sábados División Honor (Temp. 26/27)',
+    match_kind TEXT NOT NULL DEFAULT 'liga', -- 'liga' | 'copa' | 'amistoso' (cada una: su fixture y su tabla)
     location_name TEXT NOT NULL DEFAULT 'Camp Municipal Agapito Fernández',
     location_url TEXT DEFAULT 'https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona',
     is_home BOOLEAN DEFAULT TRUE,

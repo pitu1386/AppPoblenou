@@ -35,6 +35,7 @@ public class SupabaseMatchDto
     public string opponent { get; set; } = "";
     public string? rival_team_id { get; set; }
     public string? competition { get; set; }
+    public string? match_kind { get; set; }   // 'liga' | 'copa' | 'amistoso'
     public string location_name { get; set; } = "";
     public string? location_url { get; set; }
     public bool is_home { get; set; } = true;
@@ -199,6 +200,7 @@ public static class SupabaseMappers
             opponent = isOur ? m.Opponent : $"{m.HomeTeamName} vs {m.AwayTeamName}",
             rival_team_id = isOur ? m.RivalTeamId : m.HomeTeamId,
             competition = m.Competition,
+            match_kind = m.Kind.ToString().ToLowerInvariant(),
             location_name = m.LocationName,
             location_url = m.LocationUrl,
             is_home = isOur ? m.IsHome : false,
@@ -211,12 +213,19 @@ public static class SupabaseMappers
 
     public static Match FromDto(SupabaseMatchDto d)
     {
+        var kind = d.match_kind?.ToLowerInvariant() switch
+        {
+            "copa" => MatchKind.Copa,
+            "amistoso" => MatchKind.Amistoso,
+            _ => MatchKind.Liga
+        };
         var m = new Match
         {
             Id = d.id,
-            Round = d.round > 0 ? d.round : 1,
+            Round = d.round > 0 ? d.round : (kind == MatchKind.Amistoso ? 0 : 1),
             MatchDate = d.match_date,
             Competition = d.competition ?? "Sábados División Honor (Temp. 26/27)",
+            Kind = kind,
             LocationName = d.location_name,
             LocationUrl = d.location_url ?? "",
             Status = (MatchStatus)d.status

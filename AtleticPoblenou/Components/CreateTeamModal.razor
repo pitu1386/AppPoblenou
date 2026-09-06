@@ -9,7 +9,7 @@
                 <div class="flex items-center gap-2">
 
                     <div>
-                        <h3 class="font-extrabold text-ink text-base">Cargar Equipo Rival</h3>
+                        <h3 class="font-extrabold text-ink text-base">@(TargetTeam != null ? "Editar Equipo Rival" : "Cargar Equipo Rival")</h3>
                         <p class="text-xs text-muted">Nombre y colores de camiseta</p>
                     </div>
                 </div>
@@ -80,7 +80,7 @@
                     Cancelar
                 </button>
                 <button @onclick="SaveTeam" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    Guardar Equipo
+                    @(TargetTeam != null ? "Guardar Cambios" : "Guardar Equipo")
                 </button>
             </div>
 
@@ -91,11 +91,37 @@
 @code {
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public RivalTeam? TargetTeam { get; set; }
 
     private string _name = "";
     private string _primaryColor = "#1E3A8A";
     private string _secondaryColor = "#FFFFFF";
     private string _kitDescription = "Azul marino y blanco";
+    private string _loadedTeamId = "";
+
+    protected override void OnParametersSet()
+    {
+        if (!IsOpen) { _loadedTeamId = ""; return; }
+
+        var key = TargetTeam?.Id ?? "__new__";
+        if (_loadedTeamId == key) return;
+        _loadedTeamId = key;
+
+        if (TargetTeam != null)
+        {
+            _name = TargetTeam.Name;
+            _primaryColor = TargetTeam.PrimaryColorHex;
+            _secondaryColor = TargetTeam.SecondaryColorHex;
+            _kitDescription = TargetTeam.KitDescription;
+        }
+        else
+        {
+            _name = "";
+            _primaryColor = "#1E3A8A";
+            _secondaryColor = "#FFFFFF";
+            _kitDescription = "Azul marino y blanco";
+        }
+    }
 
     private void SetColors(string pri, string sec, string desc)
     {
@@ -114,15 +140,31 @@
     {
         if (string.IsNullOrWhiteSpace(_name)) return;
 
-        var team = new RivalTeam
+        if (TargetTeam != null)
         {
-            Name = _name.Trim(),
-            PrimaryColorHex = _primaryColor,
-            SecondaryColorHex = _secondaryColor,
-            KitDescription = _kitDescription.Trim()
-        };
+            var updated = new RivalTeam
+            {
+                Id = TargetTeam.Id,
+                Name = _name.Trim(),
+                PrimaryColorHex = _primaryColor,
+                SecondaryColorHex = _secondaryColor,
+                KitDescription = _kitDescription.Trim(),
+                Notes = TargetTeam.Notes
+            };
+            await TeamService.UpdateRivalTeamAsync(updated);
+        }
+        else
+        {
+            var team = new RivalTeam
+            {
+                Name = _name.Trim(),
+                PrimaryColorHex = _primaryColor,
+                SecondaryColorHex = _secondaryColor,
+                KitDescription = _kitDescription.Trim()
+            };
+            await TeamService.AddRivalTeamAsync(team);
+        }
 
-        await TeamService.AddRivalTeamAsync(team);
         _name = "";
         await Close();
     }

@@ -23,6 +23,12 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.6", new[]
+        {
+            "🏆 Los partidos ahora se marcan como Liga, Copa o Amistoso. El amistoso se ve en el fixture pero ya no cuenta para la tabla.",
+            "🥇 La copa tiene su propio fixture y su propia tabla de posiciones (pestaña Liga / Copa en Posiciones).",
+            "✏️ Se pueden editar los equipos rivales (nombre y colores de camiseta), no solo crearlos y borrarlos.",
+        }),
         ("2.5", new[]
         {
             "🟢 Pizarra táctica: ahora guarda la alineación en la nube (ya no se pierde al cerrarla) y arma el once automático solo con quienes confirmaron asistencia, respetando la posición real de cada uno.",

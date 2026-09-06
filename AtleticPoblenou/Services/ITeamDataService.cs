@@ -56,6 +56,8 @@ public interface ITeamDataService
     Task UpdateRivalTeamAsync(RivalTeam team);
     Task DeleteRivalTeamAsync(string teamId);
     List<StandingRow> GetStandings();
+    List<StandingRow> GetStandings(MatchKind competition);
+    bool HasCopaMatches { get; }
 
     // Announcements & Polls
     List<TeamAnnouncement> GetAnnouncements();

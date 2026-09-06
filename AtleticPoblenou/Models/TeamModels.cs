@@ -131,12 +131,27 @@ public enum MatchStatus
     Cancelled
 }
 
+/// <summary>Competición a la que pertenece un partido. Cada una tiene su propio fixture y su propia tabla.</summary>
+public enum MatchKind
+{
+    Liga,
+    Copa,
+    Amistoso
+}
+
 public class Match
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public int Round { get; set; } = 1;
     public DateTime MatchDate { get; set; } = DateTime.UtcNow;
     public string Competition { get; set; } = "Sábados División Honor (Temp. 26/27)";
+
+    /// <summary>Liga, Copa o Amistoso. Determina en qué fixture y en qué tabla entra el partido.</summary>
+    public MatchKind Kind { get; set; } = MatchKind.Liga;
+
+    // Amistoso: se ve en el fixture pero NO computa para ninguna tabla.
+    public bool IsFriendly => Kind == MatchKind.Amistoso;
+    public bool CountsForStandings => Kind != MatchKind.Amistoso;
 
     // Equipos
     public string HomeTeamId { get; set; } = "apn";

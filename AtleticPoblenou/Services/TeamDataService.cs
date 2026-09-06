@@ -703,7 +703,12 @@ public class TeamDataService : ITeamDataService, IDisposable
         await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("rival_teams", teamId), "rival_teams");
     }
 
-    public List<StandingRow> GetStandings()
+    /// <summary>¿Hay al menos un partido de copa cargado? (para mostrar u ocultar la pestaña de la copa)</summary>
+    public bool HasCopaMatches => _matches.Any(m => m.Kind == MatchKind.Copa);
+
+    public List<StandingRow> GetStandings() => GetStandings(MatchKind.Liga);
+
+    public List<StandingRow> GetStandings(MatchKind competition)
     {
         var standings = new List<StandingRow>();
 
@@ -717,18 +722,22 @@ public class TeamDataService : ITeamDataService, IDisposable
         };
         standings.Add(ourRow);
 
-        foreach (var rival in _rivalTeams)
+        // La liga tiene un cuadro fijo de equipos; la copa se arma sola con los que jugaron.
+        if (competition == MatchKind.Liga)
         {
-            standings.Add(new StandingRow
+            foreach (var rival in _rivalTeams)
             {
-                TeamId = rival.Id,
-                TeamName = rival.Name,
-                PrimaryColorHex = rival.PrimaryColorHex,
-                SecondaryColorHex = rival.SecondaryColorHex
-            });
+                standings.Add(new StandingRow
+                {
+                    TeamId = rival.Id,
+                    TeamName = rival.Name,
+                    PrimaryColorHex = rival.PrimaryColorHex,
+                    SecondaryColorHex = rival.SecondaryColorHex
+                });
+            }
         }
 
-        foreach (var m in _matches.Where(m => m.Status == MatchStatus.Finished))
+        foreach (var m in _matches.Where(m => m.Status == MatchStatus.Finished && m.Kind == competition))
         {
             int hScore, aScore;
             if (m.IsOurMatch)
@@ -768,11 +777,17 @@ public class TeamDataService : ITeamDataService, IDisposable
             }
         }
 
-        return standings.OrderByDescending(s => s.Points)
+        var ordered = standings.OrderByDescending(s => s.Points)
                         .ThenByDescending(s => s.GoalDifference)
                         .ThenByDescending(s => s.GoalsFor)
                         .ThenBy(s => s.TeamName)
                         .ToList();
+
+        // En la copa solo mostramos equipos que ya jugaron (más nuestro equipo siempre).
+        if (competition == MatchKind.Copa)
+            ordered = ordered.Where(s => s.Played > 0 || s.IsOurTeam).ToList();
+
+        return ordered;
     }
 
     private static StandingRow? FindRow(List<StandingRow> rows, string teamId, string teamName)

@@ -221,7 +221,8 @@
     private void LoadRoundMatches()
     {
         var all = TeamService.GetMatches();
-        _roundMatches = all.Where(m => m.Round == _currentRound).ToList();
+        // "Cargar Jornada" es solo para la liga; la copa se carga partido a partido desde el acta.
+        _roundMatches = all.Where(m => m.Round == _currentRound && m.Kind == MatchKind.Liga).ToList();
     }
 
     private void OnRoundChanged()

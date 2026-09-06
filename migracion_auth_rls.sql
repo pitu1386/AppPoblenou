@@ -27,6 +27,9 @@ alter table public.profiles add column if not exists auth_uid uuid;
 create unique index if not exists profiles_auth_uid_key on public.profiles (auth_uid);
 
 alter table public.matches add column if not exists round integer default 1;
+-- Competición del partido: 'liga' | 'copa' | 'amistoso'. Cada una tiene su fixture y su tabla;
+-- el amistoso no computa en ninguna.
+alter table public.matches add column if not exists match_kind text not null default 'liga';
 
 -- Limpieza de restos de partidos de prueba (antes de crear la restricción que los prohíbe)
 delete from public.attendance where match_id in ('match-1', 'match-2');
