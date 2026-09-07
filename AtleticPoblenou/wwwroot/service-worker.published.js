@@ -21,7 +21,8 @@ self.addEventListener('push', event => {
     const options = {
         body: data.body || '',
         icon: new URL('icon-192.png', self.registration.scope).href,
-        badge: new URL('icon-192.png', self.registration.scope).href,
+        // badge = ícono monocromo de la barra de estado (Android lo pinta como silueta blanca)
+        badge: new URL('notif-badge.png', self.registration.scope).href,
         tag: data.tag || undefined,
         renotify: !!data.tag,
         data: { url: data.url || './' }

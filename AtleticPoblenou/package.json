@@ -1,6 +1,6 @@
 {
   "name": "atletic-poblenou-css",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "description": "Compilación de Tailwind CSS para la App de Veteranos del Atlètic Poblenou",
   "scripts": {
