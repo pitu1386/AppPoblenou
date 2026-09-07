@@ -1,4 +1,5 @@
 @inject ITeamDataService TeamService
+@inject PushService Push
 
 <div class="space-y-4 pb-20">
 
@@ -217,6 +218,32 @@
                 <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
             </button>
 
+            <!-- Notificación push directa -->
+            <div class="p-4 bg-surface rounded-xl border border-line space-y-3 shadow-xs">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-xl bg-infobg border border-info/30 text-infotext flex items-center justify-center text-xl shrink-0">🔔</div>
+                    <div>
+                        <div class="font-bold text-sm text-ink">Enviar notificación al equipo</div>
+                        <div class="text-xs text-muted">Le llega como aviso del teléfono a todos los que la activaron</div>
+                    </div>
+                </div>
+
+                <input @bind="_pushTitle" type="text" placeholder="Título (ej: Cambio de cancha)"
+                       class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink text-xs font-medium focus:border-club focus:outline-none" />
+                <textarea @bind="_pushBody" rows="2" placeholder="Mensaje corto…"
+                          class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink text-xs font-medium focus:border-club focus:outline-none"></textarea>
+
+                @if (!string.IsNullOrEmpty(_pushResult))
+                {
+                    <div class="text-xs font-bold @(_pushOk ? "text-oktext" : "text-clubtext")">@_pushResult</div>
+                }
+
+                <button type="button" @onclick="SendManualPush" disabled="@(_pushBusy || string.IsNullOrWhiteSpace(_pushTitle))"
+                        class="w-full py-2.5 bg-club hover:bg-clubdeep disabled:opacity-40 text-white font-extrabold rounded-lg text-xs transition">
+                    @(_pushBusy ? "Enviando…" : "Enviar a todo el equipo")
+                </button>
+            </div>
+
             <!-- Historial de Comunicados -->
             <button type="button" @onclick="() => _showAnnouncementHistoryModal = true"
                     class="w-full p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group shadow-xs">
@@ -277,5 +304,30 @@
         await TeamService.GenerateNewTeamCodeAsync();
         _codeJustGenerated = true;
         StateHasChanged();
+    }
+
+    private string _pushTitle = "";
+    private string _pushBody = "";
+    private bool _pushBusy;
+    private bool _pushOk;
+    private string? _pushResult;
+
+    private async Task SendManualPush()
+    {
+        _pushBusy = true;
+        _pushResult = null;
+        var (ok, sent, error) = await Push.SendToAllAsync(_pushTitle.Trim(), _pushBody.Trim());
+        _pushBusy = false;
+        _pushOk = ok;
+        if (ok)
+        {
+            _pushResult = sent > 0 ? $"✓ Enviada a {sent} dispositivo(s)." : "Enviada, pero nadie tiene notificaciones activadas todavía.";
+            _pushTitle = "";
+            _pushBody = "";
+        }
+        else
+        {
+            _pushResult = $"No se pudo enviar: {error}";
+        }
     }
 }

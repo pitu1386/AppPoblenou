@@ -13,5 +13,6 @@ builder.Services.AddScoped<SupabaseClientService>();
 builder.Services.AddScoped<ITeamDataService, TeamDataService>();
 builder.Services.AddScoped<WeatherService>();
 builder.Services.AddScoped<ThemeService>();
+builder.Services.AddScoped<PushService>();
 
 await builder.Build().RunAsync();

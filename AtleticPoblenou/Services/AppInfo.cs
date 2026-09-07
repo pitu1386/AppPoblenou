@@ -17,12 +17,23 @@ public static class AppInfo
     /// <summary>Clave pública (anon). Solo da acceso a lo que permitan las políticas RLS.</summary>
     public const string SupabaseAnonKey = "sb_publishable_2jgFAT8ePAK6BJOyPDUImA_-BC8NXjq";
 
+    /// <summary>Clave pública VAPID para Web Push (la privada vive como secreto en la Edge Function).</summary>
+    public const string VapidPublicKey = "BHW224Pd_Vk2yX7O4WDyF3BCOQTaVwjNRITaYL1fsQ4wkvO6rn-I35d8yxlpk6TSl99KWhpRqK7TqvFbK4Ybe0s";
+
+    public const string SendPushUrl = SupabaseUrl + "/functions/v1/send-push";
+
     /// <summary>
     /// Historial de novedades por versión, más nueva primero. <see cref="Components.WhatsNewModal"/> lo usa para
     /// avisar solo de lo que cambió desde la última vez que ese navegador abrió la app.
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.7", new[]
+        {
+            "🔔 Notificaciones al teléfono: activalas desde el menú de tu perfil. Te avisan de comunicados nuevos y del recordatorio del partido el día antes.",
+            "📲 En iPhone hay que tener la app instalada en la pantalla de inicio para recibirlas.",
+            "⚙️ El staff puede mandar una notificación directa a todo el equipo (Admin → Comunicados) y dar el toque por notificación a los que no confirmaron la convocatoria.",
+        }),
         ("2.6", new[]
         {
             "🏆 Los partidos ahora se marcan como Liga, Copa o Amistoso. El amistoso se ve en el fixture pero ya no cuenta para la tabla.",

@@ -13,6 +13,34 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
 
+// ---- Notificaciones push ----
+self.addEventListener('push', event => {
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data ? event.data.text() : '' }; }
+    const title = data.title || 'Atlètic Poblenou';
+    const options = {
+        body: data.body || '',
+        icon: new URL('icon-192.png', self.registration.scope).href,
+        badge: new URL('icon-192.png', self.registration.scope).href,
+        tag: data.tag || undefined,
+        renotify: !!data.tag,
+        data: { url: data.url || './' }
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const target = new URL(event.notification.data && event.notification.data.url ? event.notification.data.url : './', self.registration.scope).href;
+    event.waitUntil((async () => {
+        const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const c of all) {
+            if (c.url.startsWith(self.registration.scope) && 'focus' in c) return c.focus();
+        }
+        return self.clients.openWindow(target);
+    })());
+});
+
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
 const offlineAssetsInclude = [ /\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/, /\.webmanifest$/ ];

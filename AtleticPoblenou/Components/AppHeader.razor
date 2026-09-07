@@ -1,5 +1,6 @@
 @inject ITeamDataService TeamService
 @inject ThemeService Theme
+@inject PushService Push
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -66,6 +67,25 @@
                             <span class="text-base">🔄</span>
                             Actualizar app (Borrar caché)
                         </button>
+
+                        @if (Push.IsSupported)
+                        {
+                            <button @onclick="ToggleNotifs" disabled="@_notifBusy"
+                                    class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold hover:bg-well transition flex items-center gap-3 @(Push.IsEnabled ? "text-oktext" : "text-ink")">
+                                <span class="text-base">@(Push.IsEnabled ? "🔔" : "🔕")</span>
+                                @(_notifBusy ? "Un momento…" : Push.IsEnabled ? "Notificaciones activadas · desactivar" : "Activar notificaciones")
+                            </button>
+                            @if (!string.IsNullOrEmpty(_notifError))
+                            {
+                                <p class="px-3 pb-1 text-[11px] text-clubtext leading-snug">@_notifError</p>
+                            }
+                        }
+                        else
+                        {
+                            <div class="px-3 py-1.5 text-[11px] text-faint leading-snug">
+                                🔕 Notificaciones no disponibles en este navegador. En iPhone: instalá la app en la pantalla de inicio.
+                            </div>
+                        }
                         @if (TeamService.IsOwnerAdmin(CurrentUser))
                         {
                             <button @onclick="HandleOpenDb" class="w-full h-11 px-3 rounded-lg text-left text-sm font-semibold text-ink hover:bg-well transition flex items-center gap-3">
@@ -103,18 +123,39 @@
 
     private UserProfile CurrentUser => TeamService.GetCurrentUser();
     private bool _showUserMenu = false;
+    private bool _notifBusy = false;
+    private string? _notifError;
 
     protected override async Task OnInitializedAsync()
     {
         TeamService.OnChange += StateHasChanged;
         Theme.OnChange += StateHasChanged;
+        Push.OnChange += StateHasChanged;
         await Theme.InitializeAsync();
+        await Push.InitializeAsync();
     }
 
     public void Dispose()
     {
         TeamService.OnChange -= StateHasChanged;
         Theme.OnChange -= StateHasChanged;
+        Push.OnChange -= StateHasChanged;
+    }
+
+    private async Task ToggleNotifs()
+    {
+        _notifBusy = true;
+        _notifError = null;
+        if (Push.IsEnabled)
+        {
+            await Push.DisableAsync();
+        }
+        else
+        {
+            var (ok, error) = await Push.EnableAsync();
+            if (!ok) _notifError = error;
+        }
+        _notifBusy = false;
     }
 
     private Task ToggleTheme() => Theme.ToggleAsync();

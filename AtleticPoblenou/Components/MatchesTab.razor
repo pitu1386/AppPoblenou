@@ -1,5 +1,6 @@
 @inject ITeamDataService TeamService
 @inject WeatherService Weather
+@inject PushService Push
 @inject IJSRuntime JS
 
 <div class="space-y-4 pb-20">
@@ -270,8 +271,20 @@
                     else
                     {
                         <div class="space-y-2 pt-1">
+                            @if (Push.IsSupported && (CanManageMatches || IsAdmin))
+                            {
+                                <button type="button" @onclick="() => NudgeUnansweredPush(unansweredPlayers)" disabled="@_pushNudgeBusy"
+                                        class="w-full py-2 rounded-lg bg-infobg text-infotext border border-info/40 font-bold text-xs hover:bg-info/10 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                    <span>🔔</span>
+                                    @(_pushNudgeBusy ? "Enviando…" : $"Notificar a los {unansweredPlayers.Count} que faltan")
+                                </button>
+                                @if (!string.IsNullOrEmpty(_pushNudgeResult))
+                                {
+                                    <div class="text-[11px] font-bold text-center @(_pushNudgeOk ? "text-oktext" : "text-clubtext")">@_pushNudgeResult</div>
+                                }
+                            }
                             <div class="text-[11px] text-muted">
-                                Toca para enviarles un mensaje recordatorio directo por WhatsApp:
+                                O tocá cada uno para mandarle un recordatorio directo por WhatsApp:
                             </div>
                             <div class="space-y-1.5">
                                 @foreach (var player in unansweredPlayers)
@@ -999,5 +1012,31 @@
             : $"https://wa.me/?text={Uri.EscapeDataString(msg)}";
 
         await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private bool _pushNudgeBusy;
+    private bool _pushNudgeOk;
+    private string? _pushNudgeResult;
+
+    private async Task NudgeUnansweredPush(List<UserProfile> unanswered)
+    {
+        if (NextMatch == null || unanswered.Count == 0) return;
+        _pushNudgeBusy = true;
+        _pushNudgeResult = null;
+
+        var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == NextMatch.RivalTeamId);
+        var rivalName = !string.IsNullOrEmpty(NextMatch.Opponent) ? NextMatch.Opponent : (rival?.Name ?? "el rival");
+        var when = NextMatch.MatchDate.ToString("ddd d/MM HH:mm", EsCulture);
+
+        var (ok, sent, error) = await Push.SendToAsync(
+            "❗ Falta tu confirmación",
+            $"vs {rivalName} · {when} h. Entrá a la app y marcá si vas.",
+            unanswered.Select(p => p.Id));
+
+        _pushNudgeBusy = false;
+        _pushNudgeOk = ok;
+        _pushNudgeResult = ok
+            ? (sent > 0 ? $"✓ Notificación enviada a {sent} dispositivo(s)" : "Ninguno de los que falta tiene notificaciones activadas")
+            : $"No se pudo enviar: {error}";
     }
 }
