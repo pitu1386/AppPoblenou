@@ -36,7 +36,10 @@
     <link rel="icon" type="image/png" href="escudo.png" />
     <link rel="apple-touch-icon" href="escudo.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- "default": iOS reserva el espacio de la barra de estado y la dibuja con contraste correcto
+         (antes "black-translucent" dejaba el contenido debajo del notch / Dynamic Island). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="A.P.N. Poblenou" />
     <meta name="theme-color" content="#FFFFFF" />
     <link href="manifest.webmanifest" rel="manifest" />

@@ -3,8 +3,9 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
-<header class="sticky top-0 z-30 bg-surface/95 backdrop-blur-md">
-    <div class="max-w-xl mx-auto flex items-center gap-3 px-5 pt-4 pb-3">
+<header class="sticky top-0 z-30 bg-surface/95 backdrop-blur-md pt-[env(safe-area-inset-top)]">
+    <div class="max-w-xl mx-auto flex items-center gap-3 px-5 pt-4 pb-3
+                pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))]">
 
         <!-- Escudo y nombre -->
         <img src="escudo.png" alt="Escudo Atlètic Poblenou" class="w-9 h-[42px] object-contain shrink-0" />
