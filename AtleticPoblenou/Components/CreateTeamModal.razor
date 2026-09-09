@@ -73,6 +73,19 @@
                     <input @bind="_kitDescription" type="text" placeholder="Ej: Camiseta azul marino, pantalón blanco"
                            class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
                 </div>
+
+                <!-- Venue Section -->
+                <div class="bg-well p-3.5 rounded-xl border border-line space-y-2">
+                    <label class="font-bold text-ink2 block">Cancha donde juega de local</label>
+                    <p class="text-xs text-muted m-0">Se carga sola cuando programés un partido de visitante contra este equipo.</p>
+                    <input @bind="_venueName" @bind:after="OnVenueNameChanged" type="text" placeholder="Nombre de la cancha o campo..."
+                           class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    <div>
+                        <label class="text-xs text-muted font-semibold block mb-0.5">Enlace a Google Maps</label>
+                        <input @bind="_venueMapsUrl" type="text" placeholder="https://maps.google.com/?q=..."
+                               class="w-full bg-surface border border-line2 rounded-lg px-3 py-1.5 text-ink font-cond text-xs focus:border-club focus:outline-none" />
+                    </div>
+                </div>
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-line">
@@ -97,6 +110,8 @@
     private string _primaryColor = "#1E3A8A";
     private string _secondaryColor = "#FFFFFF";
     private string _kitDescription = "Azul marino y blanco";
+    private string _venueName = "";
+    private string _venueMapsUrl = "";
     private string _loadedTeamId = "";
 
     protected override void OnParametersSet()
@@ -113,6 +128,8 @@
             _primaryColor = TargetTeam.PrimaryColorHex;
             _secondaryColor = TargetTeam.SecondaryColorHex;
             _kitDescription = TargetTeam.KitDescription;
+            _venueName = TargetTeam.VenueName;
+            _venueMapsUrl = TargetTeam.VenueMapsUrl;
         }
         else
         {
@@ -120,6 +137,16 @@
             _primaryColor = "#1E3A8A";
             _secondaryColor = "#FFFFFF";
             _kitDescription = "Azul marino y blanco";
+            _venueName = "";
+            _venueMapsUrl = "";
+        }
+    }
+
+    private void OnVenueNameChanged()
+    {
+        if (string.IsNullOrWhiteSpace(_venueMapsUrl) && !string.IsNullOrWhiteSpace(_venueName))
+        {
+            _venueMapsUrl = $"https://maps.google.com/?q={Uri.EscapeDataString(_venueName + " Barcelona")}";
         }
     }
 
@@ -149,6 +176,8 @@
                 PrimaryColorHex = _primaryColor,
                 SecondaryColorHex = _secondaryColor,
                 KitDescription = _kitDescription.Trim(),
+                VenueName = _venueName.Trim(),
+                VenueMapsUrl = _venueMapsUrl.Trim(),
                 Notes = TargetTeam.Notes
             };
             await TeamService.UpdateRivalTeamAsync(updated);
@@ -160,7 +189,9 @@
                 Name = _name.Trim(),
                 PrimaryColorHex = _primaryColor,
                 SecondaryColorHex = _secondaryColor,
-                KitDescription = _kitDescription.Trim()
+                KitDescription = _kitDescription.Trim(),
+                VenueName = _venueName.Trim(),
+                VenueMapsUrl = _venueMapsUrl.Trim()
             };
             await TeamService.AddRivalTeamAsync(team);
         }

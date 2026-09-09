@@ -123,26 +123,20 @@
 
                 <!-- Field & Google Maps URL -->
                 <div class="bg-well p-3 rounded-xl border border-line space-y-2">
-                    <div class="flex items-center justify-between">
-                        <label class="font-bold text-ink2 block">Cancha / Ubicación</label>
-                        <span class="text-xs text-faint font-semibold">Canchas habituales:</span>
-                    </div>
+                    <label class="font-bold text-ink2 block">Cancha / Ubicación</label>
 
-                    <!-- Fast shortcuts to popular Barcelona veteran fields -->
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                        <button type="button" @onclick='() => SetField("Camp Municipal Agapito Fernández", "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona")'
-                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
-                             Agapito Fernández
-                        </button>
-                        <button type="button" @onclick='() => SetField("CEM Can Felipa (Poblenou)", "https://maps.google.com/?q=Can+Felipa+Poblenou+Barcelona")'
-                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
-                             Can Felipa
-                        </button>
-                        <button type="button" @onclick='() => SetField("Camp Municipal Menorca", "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Menorca+Barcelona")'
-                                class="px-2 py-0.5 rounded-lg bg-surface border border-line2 text-xs text-ink2 hover:text-ink hover:border-club transition">
-                             Menorca
-                        </button>
-                    </div>
+                    @if (_isHome)
+                    {
+                        <p class="text-[11px] text-muted m-0">Nuestra cancha habitual, configurable en Admin → Club y Liga.</p>
+                    }
+                    else if (_selectedRival != null && !_selectedRival.HasVenue)
+                    {
+                        <p class="text-[11px] text-warntext m-0">Este rival todavía no tiene cancha cargada. Escribila acá o guardala en su ficha (Equipos rivales) para que la próxima vez aparezca sola.</p>
+                    }
+                    else if (_selectedRival != null)
+                    {
+                        <p class="text-[11px] text-oktext m-0">✓ Cancha del rival, cargada de su ficha.</p>
+                    }
 
                     <div>
                         <input @bind="_locationName" @bind:after="OnLocationChanged" type="text" placeholder="Nombre de la cancha o campo..."
@@ -170,7 +164,7 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <input @bind="_isHome" type="checkbox" id="isHomeCheck" class="rounded accent-red-600 w-4 h-4" />
+                    <input @bind="_isHome" @bind:after="ApplyDefaultVenue" type="checkbox" id="isHomeCheck" class="rounded accent-red-600 w-4 h-4" />
                     <label for="isHomeCheck" class="font-semibold text-ink2">Jugamos como local (en casa)</label>
                 </div>
 
@@ -286,10 +280,23 @@
         }
     }
 
-    private void SetField(string name, string url)
+    /// <summary>Propone la cancha correcta (la nuestra de local, la del rival de visitante) al crear un
+    /// partido nuevo. Editando uno ya guardado no se pisa lo que el usuario haya puesto a mano.</summary>
+    private void ApplyDefaultVenue()
     {
-        _locationName = name;
-        _locationUrl = url;
+        if (TargetMatch != null) return;
+
+        if (_isHome)
+        {
+            var club = TeamService.GetClubSettings();
+            _locationName = club.HomeVenueName;
+            _locationUrl = club.HomeVenueMapsUrl;
+        }
+        else if (_selectedRival != null && _selectedRival.HasVenue)
+        {
+            _locationName = _selectedRival.VenueName;
+            _locationUrl = _selectedRival.VenueMapsUrl;
+        }
     }
 
     private static string KindLabel(MatchKind k) => k switch
@@ -347,10 +354,11 @@
 
         _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
 
-        // Solo se autocompletan las notas al crear un partido nuevo; al editar uno existente no se pisan.
+        // Solo se autocompletan notas y cancha al crear un partido nuevo; al editar uno existente no se pisan.
         if (TargetMatch == null)
         {
             _notes = $"Camiseta {_rivalKitWarning.Description}. Estar 40 minutos antes.";
+            ApplyDefaultVenue();
         }
     }
 

@@ -52,6 +52,8 @@ public class SupabaseRivalTeamDto
     public string? primary_color_hex { get; set; }
     public string? secondary_color_hex { get; set; }
     public string? kit_description { get; set; }
+    public string? venue_name { get; set; }
+    public string? venue_maps_url { get; set; }
     public string? notes { get; set; }
 }
 
@@ -270,6 +272,8 @@ public static class SupabaseMappers
         primary_color_hex = t.PrimaryColorHex,
         secondary_color_hex = t.SecondaryColorHex,
         kit_description = t.KitDescription,
+        venue_name = t.VenueName,
+        venue_maps_url = t.VenueMapsUrl,
         notes = t.Notes
     };
 
@@ -280,6 +284,8 @@ public static class SupabaseMappers
         PrimaryColorHex = d.primary_color_hex ?? "#1E3A8A",
         SecondaryColorHex = d.secondary_color_hex ?? "#FFFFFF",
         KitDescription = d.kit_description ?? "",
+        VenueName = d.venue_name ?? "",
+        VenueMapsUrl = d.venue_maps_url ?? "",
         Notes = d.notes ?? ""
     };
 

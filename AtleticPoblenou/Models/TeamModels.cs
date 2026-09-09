@@ -104,6 +104,10 @@ public class RivalTeam
     public string PrimaryColorHex { get; set; } = "#1E3A8A";
     public string SecondaryColorHex { get; set; } = "#FFFFFF";
     public string KitDescription { get; set; } = "Azul y blanco";
+    /// <summary>Cancha donde juega de local. Vacío = todavía no se cargó.</summary>
+    public string VenueName { get; set; } = string.Empty;
+    public string VenueMapsUrl { get; set; } = string.Empty;
+    public bool HasVenue => !string.IsNullOrWhiteSpace(VenueName);
     public string Notes { get; set; } = string.Empty;
 }
 

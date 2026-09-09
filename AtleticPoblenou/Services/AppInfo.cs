@@ -32,6 +32,11 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.8", new[]
+        {
+            "📍 Los equipos rivales ahora tienen su propia cancha cargada (Equipos → Editar). Al armar un partido de visitante, la ubicación aparece sola.",
+            "🧹 Se sacaron los atajos de canchas fijas al crear un partido: ahora propone la nuestra de local o la del rival de visitante.",
+        }),
         ("2.7.2", new[]
         {
             "📝 Al editar el acta de un partido ya cargado, ahora vuelven a aparecer los goleadores, asistencias, tarjetas y el MVP (antes arrancaba en blanco).",

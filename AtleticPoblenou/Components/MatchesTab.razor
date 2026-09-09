@@ -790,6 +790,13 @@
                                 <div class="text-xs text-muted flex items-center gap-1 mt-0.5 truncate">
                                     <span class="truncate">@rival.KitDescription</span>
                                 </div>
+                                @if (rival.HasVenue)
+                                {
+                                    <div class="text-[11px] text-oktext flex items-center gap-1 mt-0.5 truncate">
+                                        <span>📍</span>
+                                        <span class="truncate">@rival.VenueName</span>
+                                    </div>
+                                }
                             </div>
                         </div>
 

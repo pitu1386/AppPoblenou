@@ -123,6 +123,8 @@ CREATE TABLE public.rival_teams (
     primary_color_hex TEXT DEFAULT '#1E3A8A',
     secondary_color_hex TEXT DEFAULT '#FFFFFF',
     kit_description TEXT,
+    venue_name TEXT,
+    venue_maps_url TEXT,
     notes TEXT
 );
 

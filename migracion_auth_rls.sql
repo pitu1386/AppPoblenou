@@ -31,6 +31,9 @@ alter table public.matches add column if not exists round integer default 1;
 -- el amistoso no computa en ninguna.
 alter table public.matches add column if not exists match_kind text not null default 'liga';
 
+alter table public.rival_teams add column if not exists venue_name text;
+alter table public.rival_teams add column if not exists venue_maps_url text;
+
 -- Limpieza de restos de partidos de prueba (antes de crear la restricción que los prohíbe)
 delete from public.attendance where match_id in ('match-1', 'match-2');
 delete from public.match_events where match_id in ('match-1', 'match-2');
