@@ -45,7 +45,7 @@
             <!-- ADD GOALS & ASSISTS SECTION -->
             <div class="space-y-2">
                 <div class="flex items-center justify-between text-xs font-bold text-ink2">
-                    <span>Goles del Atletic Poblenou (@_goals.Count)</span>
+                    <span>Goles del Atletic Poblenou (@TotalGoals)</span>
                     <button type="button" @onclick="AddGoalRow" class="text-xs text-clubtext hover:text-club font-extrabold flex items-center gap-1">
                         <span>+</span> Añadir Gol
                     </button>
@@ -80,9 +80,14 @@
                                         <option value="@p.Id">@p.Nickname (#@p.JerseyNumber)</option>
                                     }
                                 </select>
-                            }
 
-                            <input @bind="g.Minute" type="number" placeholder="Min" class="w-12 bg-surface border border-line2 rounded-lg py-1.5 text-xs text-ink font-cond text-center shrink-0" />
+                                <div class="flex items-center gap-1 shrink-0">
+                                    <input @bind="g.Goals" @bind:after="RecalcOurScore" type="number" min="1" max="20"
+                                           class="w-12 bg-surface border border-line2 rounded-lg py-1.5 text-xs text-ink font-cond font-bold text-center focus:border-club focus:outline-none"
+                                           title="Cuántos goles hizo en este partido" />
+                                    <span class="text-[10px] text-faint font-bold">goles</span>
+                                </div>
+                            }
 
                             <!-- Toggle button for Gol en contra -->
                             <button type="button" @onclick="() => ToggleOwnGoal(g)"
@@ -94,7 +99,7 @@
                             <button type="button" @onclick="() => RemoveGoal(g)" class="text-faint hover:text-club px-1 text-xs shrink-0">✕</button>
                         </div>
 
-                        @if (!g.IsOwnGoal)
+                        @if (!g.IsOwnGoal && g.Goals <= 1)
                         {
                             <!-- Direct Assist selector linked to the goal -->
                             <div class="flex items-center gap-2 pl-6">
@@ -107,6 +112,10 @@
                                     }
                                 </select>
                             </div>
+                        }
+                        else if (!g.IsOwnGoal)
+                        {
+                            <p class="text-[11px] text-faint pl-6 m-0">Con más de un gol no se registra asistencia individual. Si necesitás detallarla, agregalo en una fila aparte con cantidad 1.</p>
                         }
                     </div>
                 }
@@ -187,7 +196,8 @@
     {
         public string PlayerId { get; set; } = "";
         public string AssistPlayerId { get; set; } = "";
-        public int? Minute { get; set; }
+        /// <summary>Cuántos goles anotó este jugador en la fila. Con más de 1 no se guarda asistencia por gol.</summary>
+        public int Goals { get; set; } = 1;
         public bool IsOwnGoal { get; set; } = false;
     }
 
@@ -199,26 +209,92 @@
 
     private List<GoalEntry> _goals = new();
     private List<CardEntry> _cards = new();
+    private string? _loadedForMatchId;
+
+    /// <summary>Total real de goles (no de filas): una fila con cantidad 3 cuenta como 3.</summary>
+    private int TotalGoals => _goals.Sum(g => g.IsOwnGoal ? 1 : Math.Max(1, g.Goals));
 
     protected override void OnParametersSet()
     {
-        if (TargetMatch != null && IsOpen)
+        if (TargetMatch != null && IsOpen && TargetMatch.Id != _loadedForMatchId)
         {
-            _ourScore = TargetMatch.OurScore ?? 0;
-            _rivalScore = TargetMatch.RivalScore ?? 0;
+            _loadedForMatchId = TargetMatch.Id;
+            LoadFromMatch();
         }
+        else if (!IsOpen)
+        {
+            _loadedForMatchId = null;
+        }
+    }
+
+    /// <summary>Reconstruye el formulario a partir de lo ya guardado, para que editar un acta
+    /// existente muestre los goleadores, asistencias, tarjetas y MVP en vez de arrancar en blanco.</summary>
+    private void LoadFromMatch()
+    {
+        if (TargetMatch == null) return;
+
+        _ourScore = TargetMatch.OurScore ?? 0;
+        _rivalScore = TargetMatch.RivalScore ?? 0;
+        _goals = new();
+        _cards = new();
+        _mvpPlayerId = "";
+
+        var events = TeamService.GetMatchEvents().Where(e => e.MatchId == TargetMatch.Id).ToList();
+        if (events.Count == 0) return;
+
+        // Cada asistencia se guardó con el mismo minuto que su gol; se empareja por eso.
+        // Solo los goles cargados de a uno (con minuto) pueden tener asistencia.
+        var assistEvents = events.Where(e => e.EventType == EventType.Assist).ToList();
+        var usedAssistIds = new HashSet<string>();
+        var goalEvents = events.Where(e => e.EventType == EventType.Goal).ToList();
+
+        _goals = new();
+
+        // Goles cargados de a uno (llevan una clave interna en Minute solo para emparejar su
+        // asistencia; no es un minuto real, la app ya no pide esa fecha): una fila por gol.
+        foreach (var g in goalEvents.Where(e => e.Minute.HasValue))
+        {
+            var assist = assistEvents.FirstOrDefault(a => !usedAssistIds.Contains(a.Id) && a.Minute == g.Minute);
+            if (assist != null) usedAssistIds.Add(assist.Id);
+            _goals.Add(new GoalEntry
+            {
+                PlayerId = g.PlayerId,
+                AssistPlayerId = assist?.PlayerId ?? "",
+                Goals = 1
+            });
+        }
+
+        // Goles cargados por cantidad: se agrupan de nuevo por jugador en una sola fila.
+        foreach (var group in goalEvents.Where(e => !e.Minute.HasValue).GroupBy(e => e.PlayerId))
+        {
+            _goals.Add(new GoalEntry { PlayerId = group.Key, Goals = group.Count() });
+        }
+
+        // Los goles en contra del rival no se guardan como evento propio: la diferencia entre
+        // el marcador y los goles con autor conocido son los que sumó el rival en su arco.
+        var missingOwnGoals = Math.Max(0, _ourScore - TotalGoals);
+        for (var i = 0; i < missingOwnGoals; i++)
+        {
+            _goals.Add(new GoalEntry { IsOwnGoal = true });
+        }
+
+        _cards = events.Where(e => e.EventType is EventType.YellowCard or EventType.RedCard)
+            .Select(e => new CardEntry { PlayerId = e.PlayerId, IsRed = e.EventType == EventType.RedCard })
+            .ToList();
+
+        _mvpPlayerId = events.FirstOrDefault(e => e.EventType == EventType.Mvp)?.PlayerId ?? "";
     }
 
     private void AddGoalRow()
     {
         _goals.Add(new GoalEntry());
-        _ourScore = _goals.Count;
+        RecalcOurScore();
     }
 
     private void RemoveGoal(GoalEntry g)
     {
         _goals.Remove(g);
-        _ourScore = _goals.Count;
+        RecalcOurScore();
     }
 
     private void ToggleOwnGoal(GoalEntry g)
@@ -228,8 +304,13 @@
         {
             g.PlayerId = "";
             g.AssistPlayerId = "";
+            g.Goals = 1;
         }
+        RecalcOurScore();
     }
+
+    /// <summary>Recalcula el marcador propio a partir de los goles cargados (respeta la cantidad por fila).</summary>
+    private void RecalcOurScore() => _ourScore = TotalGoals;
 
     private void AddCardRow() => _cards.Add(new CardEntry());
 
@@ -248,26 +329,34 @@
         // 1. Process Goals & Linked Assists
         foreach (var g in _goals)
         {
-            if (!g.IsOwnGoal && !string.IsNullOrEmpty(g.PlayerId))
+            if (g.IsOwnGoal || string.IsNullOrEmpty(g.PlayerId)) continue;
+
+            var count = Math.Max(1, g.Goals);
+            // Clave interna para emparejar el gol con su asistencia al reabrir el acta (no es un
+            // minuto real: la app no pide esa fecha). Con más de un gol en la fila no aplica.
+            int? correlationKey = count == 1 ? _goals.IndexOf(g) : null;
+
+            for (var i = 0; i < count; i++)
             {
                 events.Add(new MatchEvent
                 {
                     MatchId = TargetMatch.Id,
                     PlayerId = g.PlayerId,
                     EventType = EventType.Goal,
-                    Minute = g.Minute
+                    Minute = correlationKey
                 });
+            }
 
-                if (!string.IsNullOrEmpty(g.AssistPlayerId))
+            // La asistencia individual solo tiene sentido cuando la fila es un único gol.
+            if (count == 1 && !string.IsNullOrEmpty(g.AssistPlayerId))
+            {
+                events.Add(new MatchEvent
                 {
-                    events.Add(new MatchEvent
-                    {
-                        MatchId = TargetMatch.Id,
-                        PlayerId = g.AssistPlayerId,
-                        EventType = EventType.Assist,
-                        Minute = g.Minute
-                    });
-                }
+                    MatchId = TargetMatch.Id,
+                    PlayerId = g.AssistPlayerId,
+                    EventType = EventType.Assist,
+                    Minute = correlationKey
+                });
             }
         }
 

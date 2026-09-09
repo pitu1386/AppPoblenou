@@ -2,6 +2,7 @@
 @inject WeatherService Weather
 @inject PushService Push
 @inject IJSRuntime JS
+@implements IDisposable
 
 <div class="space-y-4 pb-20">
 
@@ -503,7 +504,7 @@
                 var isHomeWinner = match.HomeScore.HasValue && match.AwayScore.HasValue && match.HomeScore > match.AwayScore;
                 var isAwayWinner = match.HomeScore.HasValue && match.AwayScore.HasValue && match.AwayScore > match.HomeScore;
 
-                <div class="bg-surface border border-line rounded-xl p-4 transition hover:border-line2 @(match.IsOurMatch ? "border-l-4 border-l-club" : "")">
+                <div @key="match.Id" class="bg-surface border border-line rounded-xl p-4 transition hover:border-line2 @(match.IsOurMatch ? "border-l-4 border-l-club" : "")">
                     <div class="flex items-center justify-between text-xs text-muted mb-2">
                         <span class="flex items-center gap-1.5 min-w-0">
                             @if (match.Kind == MatchKind.Amistoso)
@@ -833,6 +834,18 @@
     [Parameter] public EventCallback<RivalTeam> OnOpenEditTeam { get; set; }
     [Parameter] public EventCallback OnOpenCreateAnnouncement { get; set; }
     [Parameter] public EventCallback OnOpenRoundResults { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Sin esto, un cambio guardado en otro modal (p. ej. editar el resultado de un partido)
+        // solo se veía reflejado en el fixture si el padre volvía a dibujar por otro motivo.
+        TeamService.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+    }
 
     private string _subTab = "next"; // "next", "fixture", "table", "rivals"
     private string _rsvpFilter = "all"; // "all", "going", "maybe", "notgoing", "unanswered"
