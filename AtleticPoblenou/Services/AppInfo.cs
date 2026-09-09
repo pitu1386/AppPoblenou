@@ -10,7 +10,11 @@ public static class AppInfo
     private static string ComputeVersion()
     {
         var v = typeof(AppInfo).Assembly.GetName().Version;
-        return v == null ? "dev" : $"{v.Major}.{v.Minor}";
+        if (v == null) return "dev";
+        // Con parche (2.7.2) se muestra completo; en un "2.7.0" redondo se muestra corto (2.7),
+        // igual que antes. Sin esto, un bugfix de parche (2.7.0 -> 2.7.1) era invisible: la app
+        // seguía mostrando "v2.7" y WhatsNewModal nunca se enteraba de que había algo nuevo.
+        return v.Build > 0 ? $"{v.Major}.{v.Minor}.{v.Build}" : $"{v.Major}.{v.Minor}";
     }
 
     public const string SupabaseUrl = "https://dlajpiuuslegmoedslux.supabase.co";
@@ -28,6 +32,12 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.7.2", new[]
+        {
+            "📝 Al editar el acta de un partido ya cargado, ahora vuelven a aparecer los goleadores, asistencias, tarjetas y el MVP (antes arrancaba en blanco).",
+            "⚽ En el acta, cada gol tiene un campo de cantidad: si un jugador hizo varios, se pone el número en vez de repetir la fila.",
+            "🔄 El resultado se actualiza solo en la grilla del fixture apenas lo guardás.",
+        }),
         ("2.7", new[]
         {
             "🔔 Notificaciones al teléfono: activalas desde el menú de tu perfil. Te avisan de comunicados nuevos y del recordatorio del partido el día antes.",
