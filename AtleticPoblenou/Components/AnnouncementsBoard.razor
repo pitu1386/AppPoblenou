@@ -4,6 +4,7 @@
     var announcements = TeamService.GetAnnouncements();
     var currentUser = TeamService.GetCurrentUser();
     var isAdmin = currentUser.Role == UserRole.Admin;
+    var totalMembers = TeamService.GetProfiles().Count(p => p.IsActive);
 }
 
 @if (announcements.Any() || isAdmin)
@@ -63,10 +64,11 @@
                 <!-- INTERACTIVE POLL SECTION -->
                 @if (ann.HasPoll && ann.PollOptions.Any())
                 {
+                    var participationPercent = totalMembers > 0 ? (int)Math.Round((double)totalVotes / totalMembers * 100) : 0;
                     <div class="space-y-2 pt-1 border-t border-line">
                         <div class="flex items-center justify-between text-xs">
                             <span class="font-bold text-muted">Encuesta del equipo:</span>
-                            <span class="text-faint font-cond">@totalVotes @(totalVotes == 1 ? "voto" : "votos")</span>
+                            <span class="text-faint font-cond">@totalVotes de @totalMembers respondieron (@participationPercent%)</span>
                         </div>
 
                         <div class="space-y-1.5">

@@ -35,6 +35,7 @@ CREATE TABLE public.profiles (
     medical_notes TEXT,
     avatar_url TEXT,
     is_active BOOLEAN DEFAULT TRUE,
+    counts_for_season_fee BOOLEAN NOT NULL DEFAULT TRUE, -- si se lo contempla en la cartera de pagos
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -127,6 +128,7 @@ CREATE TABLE public.rival_teams (
     kit_description TEXT,
     venue_name TEXT,
     venue_maps_url TEXT,
+    logo_url TEXT, -- URL de imagen o data URI del escudo; vacío = se usa el cuadrado de colores
     notes TEXT
 );
 

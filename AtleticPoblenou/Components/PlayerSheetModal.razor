@@ -48,6 +48,12 @@
                                         🚫 DESVINCULADO
                                     </span>
                                 }
+                                @if (!TargetProfile.CountsForSeasonFee)
+                                {
+                                    <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-well2 text-muted border border-line2">
+                                        ⛔ EXENTO DE CUOTA
+                                    </span>
+                                }
                                 @if (TargetProfile.IsCaptain)
                                 {
                                     <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center gap-1">
@@ -277,6 +283,12 @@
                                     🟡 Es Capitán del Equipo (Brazalete C)
                                 </span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                                <input type="checkbox" @bind="_editModel.CountsForSeasonFee" class="w-4 h-4 accent-club rounded cursor-pointer" />
+                                <span class="text-xs font-bold text-ink2 flex items-center gap-1">
+                                    💶 Cuenta para la cuota de temporada (cartera de pagos)
+                                </span>
+                            </label>
                         </div>
                     }
 
@@ -432,7 +444,8 @@
             Dni = p.Dni,
             MedicalNotes = p.MedicalNotes,
             AvatarUrl = p.AvatarUrl,
-            CreatedAt = p.CreatedAt
+            CreatedAt = p.CreatedAt,
+            CountsForSeasonFee = p.CountsForSeasonFee
         };
     }
 
@@ -463,6 +476,7 @@
         TargetProfile.BirthDate = _editModel.BirthDate;
         TargetProfile.Dni = _editModel.Dni;
         TargetProfile.MedicalNotes = _editModel.MedicalNotes;
+        TargetProfile.CountsForSeasonFee = _editModel.CountsForSeasonFee;
 
         if (!string.IsNullOrEmpty(_newPassword))
         {

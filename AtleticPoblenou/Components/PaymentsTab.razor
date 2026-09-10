@@ -65,7 +65,7 @@
     @if (_subTab == "players")
     {
         var allPaidPayments = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).ToList();
-        var profiles = TeamService.GetProfiles();
+        var profiles = TeamService.GetProfiles().Where(p => p.CountsForSeasonFee).ToList();
         var clubSettings = TeamService.GetClubSettings();
         var seasonFee = clubSettings.SeasonFeePerPlayer;
 
@@ -390,7 +390,7 @@
         var totalIn = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).Sum(p => p.Amount);
         var totalOut = TeamService.GetExpenses().Sum(e => e.Amount);
         var fee = TeamService.GetClubSettings().SeasonFeePerPlayer;
-        var profiles = TeamService.GetProfiles();
+        var profiles = TeamService.GetProfiles().Where(p => p.CountsForSeasonFee).ToList();
         var allPayments = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).ToList();
 
         var fullyPaidCount = profiles.Count(p => allPayments.Where(x => x.PlayerId == p.Id).Sum(x => x.Amount) >= fee);

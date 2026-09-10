@@ -69,6 +69,8 @@ public class UserProfile
     public string AvatarUrl { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
+    /// <summary>Si se lo contempla para la cuota de temporada (cartera de pagos). Solo lo cambia un Admin.</summary>
+    public bool CountsForSeasonFee { get; set; } = true;
 
     public int? Age => BirthDate.HasValue
         ? DateTime.Today.Year - BirthDate.Value.Year - (DateTime.Today.DayOfYear < BirthDate.Value.DayOfYear ? 1 : 0)
@@ -108,6 +110,9 @@ public class RivalTeam
     public string VenueName { get; set; } = string.Empty;
     public string VenueMapsUrl { get; set; } = string.Empty;
     public bool HasVenue => !string.IsNullOrWhiteSpace(VenueName);
+    /// <summary>Escudo del club: URL de imagen o data URI. Vacío = se usa el cuadrado de colores.</summary>
+    public string LogoUrl { get; set; } = string.Empty;
+    public bool HasLogo => !string.IsNullOrWhiteSpace(LogoUrl);
     public string Notes { get; set; } = string.Empty;
 }
 
@@ -117,6 +122,8 @@ public class StandingRow
     public string TeamName { get; set; } = string.Empty;
     public string PrimaryColorHex { get; set; } = "#3B82F6";
     public string SecondaryColorHex { get; set; } = "#FFFFFF";
+    public string LogoUrl { get; set; } = string.Empty;
+    public bool HasLogo => !string.IsNullOrWhiteSpace(LogoUrl);
     public bool IsOurTeam { get; set; } = false;
     public int Played { get; set; }
     public int Won { get; set; }
@@ -192,9 +199,15 @@ public class Match
             {
                 HomeTeamId = "apn";
                 HomeTeamName = "Atletic Poblenou";
+                AwayTeamId = "";
+                AwayTeamName = "";
             }
             else
             {
+                // Limpiar el lado local es clave: sin esto queda en "apn" (el valor por defecto
+                // del campo) y el getter de arriba sigue leyendo el partido como local.
+                HomeTeamId = "";
+                HomeTeamName = "";
                 AwayTeamId = "apn";
                 AwayTeamName = "Atletic Poblenou";
             }

@@ -69,6 +69,19 @@
                 </div>
 
                 <div>
+                    <label class="font-bold text-ink2 block mb-1">Escudo del club (URL de imagen, opcional)</label>
+                    <div class="flex items-center gap-2">
+                        @if (!string.IsNullOrWhiteSpace(_logoUrl))
+                        {
+                            <img src="@_logoUrl" alt="" class="w-9 h-9 rounded-lg object-contain bg-well border border-line2 shrink-0" />
+                        }
+                        <input @bind="_logoUrl" type="text" placeholder="https://... o pegá la imagen como data URI"
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                    <p class="text-[11px] text-muted mt-1 m-0">Vacío = se usa el cuadrado de colores de la camiseta.</p>
+                </div>
+
+                <div>
                     <label class="font-bold text-ink2 block mb-1">Descripción de la indumentaria</label>
                     <input @bind="_kitDescription" type="text" placeholder="Ej: Camiseta azul marino, pantalón blanco"
                            class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
@@ -112,6 +125,7 @@
     private string _kitDescription = "Azul marino y blanco";
     private string _venueName = "";
     private string _venueMapsUrl = "";
+    private string _logoUrl = "";
     private string _loadedTeamId = "";
 
     protected override void OnParametersSet()
@@ -130,6 +144,7 @@
             _kitDescription = TargetTeam.KitDescription;
             _venueName = TargetTeam.VenueName;
             _venueMapsUrl = TargetTeam.VenueMapsUrl;
+            _logoUrl = TargetTeam.LogoUrl;
         }
         else
         {
@@ -139,6 +154,7 @@
             _kitDescription = "Azul marino y blanco";
             _venueName = "";
             _venueMapsUrl = "";
+            _logoUrl = "";
         }
     }
 
@@ -178,6 +194,7 @@
                 KitDescription = _kitDescription.Trim(),
                 VenueName = _venueName.Trim(),
                 VenueMapsUrl = _venueMapsUrl.Trim(),
+                LogoUrl = _logoUrl.Trim(),
                 Notes = TargetTeam.Notes
             };
             await TeamService.UpdateRivalTeamAsync(updated);
@@ -191,7 +208,8 @@
                 SecondaryColorHex = _secondaryColor,
                 KitDescription = _kitDescription.Trim(),
                 VenueName = _venueName.Trim(),
-                VenueMapsUrl = _venueMapsUrl.Trim()
+                VenueMapsUrl = _venueMapsUrl.Trim(),
+                LogoUrl = _logoUrl.Trim()
             };
             await TeamService.AddRivalTeamAsync(team);
         }

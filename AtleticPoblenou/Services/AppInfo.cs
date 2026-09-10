@@ -32,6 +32,15 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.10", new[]
+        {
+            "📅 Fixture completo de la liga cargado (las 30 jornadas), con los escudos de cada club y su cancha.",
+            "🔎 En el Fixture hay un filtro nuevo: Próximos / Finalizados / Todos, para no scrollear los partidos ya jugados.",
+            "🛡️ Los escudos de los rivales se ven en la tarjeta del próximo partido, en la lista de Equipos y en la tabla de Posiciones.",
+            "💶 En la ficha de cada jugador se puede marcar si cuenta o no para la cuota de temporada (cartera de pagos).",
+            "📊 Las encuestas del equipo muestran qué porcentaje de la plantilla respondió.",
+            "✏️ Al editar un equipo rival, el nombre y la cancha se actualizan solos en todos sus partidos.",
+        }),
         ("2.9", new[]
         {
             "🕐 Los partidos pueden marcarse como 'A confirmar' o 'Confirmada' junto al horario, para no confundir una hora provisional con la definitiva.",

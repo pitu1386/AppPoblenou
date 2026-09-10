@@ -26,6 +26,9 @@ create extension if not exists pgcrypto;
 alter table public.profiles add column if not exists auth_uid uuid;
 create unique index if not exists profiles_auth_uid_key on public.profiles (auth_uid);
 
+-- Si se lo contempla o no en la cartera de pagos (cuota de temporada). Solo lo cambia un admin.
+alter table public.profiles add column if not exists counts_for_season_fee boolean not null default true;
+
 alter table public.matches add column if not exists round integer default 1;
 -- Competición del partido: 'liga' | 'copa' | 'amistoso'. Cada una tiene su fixture y su tabla;
 -- el amistoso no computa en ninguna.
@@ -36,6 +39,7 @@ alter table public.matches add column if not exists is_time_confirmed boolean no
 
 alter table public.rival_teams add column if not exists venue_name text;
 alter table public.rival_teams add column if not exists venue_maps_url text;
+alter table public.rival_teams add column if not exists logo_url text;
 
 -- Limpieza de restos de partidos de prueba (antes de crear la restricción que los prohíbe)
 delete from public.attendance where match_id in ('match-1', 'match-2');
@@ -226,8 +230,9 @@ begin
            or new.is_captain is distinct from old.is_captain
            or new.is_sub_captain is distinct from old.is_sub_captain
            or new.auth_uid is distinct from old.auth_uid
-           or new.email is distinct from old.email then
-            raise exception 'No tienes permiso para cambiar rol, capitanía, estado o cuenta';
+           or new.email is distinct from old.email
+           or new.counts_for_season_fee is distinct from old.counts_for_season_fee then
+            raise exception 'No tienes permiso para cambiar rol, capitanía, estado, cuenta o cuota';
         end if;
     end if;
     return new;

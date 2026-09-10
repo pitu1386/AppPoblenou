@@ -24,6 +24,7 @@ public class SupabaseProfileDto
     public string? medical_notes { get; set; }
     public string? avatar_url { get; set; }
     public bool is_active { get; set; } = true;
+    public bool counts_for_season_fee { get; set; } = true;
     public DateTime? created_at { get; set; }
 }
 
@@ -55,6 +56,7 @@ public class SupabaseRivalTeamDto
     public string? kit_description { get; set; }
     public string? venue_name { get; set; }
     public string? venue_maps_url { get; set; }
+    public string? logo_url { get; set; }
     public string? notes { get; set; }
 }
 
@@ -168,6 +170,7 @@ public static class SupabaseMappers
         medical_notes = p.MedicalNotes,
         avatar_url = p.AvatarUrl,
         is_active = p.IsActive,
+        counts_for_season_fee = p.CountsForSeasonFee,
         created_at = p.CreatedAt
     };
 
@@ -190,6 +193,7 @@ public static class SupabaseMappers
         MedicalNotes = d.medical_notes ?? "",
         AvatarUrl = d.avatar_url ?? "",
         IsActive = d.is_active,
+        CountsForSeasonFee = d.counts_for_season_fee,
         CreatedAt = d.created_at ?? DateTime.UtcNow
     };
 
@@ -278,6 +282,7 @@ public static class SupabaseMappers
         kit_description = t.KitDescription,
         venue_name = t.VenueName,
         venue_maps_url = t.VenueMapsUrl,
+        logo_url = t.LogoUrl,
         notes = t.Notes
     };
 
@@ -290,6 +295,7 @@ public static class SupabaseMappers
         KitDescription = d.kit_description ?? "",
         VenueName = d.venue_name ?? "",
         VenueMapsUrl = d.venue_maps_url ?? "",
+        LogoUrl = d.logo_url ?? "",
         Notes = d.notes ?? ""
     };
 

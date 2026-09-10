@@ -692,8 +692,38 @@ public class TeamDataService : ITeamDataService, IDisposable
     {
         var idx = _rivalTeams.FindIndex(t => t.Id == team.Id);
         if (idx >= 0) _rivalTeams[idx] = team;
+
+        // El fixture guarda el nombre (y, si el rival juega de local, la cancha) como texto propio
+        // de cada partido, no los busca en vivo. Si algo de eso cambió acá, hay que propagarlo a
+        // los partidos ya cargados para que no queden desactualizados.
+        var affected = new List<Match>();
+        foreach (var m in _matches)
+        {
+            var changed = false;
+            if (m.HomeTeamId == team.Id)
+            {
+                if (m.HomeTeamName != team.Name) { m.HomeTeamName = team.Name; changed = true; }
+                if (team.HasVenue && (m.LocationName != team.VenueName || m.LocationUrl != team.VenueMapsUrl))
+                {
+                    m.LocationName = team.VenueName;
+                    m.LocationUrl = team.VenueMapsUrl;
+                    changed = true;
+                }
+            }
+            if (m.AwayTeamId == team.Id && m.AwayTeamName != team.Name)
+            {
+                m.AwayTeamName = team.Name;
+                changed = true;
+            }
+            if (changed) affected.Add(m);
+        }
+
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertRivalTeamAsync(team), "rival_teams");
+        await WriteAndRefreshAsync(async () =>
+        {
+            await _supabase.UpsertRivalTeamAsync(team);
+            if (affected.Count > 0) await _supabase.UpsertMatchesAsync(affected);
+        }, "rival_teams", "matches");
     }
 
     public async Task DeleteRivalTeamAsync(string teamId)
@@ -718,6 +748,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             TeamName = !string.IsNullOrEmpty(_clubSettings.ShortName) ? _clubSettings.ShortName : _clubSettings.ClubName,
             PrimaryColorHex = _clubSettings.PrimaryColorHex,
             SecondaryColorHex = _clubSettings.SecondaryColorHex,
+            LogoUrl = "escudo.png",
             IsOurTeam = true
         };
         standings.Add(ourRow);
@@ -732,7 +763,8 @@ public class TeamDataService : ITeamDataService, IDisposable
                     TeamId = rival.Id,
                     TeamName = rival.Name,
                     PrimaryColorHex = rival.PrimaryColorHex,
-                    SecondaryColorHex = rival.SecondaryColorHex
+                    SecondaryColorHex = rival.SecondaryColorHex,
+                    LogoUrl = rival.LogoUrl
                 });
             }
         }
