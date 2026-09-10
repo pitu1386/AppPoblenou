@@ -32,6 +32,12 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.9", new[]
+        {
+            "🕐 Los partidos pueden marcarse como 'A confirmar' o 'Confirmada' junto al horario, para no confundir una hora provisional con la definitiva.",
+            "🟢 Pizarra táctica: ahora solo el DT (o el Admin) puede armarla, y queda marcada como borrador hasta que él la confirma.",
+            "🔑 Corregido un error que a veces mostraba 'no tienes permiso' al guardar cambios estando logueado.",
+        }),
         ("2.8", new[]
         {
             "📍 Los equipos rivales ahora tienen su propia cancha cargada (Equipos → Editar). Al armar un partido de visitante, la ubicación aparece sola.",

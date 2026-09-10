@@ -48,6 +48,13 @@ public class SupabaseClientService
         var req = new HttpRequestMessage(method, url);
         req.Headers.Add("apikey", AppInfo.SupabaseAnonKey);
         var token = await _auth.GetAccessTokenAsync();
+        // Si había sesión pero no se pudo renovar el token, NUNCA seguir como anon: esa clave
+        // no tiene permisos sobre ninguna tabla y el 403 resultante ("no tienes permiso") confunde,
+        // porque el usuario sigue viéndose logueado. Mejor cortar acá con un mensaje claro.
+        if (token == null && _auth.IsSignedIn)
+        {
+            throw new SupabaseException("No se pudo renovar tu sesión. Cierra sesión y vuelve a entrar.", HttpStatusCode.Unauthorized);
+        }
         req.Headers.Add("Authorization", $"Bearer {token ?? AppInfo.SupabaseAnonKey}");
         return req;
     }
@@ -64,6 +71,10 @@ public class SupabaseClientService
                 req.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
             }
             resp = await _http.SendAsync(req);
+        }
+        catch (SupabaseException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

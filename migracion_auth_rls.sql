@@ -31,6 +31,9 @@ alter table public.matches add column if not exists round integer default 1;
 -- el amistoso no computa en ninguna.
 alter table public.matches add column if not exists match_kind text not null default 'liga';
 
+-- Hora "a confirmar" vs. ya definitiva, para que no se filtre un horario provisional como si fuera el real.
+alter table public.matches add column if not exists is_time_confirmed boolean not null default true;
+
 alter table public.rival_teams add column if not exists venue_name text;
 alter table public.rival_teams add column if not exists venue_maps_url text;
 
@@ -53,6 +56,9 @@ create table if not exists public.match_lineups (
     starting_player_ids jsonb not null default '[]'::jsonb, -- 11 huecos en orden; null = hueco vacío
     updated_at timestamptz default now()
 );
+
+-- Si el DT ya la dio por definitiva o sigue siendo un borrador sujeto a cambios.
+alter table public.match_lineups add column if not exists is_confirmed boolean not null default false;
 
 alter table public.team_expenses alter column category type text using category::text;
 alter table public.team_expenses alter column category set default 'Otros';
@@ -166,6 +172,12 @@ $$;
 create or replace function public.is_treasury()
 returns boolean language sql stable security definer set search_path = public as $$
     select coalesce(public.my_role() in (0, 1), false)
+$$;
+
+-- Admin y DT (4): la pizarra táctica es decisión del cuerpo técnico, no de cualquier staff.
+create or replace function public.is_coach()
+returns boolean language sql stable security definer set search_path = public as $$
+    select coalesce(public.my_role() in (0, 4), false)
 $$;
 
 create or replace function public.normalize_code(p text)
@@ -283,11 +295,11 @@ create policy "apn_insert" on public.match_events for insert to authenticated wi
 create policy "apn_update" on public.match_events for update to authenticated using (public.is_staff()) with check (public.is_staff());
 create policy "apn_delete" on public.match_events for delete to authenticated using (public.is_staff());
 
--- match_lineups: lectura miembros, escritura staff (mismo criterio que los partidos).
+-- match_lineups: lectura miembros, escritura solo DT (y admin) — la alineación la decide el técnico.
 create policy "apn_select" on public.match_lineups for select to authenticated using (public.is_member());
-create policy "apn_insert" on public.match_lineups for insert to authenticated with check (public.is_staff());
-create policy "apn_update" on public.match_lineups for update to authenticated using (public.is_staff()) with check (public.is_staff());
-create policy "apn_delete" on public.match_lineups for delete to authenticated using (public.is_staff());
+create policy "apn_insert" on public.match_lineups for insert to authenticated with check (public.is_coach());
+create policy "apn_update" on public.match_lineups for update to authenticated using (public.is_coach()) with check (public.is_coach());
+create policy "apn_delete" on public.match_lineups for delete to authenticated using (public.is_coach());
 
 -- attendance: cada jugador su propia asistencia; staff cualquiera.
 create policy "apn_select" on public.attendance for select to authenticated using (public.is_member());

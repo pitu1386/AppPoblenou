@@ -67,6 +67,14 @@
                     <div class="font-cond font-extrabold text-[38px] leading-none text-clubtext">
                         @NextMatch.MatchDate.ToString("HH:mm")
                     </div>
+                    @if (NextMatch.IsTimeConfirmed)
+                    {
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-okbg text-oktext border border-ok/40 shrink-0">✓ Confirmada</span>
+                    }
+                    else
+                    {
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-warnbg text-warntext border border-warn/40 shrink-0">⏳ A confirmar</span>
+                    }
                 </div>
 
                 <!-- CUENTA ATRÁS HASTA EL PITIDO INICIAL -->
@@ -521,8 +529,14 @@
                                 <span class="font-bold text-clubtext truncate">Jornada @match.Round · @match.Competition</span>
                             }
                         </span>
-                        <span class="px-2 py-0.5 rounded text-xs font-bold shrink-0 @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
-                            @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
+                        <span class="flex items-center gap-1.5 shrink-0">
+                            <span class="px-2 py-0.5 rounded text-xs font-bold shrink-0 @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
+                                @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
+                            </span>
+                            @if (match.Status != MatchStatus.Finished && !match.IsTimeConfirmed)
+                            {
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold shrink-0 bg-warnbg text-warntext border border-warn/40">⏳ A confirmar</span>
+                            }
                         </span>
                     </div>
 
@@ -829,7 +843,7 @@
     }
 
     <!-- Tactical Board Pitch Modal -->
-    <TacticalBoardModal @bind-IsOpen="_showTacticalModal" Match="_tacticalMatch" CanEdit="CanManageMatches" />
+    <TacticalBoardModal @bind-IsOpen="_showTacticalModal" Match="_tacticalMatch" CanEdit="CanEditTactics" />
 
 </div>
 
@@ -922,6 +936,8 @@
     private UserProfile CurrentUser => TeamService.GetCurrentUser();
     private bool IsAdmin => CurrentUser.Role == UserRole.Admin;
     private bool CanManageMatches => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.FieldManager || CurrentUser.Role == UserRole.Coach;
+    /// <summary>La pizarra táctica la decide el cuerpo técnico: solo DT (y Admin como respaldo), no el Delegado.</summary>
+    private bool CanEditTactics => CurrentUser.Role == UserRole.Admin || CurrentUser.Role == UserRole.Coach;
     private Match? NextMatch => TeamService.GetNextMatch();
     private static readonly System.Globalization.CultureInfo EsCulture = GetEsCulture();
     private static System.Globalization.CultureInfo GetEsCulture()

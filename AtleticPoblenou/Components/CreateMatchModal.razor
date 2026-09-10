@@ -121,6 +121,23 @@
                     </div>
                 </div>
 
+                <div class="flex items-center justify-between gap-2 bg-well p-3 rounded-xl border border-line">
+                    <div>
+                        <label class="font-bold text-ink2 block">Estado de la hora</label>
+                        <p class="text-[11px] text-muted m-0">Marcá "A confirmar" si todavía puede cambiar (rival o liga sin confirmar).</p>
+                    </div>
+                    <div class="flex items-center gap-1 p-1 bg-surface rounded-lg border border-line shrink-0">
+                        <button type="button" @onclick="() => _isTimeConfirmed = false"
+                                class="px-2.5 py-1.5 rounded-md text-[11px] font-bold transition @(!_isTimeConfirmed ? "bg-warn text-black shadow-sm" : "text-muted hover:text-warntext")">
+                            ⏳ A confirmar
+                        </button>
+                        <button type="button" @onclick="() => _isTimeConfirmed = true"
+                                class="px-2.5 py-1.5 rounded-md text-[11px] font-bold transition @(_isTimeConfirmed ? "bg-ok text-white shadow-sm" : "text-muted hover:text-oktext")">
+                            ✓ Confirmada
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Field & Google Maps URL -->
                 <div class="bg-well p-3 rounded-xl border border-line space-y-2">
                     <label class="font-bold text-ink2 block">Cancha / Ubicación</label>
@@ -234,6 +251,7 @@
     private MatchKind _kind = MatchKind.Liga;
     private string _competitionName = "";
     private bool _isHome = true;
+    private bool _isTimeConfirmed = true;
     private string _notes = "Camiseta titular rojiblanca. Estar 40 minutos antes.";
     private bool _showDeleteConfirm = false;
 
@@ -266,6 +284,7 @@
                 _locationUrl = TargetMatch.LocationUrl ?? "";
                 _competitionName = _kind == MatchKind.Amistoso ? "" : StripRound(TargetMatch.Competition);
                 _isHome = TargetMatch.IsHome;
+                _isTimeConfirmed = TargetMatch.IsTimeConfirmed;
                 _notes = TargetMatch.Notes;
             }
             else
@@ -275,6 +294,7 @@
                 _competitionName = !string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga";
                 _locationName = club.HomeVenueName;
                 _locationUrl = club.HomeVenueMapsUrl;
+                _isTimeConfirmed = true;
                 _notes = $"Camiseta {club.KitDescription}. Estar 40 minutos antes.";
             }
         }
@@ -398,6 +418,7 @@
             TargetMatch.MatchDate = fullDate;
             TargetMatch.LocationName = _locationName;
             TargetMatch.LocationUrl = _locationUrl;
+            TargetMatch.IsTimeConfirmed = _isTimeConfirmed;
             TargetMatch.Notes = _notes;
 
             await TeamService.UpdateMatchDetailsAsync(TargetMatch);
@@ -415,6 +436,7 @@
                 LocationUrl = _locationUrl,
                 Competition = competition,
                 IsHome = _isHome,
+                IsTimeConfirmed = _isTimeConfirmed,
                 Notes = _notes,
                 Status = MatchStatus.Upcoming
             };

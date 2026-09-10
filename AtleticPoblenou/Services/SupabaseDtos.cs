@@ -42,6 +42,7 @@ public class SupabaseMatchDto
     public int? our_score { get; set; }
     public int? rival_score { get; set; }
     public int status { get; set; }
+    public bool is_time_confirmed { get; set; } = true;
     public string? notes { get; set; }
 }
 
@@ -106,6 +107,7 @@ public class SupabaseMatchLineupDto
     public string match_id { get; set; } = "";
     public string formation { get; set; } = "4-3-3";
     public List<string?>? starting_player_ids { get; set; }
+    public bool is_confirmed { get; set; }
 }
 
 public class SupabaseAnnouncementDto
@@ -209,6 +211,7 @@ public static class SupabaseMappers
             our_score = isOur ? m.OurScore : m.HomeScore,
             rival_score = isOur ? m.RivalScore : m.AwayScore,
             status = (int)m.Status,
+            is_time_confirmed = m.IsTimeConfirmed,
             notes = isOur ? m.Notes : $"LM|{m.HomeTeamId}|{m.HomeTeamName}|{m.AwayTeamId}|{m.AwayTeamName}"
         };
     }
@@ -230,7 +233,8 @@ public static class SupabaseMappers
             Kind = kind,
             LocationName = d.location_name,
             LocationUrl = d.location_url ?? "",
-            Status = (MatchStatus)d.status
+            Status = (MatchStatus)d.status,
+            IsTimeConfirmed = d.is_time_confirmed
         };
 
         if (!string.IsNullOrEmpty(d.notes) && d.notes.StartsWith("LM|"))
@@ -381,14 +385,16 @@ public static class SupabaseMappers
     {
         match_id = l.MatchId,
         formation = l.Formation,
-        starting_player_ids = l.StartingPlayerIds
+        starting_player_ids = l.StartingPlayerIds,
+        is_confirmed = l.IsConfirmed
     };
 
     public static MatchLineup FromDto(SupabaseMatchLineupDto d) => new()
     {
         MatchId = d.match_id,
         Formation = string.IsNullOrWhiteSpace(d.formation) ? "4-3-3" : d.formation,
-        StartingPlayerIds = d.starting_player_ids ?? new()
+        StartingPlayerIds = d.starting_player_ids ?? new(),
+        IsConfirmed = d.is_confirmed
     };
 
     public static SupabaseAnnouncementDto ToDto(TeamAnnouncement a) => new()

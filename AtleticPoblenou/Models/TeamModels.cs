@@ -168,6 +168,9 @@ public class Match
     public int? AwayScore { get; set; }
     public MatchStatus Status { get; set; } = MatchStatus.Upcoming;
 
+    /// <summary>Si la hora todavía puede cambiar (a confirmar con el rival/liga) o ya es definitiva.</summary>
+    public bool IsTimeConfirmed { get; set; } = true;
+
     // Cancha y notas
     public string LocationName { get; set; } = "Camp Agapito Fernández (Poblenou)";
     public string LocationUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
@@ -311,6 +314,8 @@ public class MatchLineup
     public string Formation { get; set; } = "4-3-3";
     /// <summary>11 huecos en el mismo orden que la pizarra. Null en un hueco = sin asignar.</summary>
     public List<string?> StartingPlayerIds { get; set; } = new();
+    /// <summary>Si el DT ya la dio por definitiva o todavía es un borrador/sugerencia sujeta a cambios.</summary>
+    public bool IsConfirmed { get; set; } = false;
 }
 
 public class TeamAnnouncement

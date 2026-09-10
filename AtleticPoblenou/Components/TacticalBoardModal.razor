@@ -52,6 +52,24 @@
             <!-- Content Area: Pitch & Bench -->
             <div class="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3">
 
+            @if (!_emptyHistorical)
+            {
+                @if (_isConfirmed)
+                {
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-okbg border border-ok/40 text-oktext text-xs font-bold">
+                        <span>✓</span>
+                        <span>Alineación confirmada por el DT</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-warnbg border border-warn/40 text-warntext text-xs font-bold">
+                        <span>⏳</span>
+                        <span>Borrador · todavía puede cambiar</span>
+                    </div>
+                }
+            }
+
             @if (_emptyHistorical)
             {
                 <div class="bg-well border border-line rounded-xl p-8 text-center space-y-2">
@@ -190,14 +208,23 @@
             </div>
 
             <!-- Modal Footer -->
-            <div class="p-3 sm:p-4 border-t border-line bg-surface shrink-0 flex gap-2">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well hover:bg-well2 text-ink font-bold rounded-xl text-xs transition">
-                    Cerrar
-                </button>
-                <button @onclick="ShareTacticalLineupWhatsApp" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
-                    <span>Enviar al Grupo</span>
-                </button>
+            <div class="p-3 sm:p-4 border-t border-line bg-surface shrink-0 space-y-2">
+                @if (!IsReadOnly && !_isConfirmed && !_emptyHistorical)
+                {
+                    <button @onclick="ConfirmLineup" class="w-full py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                        <span>✓</span>
+                        <span>Confirmar alineación</span>
+                    </button>
+                }
+                <div class="flex gap-2">
+                    <button @onclick="Close" class="flex-1 py-2.5 bg-well hover:bg-well2 text-ink font-bold rounded-xl text-xs transition">
+                        Cerrar
+                    </button>
+                    <button @onclick="ShareTacticalLineupWhatsApp" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                        <span>Enviar al Grupo</span>
+                    </button>
+                </div>
             </div>
 
         </div>
@@ -257,6 +284,7 @@
     private List<UserProfile> _availablePool = new();
     private int? _swapSlotIndex = null;
     private string? _loadedForMatchId = null;
+    private bool _isConfirmed = false;
     /// <summary>Partido ya finalizado sin ninguna alineación guardada: no hay nada que mostrar ni que auto-armar.</summary>
     private bool _emptyHistorical = false;
 
@@ -296,6 +324,7 @@
                 .ToList();
             while (_startingEleven.Count < 11) _startingEleven.Add(null);
             if (_startingEleven.Count > 11) _startingEleven = _startingEleven.Take(11).ToList();
+            _isConfirmed = saved.IsConfirmed;
         }
         else if (Match.Status == MatchStatus.Finished)
         {
@@ -303,10 +332,13 @@
             // armar "una sugerencia" de un partido que ya pasó no tendría sentido.
             _startingEleven = new List<UserProfile?>(new UserProfile?[11]);
             _emptyHistorical = true;
+            _isConfirmed = false;
         }
         else
         {
+            // Sugerencia automática, todavía nadie del cuerpo técnico la revisó: siempre arranca como borrador.
             _startingEleven = AutoAssignByPosition(pool, _selectedFormation);
+            _isConfirmed = false;
         }
 
         RecomputeBench(pool);
@@ -381,6 +413,7 @@
         _startingEleven = AutoAssignByPosition(combinedPool, formation);
         RecomputeBench(combinedPool);
 
+        _isConfirmed = false;
         await SaveLineupAsync();
     }
 
@@ -411,6 +444,7 @@
         }
 
         _swapSlotIndex = null;
+        _isConfirmed = false;
         await SaveLineupAsync();
     }
 
@@ -434,6 +468,15 @@
         }
 
         _substitutes.Remove(sub);
+        _isConfirmed = false;
+        await SaveLineupAsync();
+    }
+
+    /// <summary>Solo el DT (o Admin) puede darla por definitiva; cualquier retoque posterior la vuelve a marcar como borrador.</summary>
+    private async Task ConfirmLineup()
+    {
+        if (IsReadOnly) return;
+        _isConfirmed = true;
         await SaveLineupAsync();
     }
 
@@ -444,7 +487,8 @@
         {
             MatchId = Match.Id,
             Formation = _selectedFormation,
-            StartingPlayerIds = _startingEleven.Select(p => p?.Id).ToList()
+            StartingPlayerIds = _startingEleven.Select(p => p?.Id).ToList(),
+            IsConfirmed = _isConfirmed
         };
         await TeamService.SaveLineupAsync(lineup);
     }
@@ -496,7 +540,9 @@
         var rivalName = !string.IsNullOrEmpty(Match.Opponent) ? Match.Opponent : (rival?.Name ?? "Rival");
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("🟢 *ALINEACIÓN CONFIRMADA · ATLÈTIC POBLENOU*");
+        sb.AppendLine(_isConfirmed
+            ? "🟢 *ALINEACIÓN CONFIRMADA · ATLÈTIC POBLENOU*"
+            : "🟡 *ALINEACIÓN (BORRADOR, PUEDE CAMBIAR) · ATLÈTIC POBLENOU*");
         sb.AppendLine($"⚽ *Partido:* ATº POBLENOU vs {rivalName}");
         sb.AppendLine($"📅 *Fecha:* {Match.MatchDate:dddd d MMM · HH:mm} h");
         sb.AppendLine($"📐 *Sistema Táctico:* {_selectedFormation}");

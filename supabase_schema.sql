@@ -53,6 +53,7 @@ CREATE TABLE public.matches (
     our_score INTEGER,
     rival_score INTEGER,
     status INTEGER DEFAULT 0, -- 0: Upcoming, 1: Finished, 2: Cancelled
+    is_time_confirmed BOOLEAN NOT NULL DEFAULT TRUE,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT check_no_mock_matches CHECK (id NOT IN ('match-1', 'match-2'))
@@ -113,6 +114,7 @@ CREATE TABLE public.match_lineups (
     match_id TEXT PRIMARY KEY REFERENCES public.matches(id) ON DELETE CASCADE,
     formation TEXT NOT NULL DEFAULT '4-3-3',
     starting_player_ids JSONB NOT NULL DEFAULT '[]'::jsonb, -- 11 huecos en orden; null = hueco vacío
+    is_confirmed BOOLEAN NOT NULL DEFAULT FALSE, -- si el DT ya la dio por definitiva o sigue siendo borrador
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
