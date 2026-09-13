@@ -19,6 +19,13 @@
             </div>
 
             <div class="space-y-3 text-xs">
+                @if (!string.IsNullOrEmpty(PreselectedPlayerId))
+                {
+                    <div class="bg-clubbg border border-club/30 rounded-lg p-2.5 text-center">
+                        <span class="text-[11px] text-muted">Cargando pago para:</span>
+                        <div class="font-extrabold text-clubtext text-sm">@_selectedPlayerName</div>
+                    </div>
+                }
                 <!-- Select Player -->
                 <div>
                     <label class="font-bold text-ink2 block mb-1">Jugador que realizó el pago</label>
@@ -118,17 +125,27 @@
     private string _concept = "Cuota Octubre";
     private PaymentMethod _method = PaymentMethod.Bizum;
     private DateTime _paymentDate = DateTime.Today;
+    private bool _wasOpen = false;
 
+    private string? _selectedPlayerName => TeamService.GetProfileById(_selectedPlayerId)?.FullName;
+
+    /// <summary>Esto vive montado siempre en Home (no se destruye al cerrar), así que si solo
+    /// mirábamos PreselectedPlayerId, un pago cargado antes para otro jugador (o un monto/concepto
+    /// que quedó tipeado) seguía pegado la próxima vez que se abría. Reiniciar todo justo cuando
+    /// pasa de cerrado a abierto asegura que siempre arranca en blanco con el jugador correcto.</summary>
     protected override void OnParametersSet()
     {
-        if (!string.IsNullOrEmpty(PreselectedPlayerId))
+        if (IsOpen && !_wasOpen)
         {
-            _selectedPlayerId = PreselectedPlayerId;
+            _selectedPlayerId = !string.IsNullOrEmpty(PreselectedPlayerId)
+                ? PreselectedPlayerId
+                : (TeamService.GetProfiles().FirstOrDefault()?.Id ?? "");
+            _amount = 20.00m;
+            _concept = "Cuota Octubre";
+            _method = PaymentMethod.Bizum;
+            _paymentDate = DateTime.Today;
         }
-        else if (string.IsNullOrEmpty(_selectedPlayerId) && TeamService.GetProfiles().Any())
-        {
-            _selectedPlayerId = TeamService.GetProfiles().First().Id;
-        }
+        _wasOpen = IsOpen;
     }
 
     private void SelectQuickAmount(decimal amount, string defaultConcept = "")

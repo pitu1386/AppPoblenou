@@ -70,7 +70,7 @@ else
     <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
     <MatchReportViewModal @bind-IsOpen="_showMatchReportViewModal" TargetMatch="_selectedMatchForView" />
     <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
-    <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="_selectedPlayerForPayment" />
+    <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="@_selectedPlayerForPayment" />
     <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
     <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" TargetTeam="_selectedRivalForEdit" />
     <CreateAnnouncementModal @bind-IsOpen="_showCreateAnnouncementModal" />

@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.11.1", new[]
+        {
+            "🐛 Al 'Cargar pago a este jugador' desde Pagos → Aportes ahora sí abre con ese jugador ya elegido (antes no lo traía).",
+        }),
         ("2.11", new[]
         {
             "🔄 En 'Próximo partido' el orden de local/visitante ahora coincide con el del Fixture (antes siempre aparecíamos arriba).",
