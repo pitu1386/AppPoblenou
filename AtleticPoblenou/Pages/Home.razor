@@ -31,6 +31,7 @@ else
                 <MatchesTab OnCreateMatch="() => OpenMatchModal(null)"
                             OnEditMatch="OpenMatchModal"
                             OnRecordResult="OpenRecordResult"
+                            OnViewReport="OpenMatchReportView"
                             OnOpenCreateTeam="OpenCreateTeam"
                             OnOpenEditTeam="OpenEditTeam"
                             OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
@@ -67,6 +68,7 @@ else
 
     <CreateMatchModal @bind-IsOpen="_showCreateMatchModal" TargetMatch="_selectedMatchForEdit" />
     <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
+    <MatchReportViewModal @bind-IsOpen="_showMatchReportViewModal" TargetMatch="_selectedMatchForView" />
     <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
     <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="_selectedPlayerForPayment" />
     <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
@@ -100,6 +102,7 @@ else
 
     private bool _showCreateMatchModal = false;
     private bool _showRecordResultModal = false;
+    private bool _showMatchReportViewModal = false;
     private bool _showRoundResultsModal = false;
     private bool _showDirectPaymentModal = false;
     private bool _showPlayerSheetModal = false;
@@ -110,6 +113,7 @@ else
     private bool _showInstallModal = false;
 
     private Match? _selectedMatchForScore;
+    private Match? _selectedMatchForView;
     private Match? _selectedMatchForEdit;
     private string? _selectedPlayerForPayment;
     private UserProfile? _selectedProfileForSheet;
@@ -153,6 +157,12 @@ else
     {
         _selectedMatchForScore = match;
         _showRecordResultModal = true;
+    }
+
+    private void OpenMatchReportView(Match match)
+    {
+        _selectedMatchForView = match;
+        _showMatchReportViewModal = true;
     }
 
     private void OpenDirectPayment(string? playerId)

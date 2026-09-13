@@ -35,27 +35,45 @@
                     {
                         var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
                         var currentRank = rank++;
+                        var rowKey = "goals-" + kv.Key;
 
-                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
-                            <div class="flex items-center gap-3">
-                                <!-- Rank Medal -->
-                                <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs @(currentRank == 1 ? "bg-warn text-black" : currentRank == 2 ? "bg-line2 text-black" : currentRank == 3 ? "bg-warn text-white" : "bg-well2 text-muted")">
-                                    @currentRank
-                                </div>
-
-                                <div>
-                                    <div class="font-bold text-sm text-ink flex items-center gap-1.5">
-                                        <span>@player?.Nickname</span>
-                                        <span class="text-xs text-muted font-cond">#@(player?.JerseyNumber?.ToString() ?? "-")</span>
+                        <div class="p-3.5 hover:bg-well transition cursor-pointer" @onclick="() => ToggleStatRow(rowKey)">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <!-- Rank Medal -->
+                                    <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs @(currentRank == 1 ? "bg-warn text-black" : currentRank == 2 ? "bg-line2 text-black" : currentRank == 3 ? "bg-warn text-white" : "bg-well2 text-muted")">
+                                        @currentRank
                                     </div>
-                                    <div class="text-xs text-muted">@player?.Position</div>
+
+                                    <div>
+                                        <div class="font-bold text-sm text-ink flex items-center gap-1.5">
+                                            <span>@player?.Nickname</span>
+                                            <span class="text-xs text-muted font-cond">#@(player?.JerseyNumber?.ToString() ?? "-")</span>
+                                        </div>
+                                        <div class="text-xs text-muted">@player?.Position</div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
+                                        <span class="font-extrabold text-sm text-ink font-cond">@kv.Value</span>
+                                    </div>
+                                    <span class="text-faint text-xs font-bold transition-transform @(_expandedStatRow == rowKey ? "rotate-90 text-ink" : "")">›</span>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
-
-                                <span class="font-extrabold text-sm text-ink font-cond">@kv.Value</span>
-                            </div>
+                            @if (_expandedStatRow == rowKey)
+                            {
+                                <div class="mt-2.5 pt-2.5 border-t border-line space-y-1.5" @onclick:stopPropagation="true">
+                                    @foreach (var (match, count) in GetBreakdown(kv.Key, EventType.Goal))
+                                    {
+                                        <div class="flex items-center justify-between text-xs bg-well px-2.5 py-1.5 rounded-lg">
+                                            <span class="text-ink2">Jornada @match.Round · vs @match.Opponent</span>
+                                            <span class="font-bold text-ink">@count @(count == 1 ? "gol" : "goles")</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -88,22 +106,40 @@
                     {
                         var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
                         var currentRank = rank++;
+                        var rowKey = "assists-" + kv.Key;
 
-                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
-                            <div class="flex items-center gap-3">
-                                <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs bg-well2 text-infotext border border-line2">
-                                    @currentRank
+                        <div class="p-3.5 hover:bg-well transition cursor-pointer" @onclick="() => ToggleStatRow(rowKey)">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-7 h-7 rounded-full flex items-center justify-center font-extrabold text-xs bg-well2 text-infotext border border-line2">
+                                        @currentRank
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                        <div class="text-xs text-muted">@player?.Position</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div class="font-bold text-sm text-ink">@player?.Nickname</div>
-                                    <div class="text-xs text-muted">@player?.Position</div>
+
+                                <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
+                                        <span class="font-extrabold text-sm text-infotext font-cond">@kv.Value</span>
+                                    </div>
+                                    <span class="text-faint text-xs font-bold transition-transform @(_expandedStatRow == rowKey ? "rotate-90 text-ink" : "")">›</span>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-1 bg-well px-3 py-1 rounded-lg border border-line">
-
-                                <span class="font-extrabold text-sm text-infotext font-cond">@kv.Value</span>
-                            </div>
+                            @if (_expandedStatRow == rowKey)
+                            {
+                                <div class="mt-2.5 pt-2.5 border-t border-line space-y-1.5" @onclick:stopPropagation="true">
+                                    @foreach (var (match, count) in GetBreakdown(kv.Key, EventType.Assist))
+                                    {
+                                        <div class="flex items-center justify-between text-xs bg-well px-2.5 py-1.5 rounded-lg">
+                                            <span class="text-ink2">Jornada @match.Round · vs @match.Opponent</span>
+                                            <span class="font-bold text-ink">@count @(count == 1 ? "asistencia" : "asistencias")</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -133,34 +169,54 @@
                     @foreach (var kv in cards)
                     {
                         var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+                        var rowKey = "cards-" + kv.Key;
 
-                        <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
-                            <div class="flex items-center gap-3">
-                                <span class="w-7 h-7 rounded-full bg-well2 border border-line2 flex items-center justify-center text-xs font-cond font-bold text-muted">
-                                    @(player?.JerseyNumber?.ToString() ?? "-")
-                                </span>
-                                <div>
-                                    <div class="font-bold text-sm text-ink">@player?.Nickname</div>
-                                    <div class="text-xs text-muted">@player?.Position</div>
+                        <div class="p-3.5 hover:bg-well transition cursor-pointer" @onclick="() => ToggleStatRow(rowKey)">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-7 h-7 rounded-full bg-well2 border border-line2 flex items-center justify-center text-xs font-cond font-bold text-muted">
+                                        @(player?.JerseyNumber?.ToString() ?? "-")
+                                    </span>
+                                    <div>
+                                        <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                        <div class="text-xs text-muted">@player?.Position</div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    @if (kv.Value.Yellows > 0)
+                                    {
+                                        <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-warnbg border border-warn/40 text-warntext text-xs font-cond font-bold">
+                                            <span class="w-2.5 h-3.5 bg-warn rounded-sm"></span>
+                                            <span>@kv.Value.Yellows</span>
+                                        </div>
+                                    }
+                                    @if (kv.Value.Reds > 0)
+                                    {
+                                        <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-clubbg border border-club/40 text-clubtext text-xs font-cond font-bold">
+                                            <span class="w-2.5 h-3.5 bg-club rounded-sm"></span>
+                                            <span>@kv.Value.Reds</span>
+                                        </div>
+                                    }
+                                    <span class="text-faint text-xs font-bold transition-transform @(_expandedStatRow == rowKey ? "rotate-90 text-ink" : "")">›</span>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-2">
-                                @if (kv.Value.Yellows > 0)
-                                {
-                                    <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-warnbg border border-warn/40 text-warntext text-xs font-cond font-bold">
-                                        <span class="w-2.5 h-3.5 bg-warn rounded-sm"></span>
-                                        <span>@kv.Value.Yellows</span>
-                                    </div>
-                                }
-                                @if (kv.Value.Reds > 0)
-                                {
-                                    <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-clubbg border border-club/40 text-clubtext text-xs font-cond font-bold">
-                                        <span class="w-2.5 h-3.5 bg-club rounded-sm"></span>
-                                        <span>@kv.Value.Reds</span>
-                                    </div>
-                                }
-                            </div>
+                            @if (_expandedStatRow == rowKey)
+                            {
+                                <div class="mt-2.5 pt-2.5 border-t border-line space-y-1.5" @onclick:stopPropagation="true">
+                                    @foreach (var (match, yellows, reds) in GetCardBreakdown(kv.Key))
+                                    {
+                                        <div class="flex items-center justify-between text-xs bg-well px-2.5 py-1.5 rounded-lg">
+                                            <span class="text-ink2">Jornada @match.Round · vs @match.Opponent</span>
+                                            <span class="font-bold text-ink flex items-center gap-2">
+                                                @if (yellows > 0) { <span class="flex items-center gap-1"><span class="w-2 h-3 bg-warn rounded-sm inline-block"></span>@yellows</span> }
+                                                @if (reds > 0) { <span class="flex items-center gap-1"><span class="w-2 h-3 bg-club rounded-sm inline-block"></span>@reds</span> }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -182,19 +238,37 @@
                 @foreach (var kv in mvps)
                 {
                     var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == kv.Key);
+                    var rowKey = "mvp-" + kv.Key;
 
-                    <div class="p-3.5 flex items-center justify-between hover:bg-well transition">
-                        <div class="flex items-center gap-3">
+                    <div class="p-3.5 hover:bg-well transition cursor-pointer" @onclick="() => ToggleStatRow(rowKey)">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div>
+                                    <div class="font-bold text-sm text-ink">@player?.Nickname</div>
+                                    <div class="text-xs text-muted">@player?.Position</div>
+                                </div>
+                            </div>
 
-                            <div>
-                                <div class="font-bold text-sm text-ink">@player?.Nickname</div>
-                                <div class="text-xs text-muted">@player?.Position</div>
+                            <div class="flex items-center gap-2">
+                                <div class="bg-warnbg border border-warn/40 px-3 py-1 rounded-lg text-warntext font-bold text-xs font-cond">
+                                    @kv.Value MVP@(kv.Value > 1 ? "s" : "")
+                                </div>
+                                <span class="text-faint text-xs font-bold transition-transform @(_expandedStatRow == rowKey ? "rotate-90 text-ink" : "")">›</span>
                             </div>
                         </div>
 
-                        <div class="bg-warnbg border border-warn/40 px-3 py-1 rounded-lg text-warntext font-bold text-xs font-cond">
-                            @kv.Value MVP@(kv.Value > 1 ? "s" : "")
-                        </div>
+                        @if (_expandedStatRow == rowKey)
+                        {
+                            <div class="mt-2.5 pt-2.5 border-t border-line space-y-1.5" @onclick:stopPropagation="true">
+                                @foreach (var (match, _) in GetBreakdown(kv.Key, EventType.Mvp))
+                                {
+                                    <div class="flex items-center justify-between text-xs bg-well px-2.5 py-1.5 rounded-lg">
+                                        <span class="text-ink2">Jornada @match.Round · vs @match.Opponent</span>
+                                        <span class="font-bold text-ink">@match.MatchDate.ToString("dd/MM/yyyy")</span>
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -205,4 +279,26 @@
 
 @code {
     private string _statType = "goals"; // "goals", "assists", "cards", "mvp"
+    private string? _expandedStatRow = null;
+
+    private void ToggleStatRow(string rowKey) => _expandedStatRow = _expandedStatRow == rowKey ? null : rowKey;
+
+    /// <summary>Partidos en los que un jugador sumó ese tipo de evento, con cuántas veces en cada uno.</summary>
+    private List<(Match Match, int Count)> GetBreakdown(string playerId, EventType type) =>
+        TeamService.GetMatchEvents()
+            .Where(e => e.PlayerId == playerId && e.EventType == type)
+            .GroupBy(e => e.MatchId)
+            .Select(g => (MatchId: g.Key, Count: g.Count()))
+            .Join(TeamService.GetMatches(), x => x.MatchId, m => m.Id, (x, m) => (Match: m, x.Count))
+            .OrderByDescending(x => x.Match.MatchDate)
+            .ToList();
+
+    private List<(Match Match, int Yellows, int Reds)> GetCardBreakdown(string playerId) =>
+        TeamService.GetMatchEvents()
+            .Where(e => e.PlayerId == playerId && e.EventType is EventType.YellowCard or EventType.RedCard)
+            .GroupBy(e => e.MatchId)
+            .Select(g => (MatchId: g.Key, Yellows: g.Count(e => e.EventType == EventType.YellowCard), Reds: g.Count(e => e.EventType == EventType.RedCard)))
+            .Join(TeamService.GetMatches(), x => x.MatchId, m => m.Id, (x, m) => (Match: m, x.Yellows, x.Reds))
+            .OrderByDescending(x => x.Match.MatchDate)
+            .ToList();
 }

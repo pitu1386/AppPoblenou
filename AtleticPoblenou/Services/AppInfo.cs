@@ -32,6 +32,12 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.11", new[]
+        {
+            "🔄 En 'Próximo partido' el orden de local/visitante ahora coincide con el del Fixture (antes siempre aparecíamos arriba).",
+            "📋 Nuevo botón 'Ver Acta' en los partidos finalizados: resumen de goleadores, asistencias, MVP y tarjetas sin entrar a editar.",
+            "📊 En Estadísticas (Goleadores, Asistencias, Tarjetas, MVP), tocá un jugador para ver el detalle partido por partido.",
+        }),
         ("2.10", new[]
         {
             "📅 Fixture completo de la liga cargado (las 30 jornadas), con los escudos de cada club y su cancha.",

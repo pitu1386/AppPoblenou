@@ -1,0 +1,175 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen && TargetMatch != null)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div>
+                    <h3 class="font-extrabold text-ink text-base">Acta del Partido</h3>
+                    <p class="text-xs text-muted">vs @TargetMatch.Opponent • Jornada @TargetMatch.Round</p>
+                </div>
+                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <!-- FINAL SCORE -->
+            <div class="bg-well p-4 rounded-xl border border-line text-center">
+                <div class="text-xs font-bold text-muted mb-2">Marcador Final</div>
+                <div class="flex items-center justify-center gap-4">
+                    <div class="flex-1">
+                        <div class="text-xs font-bold text-clubtext mb-1">A.P.N. Poblenou</div>
+                        <div class="text-3xl font-extrabold text-ink font-cond">@TargetMatch.OurScore</div>
+                    </div>
+                    <span class="text-2xl font-extrabold text-faint">-</span>
+                    <div class="flex-1">
+                        <div class="text-xs font-bold text-muted mb-1 truncate">@TargetMatch.Opponent</div>
+                        <div class="text-3xl font-extrabold text-ink font-cond">@TargetMatch.RivalScore</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GOALS -->
+            <div class="space-y-2">
+                <div class="text-xs font-bold text-ink2">Goles del Atlètic Poblenou (@_goalRows.Sum(g => g.Count))</div>
+                @if (!_goalRows.Any() && _ownGoals == 0)
+                {
+                    <div class="p-3 bg-well rounded-lg border border-line text-xs text-faint text-center">
+                        No hay goles registrados en esta acta.
+                    </div>
+                }
+                else
+                {
+                    <div class="space-y-1.5">
+                        @foreach (var g in _goalRows)
+                        {
+                            <div class="bg-well p-2.5 rounded-xl border border-line flex items-center justify-between text-xs">
+                                <div class="font-bold text-ink flex items-center gap-1.5">
+                                    <span>⚽</span>
+                                    <span>@g.Player?.Nickname</span>
+                                    <span class="text-faint font-cond">#@(g.Player?.JerseyNumber?.ToString() ?? "-")</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    @if (!string.IsNullOrEmpty(g.AssistPlayerName))
+                                    {
+                                        <span class="text-infotext">🅰️ @g.AssistPlayerName</span>
+                                    }
+                                    <span class="font-extrabold text-ink font-cond">@g.Count</span>
+                                </div>
+                            </div>
+                        }
+                        @if (_ownGoals > 0)
+                        {
+                            <div class="bg-warnbg p-2.5 rounded-xl border border-warn/40 flex items-center justify-between text-xs">
+                                <span class="font-bold text-warntext">Gol en contra del rival</span>
+                                <span class="font-extrabold text-warntext font-cond">@_ownGoals</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- MVP -->
+            @if (_mvpPlayer != null)
+            {
+                <div class="bg-warnbg border border-warn/40 rounded-xl p-3 flex items-center justify-between">
+                    <span class="text-xs font-bold text-warntext">🏆 MVP del Partido</span>
+                    <span class="text-sm font-extrabold text-warntext">@_mvpPlayer.Nickname</span>
+                </div>
+            }
+
+            <!-- CARDS -->
+            @if (_cardRows.Any())
+            {
+                <div class="space-y-2">
+                    <div class="text-xs font-bold text-ink2">Tarjetas Disciplinarias</div>
+                    <div class="space-y-1.5">
+                        @foreach (var c in _cardRows)
+                        {
+                            <div class="flex items-center justify-between bg-well p-2 rounded-lg border border-line text-xs">
+                                <span class="font-bold text-ink">@c.Player?.Nickname</span>
+                                <span class="w-2.5 h-3.5 rounded-sm inline-block @(c.IsRed ? "bg-club" : "bg-warn")"></span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="pt-2 border-t border-line">
+                <button @onclick="Close" class="w-full py-2.5 bg-well2 hover:bg-well2 text-ink font-bold rounded-lg text-xs transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public Match? TargetMatch { get; set; }
+
+    private List<(UserProfile? Player, int Count, string? AssistPlayerName)> _goalRows = new();
+    private int _ownGoals;
+    private UserProfile? _mvpPlayer;
+    private List<(UserProfile? Player, bool IsRed)> _cardRows = new();
+    private string? _loadedForMatchId;
+
+    protected override void OnParametersSet()
+    {
+        if (TargetMatch != null && IsOpen && TargetMatch.Id != _loadedForMatchId)
+        {
+            _loadedForMatchId = TargetMatch.Id;
+            Load();
+        }
+        else if (!IsOpen)
+        {
+            _loadedForMatchId = null;
+        }
+    }
+
+    private void Load()
+    {
+        if (TargetMatch == null) return;
+
+        var events = TeamService.GetMatchEvents().Where(e => e.MatchId == TargetMatch.Id).ToList();
+        var goalEvents = events.Where(e => e.EventType == EventType.Goal).ToList();
+        var assistEvents = events.Where(e => e.EventType == EventType.Assist).ToList();
+        var usedAssistIds = new HashSet<string>();
+
+        _goalRows = new();
+        foreach (var group in goalEvents.GroupBy(e => e.PlayerId))
+        {
+            string? assistName = null;
+            if (group.Count() == 1)
+            {
+                var single = group.First();
+                var assist = assistEvents.FirstOrDefault(a => !usedAssistIds.Contains(a.Id) && a.Minute == single.Minute);
+                if (assist != null)
+                {
+                    usedAssistIds.Add(assist.Id);
+                    assistName = TeamService.GetProfileById(assist.PlayerId)?.Nickname;
+                }
+            }
+            _goalRows.Add((TeamService.GetProfileById(group.Key), group.Count(), assistName));
+        }
+
+        _ownGoals = Math.Max(0, (TargetMatch.OurScore ?? 0) - _goalRows.Sum(g => g.Count));
+
+        _cardRows = events.Where(e => e.EventType is EventType.YellowCard or EventType.RedCard)
+            .Select(e => (TeamService.GetProfileById(e.PlayerId), e.EventType == EventType.RedCard))
+            .ToList();
+
+        var mvpId = events.FirstOrDefault(e => e.EventType == EventType.Mvp)?.PlayerId;
+        _mvpPlayer = !string.IsNullOrEmpty(mvpId) ? TeamService.GetProfileById(mvpId) : null;
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
