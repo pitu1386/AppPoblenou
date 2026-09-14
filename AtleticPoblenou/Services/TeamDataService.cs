@@ -18,7 +18,7 @@ public class TeamDataService : ITeamDataService, IDisposable
 
     private static readonly string[] Tables =
     {
-        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements", "match_lineups"
+        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements", "match_lineups", "expense_budget"
     };
 
     private readonly IJSRuntime _js;
@@ -41,6 +41,7 @@ public class TeamDataService : ITeamDataService, IDisposable
     private List<TeamExpense> _expenses = new();
     private List<MatchEvent> _matchEvents = new();
     private List<MatchLineup> _matchLineups = new();
+    private Dictionary<string, decimal> _expenseBudget = new();
 
     public TeamDataService(IJSRuntime js, SupabaseAuthService auth, SupabaseClientService supabase)
     {
@@ -174,6 +175,9 @@ public class TeamDataService : ITeamDataService, IDisposable
                     break;
                 case "announcements":
                     _announcements = await _supabase.FetchAnnouncementsAsync();
+                    break;
+                case "expense_budget":
+                    _expenseBudget = await _supabase.FetchExpenseBudgetAsync();
                     break;
                 default:
                     return false;
@@ -320,6 +324,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             _matchEvents = await ReadCacheAsync<List<MatchEvent>>("match_events") ?? new();
             _matchLineups = await ReadCacheAsync<List<MatchLineup>>("match_lineups") ?? new();
             _announcements = await ReadCacheAsync<List<TeamAnnouncement>>("announcements") ?? new();
+            _expenseBudget = await ReadCacheAsync<Dictionary<string, decimal>>("expense_budget") ?? new();
         }
         catch
         {
@@ -347,6 +352,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             "match_events" => _matchEvents,
             "match_lineups" => _matchLineups,
             "announcements" => _announcements,
+            "expense_budget" => _expenseBudget,
             _ => new()
         };
         try { await _js.InvokeVoidAsync("blazorLocalStorage.set", CachePrefix + table, JsonSerializer.Serialize(data)); } catch { }
@@ -373,6 +379,7 @@ public class TeamDataService : ITeamDataService, IDisposable
         _matchEvents = new();
         _matchLineups = new();
         _announcements = new();
+        _expenseBudget = new();
     }
 
     private void EnsureOwnerAdminProtected()
@@ -615,6 +622,15 @@ public class TeamDataService : ITeamDataService, IDisposable
         _clubSettings = settings;
         NotifyStateChanged();
         await WriteAndRefreshAsync(() => _supabase.UpsertClubSettingsAsync(settings), "club_settings");
+    }
+
+    public Dictionary<string, decimal> GetExpenseBudget() => _expenseBudget;
+
+    public async Task SaveExpenseBudgetAsync(Dictionary<string, decimal> budget)
+    {
+        _expenseBudget = budget;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertExpenseBudgetAsync(budget), "expense_budget");
     }
 
     // ==========================================
@@ -1037,7 +1053,7 @@ public class TeamDataService : ITeamDataService, IDisposable
     public List<Payment> GetPaymentsForUser(string playerId) =>
         _payments.Where(p => p.PlayerId == playerId).OrderByDescending(p => p.PaidAt ?? DateTime.MinValue).ToList();
 
-    public async Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "")
+    public async Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "", string category = "Cuota Jugador", string receivedByPlayerId = "")
     {
         var payment = new Payment
         {
@@ -1047,7 +1063,9 @@ public class TeamDataService : ITeamDataService, IDisposable
             Status = PaymentStatus.Paid,
             PaidAt = paidAt ?? DateTime.UtcNow,
             Method = method,
-            Notes = notes
+            Notes = notes,
+            Category = category,
+            ReceivedByPlayerId = receivedByPlayerId
         };
         _payments.Insert(0, payment);
         NotifyStateChanged();
@@ -1087,6 +1105,15 @@ public class TeamDataService : ITeamDataService, IDisposable
         if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
     }
 
+    public async Task UpdatePaymentAsync(Payment payment)
+    {
+        var idx = _payments.FindIndex(p => p.Id == payment.Id);
+        if (idx < 0) return;
+        _payments[idx] = payment;
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertPaymentAsync(payment), "payments");
+    }
+
     public async Task DeletePaymentAsync(string paymentId)
     {
         _payments.RemoveAll(p => p.Id == paymentId);
@@ -1110,6 +1137,15 @@ public class TeamDataService : ITeamDataService, IDisposable
     public async Task AddExpenseAsync(TeamExpense expense)
     {
         _expenses.Insert(0, expense);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertExpenseAsync(expense), "team_expenses");
+    }
+
+    public async Task UpdateExpenseAsync(TeamExpense expense)
+    {
+        var idx = _expenses.FindIndex(e => e.Id == expense.Id);
+        if (idx < 0) return;
+        _expenses[idx] = expense;
         NotifyStateChanged();
         await WriteAndRefreshAsync(() => _supabase.UpsertExpenseAsync(expense), "team_expenses");
     }

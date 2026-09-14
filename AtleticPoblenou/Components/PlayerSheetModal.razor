@@ -54,6 +54,12 @@
                                         ⛔ EXENTO DE CUOTA
                                     </span>
                                 }
+                                @if (TargetProfile.CanReceivePayments)
+                                {
+                                    <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-okbg text-oktext border border-ok/40">
+                                        💰 RECIBE COBROS
+                                    </span>
+                                }
                                 @if (TargetProfile.IsCaptain)
                                 {
                                     <span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center gap-1">
@@ -289,6 +295,12 @@
                                     💶 Cuenta para la cuota de temporada (cartera de pagos)
                                 </span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                                <input type="checkbox" @bind="_editModel.CanReceivePayments" class="w-4 h-4 accent-ok rounded cursor-pointer" />
+                                <span class="text-xs font-bold text-oktext flex items-center gap-1">
+                                    💰 Persona que recibe cobros
+                                </span>
+                            </label>
                         </div>
                     }
 
@@ -445,7 +457,8 @@
             MedicalNotes = p.MedicalNotes,
             AvatarUrl = p.AvatarUrl,
             CreatedAt = p.CreatedAt,
-            CountsForSeasonFee = p.CountsForSeasonFee
+            CountsForSeasonFee = p.CountsForSeasonFee,
+            CanReceivePayments = p.CanReceivePayments
         };
     }
 
@@ -477,6 +490,7 @@
         TargetProfile.Dni = _editModel.Dni;
         TargetProfile.MedicalNotes = _editModel.MedicalNotes;
         TargetProfile.CountsForSeasonFee = _editModel.CountsForSeasonFee;
+        TargetProfile.CanReceivePayments = _editModel.CanReceivePayments;
 
         if (!string.IsNullOrEmpty(_newPassword))
         {

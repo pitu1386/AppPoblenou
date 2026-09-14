@@ -40,7 +40,9 @@ else
 
             case "payments":
                 <PaymentsTab OnOpenDirectPayment="OpenDirectPayment"
-                             OnAddExpense="() => _showAddExpenseModal = true" />
+                             OnEditPayment="OpenEditPayment"
+                             OnAddExpense="OpenAddExpense"
+                             OnEditExpense="OpenEditExpense" />
                 break;
 
             case "stats":
@@ -56,7 +58,7 @@ else
                           OnRecordPayment="() => OpenDirectPayment(null)"
                           OnOpenCreateTeam="OpenCreateTeam"
                           OnOpenCreateAnnouncement="() => _showCreateAnnouncementModal = true"
-                          OnAddExpense="() => _showAddExpenseModal = true"
+                          OnAddExpense="OpenAddExpense"
                           OnOpenDbModal="() => _showDbModal = true"
                           OnOpenRoundResults="() => _showRoundResultsModal = true"
                           OnOpenPlayerSheet="OpenPlayerSheet" />
@@ -70,11 +72,11 @@ else
     <RecordResultModal @bind-IsOpen="_showRecordResultModal" TargetMatch="_selectedMatchForScore" />
     <MatchReportViewModal @bind-IsOpen="_showMatchReportViewModal" TargetMatch="_selectedMatchForView" />
     <RoundResultsModal @bind-IsOpen="_showRoundResultsModal" OnOpenDetailedReport="OpenRecordResult" />
-    <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="@_selectedPlayerForPayment" />
+    <DirectPaymentModal @bind-IsOpen="_showDirectPaymentModal" PreselectedPlayerId="@_selectedPlayerForPayment" TargetPayment="_selectedPaymentForEdit" />
     <PlayerSheetModal @bind-IsOpen="_showPlayerSheetModal" TargetProfile="_selectedProfileForSheet" />
     <CreateTeamModal @bind-IsOpen="_showCreateTeamModal" TargetTeam="_selectedRivalForEdit" />
     <CreateAnnouncementModal @bind-IsOpen="_showCreateAnnouncementModal" />
-    <AddExpenseModal @bind-IsOpen="_showAddExpenseModal" />
+    <AddExpenseModal @bind-IsOpen="_showAddExpenseModal" TargetExpense="_selectedExpenseForEdit" />
     <DbConfigModal @bind-IsOpen="_showDbModal" />
     <PwaInstallModal @bind-IsOpen="_showInstallModal" />
 }
@@ -116,6 +118,8 @@ else
     private Match? _selectedMatchForView;
     private Match? _selectedMatchForEdit;
     private string? _selectedPlayerForPayment;
+    private Payment? _selectedPaymentForEdit;
+    private TeamExpense? _selectedExpenseForEdit;
     private UserProfile? _selectedProfileForSheet;
     private RivalTeam? _selectedRivalForEdit;
 
@@ -168,7 +172,27 @@ else
     private void OpenDirectPayment(string? playerId)
     {
         _selectedPlayerForPayment = playerId;
+        _selectedPaymentForEdit = null;
         _showDirectPaymentModal = true;
+    }
+
+    private void OpenEditPayment(Payment payment)
+    {
+        _selectedPaymentForEdit = payment;
+        _selectedPlayerForPayment = null;
+        _showDirectPaymentModal = true;
+    }
+
+    private void OpenAddExpense()
+    {
+        _selectedExpenseForEdit = null;
+        _showAddExpenseModal = true;
+    }
+
+    private void OpenEditExpense(TeamExpense expense)
+    {
+        _selectedExpenseForEdit = expense;
+        _showAddExpenseModal = true;
     }
 
     private void OpenPlayerSheet(UserProfile profile)

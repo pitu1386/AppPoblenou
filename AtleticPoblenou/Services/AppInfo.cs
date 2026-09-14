@@ -32,6 +32,16 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.12", new[]
+        {
+            "💰 En Pagos → Aportes se pueden cargar ingresos del club no asociados a un jugador (remanente, patrocinio, rifa...), con su propio resumen 'Otros Ingresos'.",
+            "🧑‍💼 En la ficha de cada jugador se puede marcar quién está habilitado para 'recibir cobros', y elegirlo al registrar un pago o un gasto.",
+            "✏️ Los cobros y los gastos ya cargados ahora se pueden editar, no solo borrar y volver a cargar.",
+            "🧾 En Gastos: nuevas categorías Sanciones y Fichas, y un campo de observación libre cuando se elige 'Otros'.",
+            "📊 Nueva pestaña Presupuesto en Pagos: presupuesto anual estimado por categoría comparado con lo gastado, y qué % representa cada rubro sobre el total.",
+            "💬 Nuevos mensajes de WhatsApp (solo Admin/Tesorero) para compartir la Caja del año y la ejecución del presupuesto.",
+            "🔐 El Tesorero ya puede editar el presupuesto anual él mismo (antes esa parte quedaba reservada solo al Admin).",
+        }),
         ("2.11.1", new[]
         {
             "🐛 Al 'Cargar pago a este jugador' desde Pagos → Aportes ahora sí abre con ese jugador ya elegido (antes no lo traía).",

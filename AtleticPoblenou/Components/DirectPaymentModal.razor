@@ -9,7 +9,9 @@
                 <div class="flex items-center gap-2">
 
                     <div>
-                        <h3 class="font-extrabold text-ink text-base">Registrar Cobro Recibido</h3>
+                        <h3 class="font-extrabold text-ink text-base">
+                            @(TargetPayment != null ? "Editar Cobro" : (_isPlayerPayment ? "Registrar Cobro Recibido" : "Registrar Ingreso del Club"))
+                        </h3>
                         <p class="text-xs text-warntext">Acción exclusiva del Tesorero</p>
                     </div>
                 </div>
@@ -26,16 +28,62 @@
                         <div class="font-extrabold text-clubtext text-sm">@_selectedPlayerName</div>
                     </div>
                 }
-                <!-- Select Player -->
-                <div>
-                    <label class="font-bold text-ink2 block mb-1">Jugador que realizó el pago</label>
-                    <select @bind="_selectedPlayerId" class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none">
-                        @foreach (var p in TeamService.GetProfiles())
-                        {
-                            <option value="@p.Id">@p.FullName (@p.Nickname) - #@(p.JerseyNumber?.ToString() ?? "-")</option>
-                        }
-                    </select>
-                </div>
+                else
+                {
+                    <!-- Toggle: pago de jugador vs ingreso general del club -->
+                    <div class="flex items-center gap-1 bg-well p-1 rounded-xl border border-line">
+                        <button type="button" @onclick="() => SetIsPlayerPayment(true)"
+                                class="flex-1 px-2.5 py-1.5 rounded-lg font-bold transition @(_isPlayerPayment ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink")">
+                            ⚽ Pago de jugador
+                        </button>
+                        <button type="button" @onclick="() => SetIsPlayerPayment(false)"
+                                class="flex-1 px-2.5 py-1.5 rounded-lg font-bold transition @(!_isPlayerPayment ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink")">
+                            💰 Otro ingreso
+                        </button>
+                    </div>
+                }
+
+                @if (_isPlayerPayment)
+                {
+                    <!-- Select Player -->
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Jugador que realizó el pago</label>
+                        <select @bind="_selectedPlayerId" class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none">
+                            @foreach (var p in TeamService.GetProfiles())
+                            {
+                                <option value="@p.Id">@p.FullName (@p.Nickname) - #@(p.JerseyNumber?.ToString() ?? "-")</option>
+                            }
+                        </select>
+                    </div>
+                }
+                else
+                {
+                    <!-- Select Income Category -->
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Rubro del ingreso</label>
+                        <select @bind="_category" @bind:after="OnCategoryChanged" class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none">
+                            <option value="Remanente Temporada Anterior">Remanente Temporada Anterior</option>
+                            <option value="Patrocinio">Patrocinio / Sponsor</option>
+                            <option value="Rifa / Evento">Rifa / Evento</option>
+                            <option value="Otros Ingresos">Otros Ingresos</option>
+                        </select>
+                    </div>
+                }
+
+                @if (_receivers.Any())
+                {
+                    <!-- Select Received By -->
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Recibido por</label>
+                        <select @bind="_receivedByPlayerId" class="w-full bg-well border border-line2 rounded-lg px-3 py-2.5 text-ink font-medium focus:border-club focus:outline-none">
+                            <option value="">Sin especificar</option>
+                            @foreach (var r in _receivers)
+                            {
+                                <option value="@r.Id">@r.FullName (@r.Nickname)</option>
+                            }
+                        </select>
+                    </div>
+                }
 
                 <!-- Amount -->
                 <div>
@@ -107,7 +155,7 @@
                     Cancelar
                 </button>
                 <button @onclick="SavePayment" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition">
-                    Asentar Cobro
+                    @(TargetPayment != null ? "Guardar Cambios" : (_isPlayerPayment ? "Asentar Cobro" : "Registrar Ingreso"))
                 </button>
             </div>
 
@@ -119,15 +167,20 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
     [Parameter] public string? PreselectedPlayerId { get; set; }
+    [Parameter] public Payment? TargetPayment { get; set; }
 
     private string _selectedPlayerId = "";
+    private bool _isPlayerPayment = true;
+    private string _category = "Cuota Jugador";
     private decimal _amount = 20.00m;
     private string _concept = "Cuota Octubre";
     private PaymentMethod _method = PaymentMethod.Bizum;
     private DateTime _paymentDate = DateTime.Today;
+    private string _receivedByPlayerId = "";
     private bool _wasOpen = false;
 
     private string? _selectedPlayerName => TeamService.GetProfileById(_selectedPlayerId)?.FullName;
+    private List<UserProfile> _receivers => TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
 
     /// <summary>Esto vive montado siempre en Home (no se destruye al cerrar), así que si solo
     /// mirábamos PreselectedPlayerId, un pago cargado antes para otro jugador (o un monto/concepto
@@ -137,16 +190,53 @@
     {
         if (IsOpen && !_wasOpen)
         {
-            _selectedPlayerId = !string.IsNullOrEmpty(PreselectedPlayerId)
-                ? PreselectedPlayerId
-                : (TeamService.GetProfiles().FirstOrDefault()?.Id ?? "");
-            _amount = 20.00m;
-            _concept = "Cuota Octubre";
-            _method = PaymentMethod.Bizum;
-            _paymentDate = DateTime.Today;
+            if (TargetPayment != null)
+            {
+                _isPlayerPayment = TargetPayment.IsPlayerPayment;
+                _category = TargetPayment.Category;
+                _selectedPlayerId = TargetPayment.PlayerId;
+                _amount = TargetPayment.Amount;
+                _concept = TargetPayment.Concept;
+                _method = TargetPayment.Method ?? PaymentMethod.Bizum;
+                _paymentDate = TargetPayment.PaidAt ?? DateTime.Today;
+                _receivedByPlayerId = TargetPayment.ReceivedByPlayerId;
+            }
+            else
+            {
+                _isPlayerPayment = true;
+                _category = "Cuota Jugador";
+                _selectedPlayerId = !string.IsNullOrEmpty(PreselectedPlayerId)
+                    ? PreselectedPlayerId
+                    : (TeamService.GetProfiles().FirstOrDefault()?.Id ?? "");
+                _amount = 20.00m;
+                _concept = "Cuota Octubre";
+                _method = PaymentMethod.Bizum;
+                _paymentDate = DateTime.Today;
+                _receivedByPlayerId = "";
+            }
         }
         _wasOpen = IsOpen;
     }
+
+    private void SetIsPlayerPayment(bool value)
+    {
+        _isPlayerPayment = value;
+        if (value)
+        {
+            _category = "Cuota Jugador";
+            if (string.IsNullOrEmpty(_selectedPlayerId))
+            {
+                _selectedPlayerId = TeamService.GetProfiles().FirstOrDefault()?.Id ?? "";
+            }
+        }
+        else
+        {
+            _category = "Remanente Temporada Anterior";
+            _concept = _category;
+        }
+    }
+
+    private void OnCategoryChanged() => _concept = _category;
 
     private void SelectQuickAmount(decimal amount, string defaultConcept = "")
     {
@@ -165,9 +255,26 @@
 
     private async Task SavePayment()
     {
-        if (string.IsNullOrWhiteSpace(_selectedPlayerId) || _amount <= 0 || string.IsNullOrWhiteSpace(_concept)) return;
+        if (_amount <= 0 || string.IsNullOrWhiteSpace(_concept)) return;
+        if (_isPlayerPayment && string.IsNullOrWhiteSpace(_selectedPlayerId)) return;
 
-        await TeamService.AddPaymentAsync(_selectedPlayerId, _concept, _amount, _method, _paymentDate);
+        var playerId = _isPlayerPayment ? _selectedPlayerId : "";
+
+        if (TargetPayment != null)
+        {
+            TargetPayment.PlayerId = playerId;
+            TargetPayment.Concept = _concept;
+            TargetPayment.Amount = _amount;
+            TargetPayment.Method = _method;
+            TargetPayment.PaidAt = _paymentDate;
+            TargetPayment.Category = _category;
+            TargetPayment.ReceivedByPlayerId = _receivedByPlayerId;
+            await TeamService.UpdatePaymentAsync(TargetPayment);
+        }
+        else
+        {
+            await TeamService.AddPaymentAsync(playerId, _concept, _amount, _method, _paymentDate, category: _category, receivedByPlayerId: _receivedByPlayerId);
+        }
         await Close();
     }
 }

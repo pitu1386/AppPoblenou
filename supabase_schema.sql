@@ -36,6 +36,7 @@ CREATE TABLE public.profiles (
     avatar_url TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     counts_for_season_fee BOOLEAN NOT NULL DEFAULT TRUE, -- si se lo contempla en la cartera de pagos
+    can_receive_payments BOOLEAN NOT NULL DEFAULT FALSE, -- si aparece como opción de "recibido por" al registrar un cobro
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -74,7 +75,7 @@ CREATE TABLE public.attendance (
 -- 4. PAYMENTS (Cuotas y Cobros)
 CREATE TABLE public.payments (
     id TEXT PRIMARY KEY,
-    player_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    player_id TEXT REFERENCES public.profiles(id) ON DELETE CASCADE, -- null = ingreso general del club, no asociado a un jugador
     concept TEXT NOT NULL,
     amount NUMERIC(10,2) NOT NULL DEFAULT 15.00,
     status INTEGER NOT NULL DEFAULT 0, -- 0: Pending, 1: Paid
@@ -82,6 +83,8 @@ CREATE TABLE public.payments (
     paid_at TIMESTAMPTZ,
     method INTEGER DEFAULT 0,         -- 0: Bizum, 1: Cash, 2: Transfer
     notes TEXT,
+    category TEXT NOT NULL DEFAULT 'Cuota Jugador', -- Cuota Jugador | Remanente Temporada Anterior | Patrocinio | Rifa / Evento | Otros Ingresos
+    received_by TEXT REFERENCES public.profiles(id) ON DELETE SET NULL, -- quién recibió físicamente el cobro
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -166,6 +169,12 @@ CREATE TABLE public.club_settings (
     season_history JSONB DEFAULT '[]'::jsonb
 );
 
+-- 9b. PRESUPUESTO ANUAL (tabla propia: solo Admin/Tesorero, separada de club_settings)
+CREATE TABLE public.expense_budget (
+    id TEXT PRIMARY KEY DEFAULT 'current',
+    budget JSONB NOT NULL DEFAULT '{}'::jsonb -- presupuesto anual estimado por categoría de gasto, ej. {"Árbitros": 1600}
+);
+
 -- ==========================================================
 -- DATOS INICIALES
 -- ==========================================================
@@ -196,4 +205,8 @@ VALUES
 -- Ajustes del club
 INSERT INTO public.club_settings (id, club_name, short_name, league_name, season_name, season_fee_per_player, team_secret_code)
 VALUES ('current', 'Atletic Poblenou', 'ATºPOBLENOU', 'Sábados División Honor (Temp. 26/27)', 'TEMP 26/27', 200.00, 'APN1929')
+ON CONFLICT (id) DO NOTHING;
+
+-- Presupuesto anual
+INSERT INTO public.expense_budget (id, budget) VALUES ('current', '{}'::jsonb)
 ON CONFLICT (id) DO NOTHING;

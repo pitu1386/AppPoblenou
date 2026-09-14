@@ -8,7 +8,7 @@
             <div class="flex items-center justify-between border-b border-line pb-3">
                 <div class="flex items-center gap-2">
 
-                    <h3 class="font-extrabold text-ink text-base">Registrar Gasto de Caja</h3>
+                    <h3 class="font-extrabold text-ink text-base">@(TargetExpense != null ? "Editar Gasto de Caja" : "Registrar Gasto de Caja")</h3>
                 </div>
                 <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
                     ✕
@@ -36,16 +36,41 @@
                             <option value="Material">Material / Balones</option>
                             <option value="Tercer Tiempo">Tercer Tiempo </option>
                             <option value="Inscripción">Inscripción Liga</option>
+                            <option value="Sanciones">Sanciones</option>
+                            <option value="Fichas">Fichas</option>
                             <option value="Otros">Otros</option>
                         </select>
                     </div>
                 </div>
+
+                @if (_category == "Otros")
+                {
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Observación (qué fue)</label>
+                        <input @bind="_notes" type="text" placeholder="Especificá de qué se trató este gasto..."
+                               class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                    </div>
+                }
 
                 <div>
                     <label class="font-bold text-ink2 block mb-1">Fecha del gasto</label>
                     <input @bind="_expenseDate" type="date"
                                class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
                 </div>
+
+                @if (_payers.Any())
+                {
+                    <div>
+                        <label class="font-bold text-ink2 block mb-1">Pagado / ejecutado por</label>
+                        <select @bind="_paidBy" class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink focus:border-club focus:outline-none">
+                            <option value="">Sin especificar</option>
+                            @foreach (var p in _payers)
+                            {
+                                <option value="@p.Id">@p.FullName (@p.Nickname)</option>
+                            }
+                        </select>
+                    </div>
+                }
             </div>
 
             <div class="flex gap-2 pt-2">
@@ -53,7 +78,7 @@
                     Cancelar
                 </button>
                 <button @onclick="SaveExpense" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    Descontar de Caja
+                    @(TargetExpense != null ? "Guardar Cambios" : "Descontar de Caja")
                 </button>
             </div>
 
@@ -64,11 +89,45 @@
 @code {
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public TeamExpense? TargetExpense { get; set; }
 
     private string _concept = "Arbitraje Jornada";
     private decimal _amount = 45.00m;
     private string _category = "Árbitros";
     private DateTime _expenseDate = DateTime.Today;
+    private string _paidBy = "";
+    private string _notes = "";
+    private bool _wasOpen = false;
+
+    private List<UserProfile> _payers => TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
+
+    /// <summary>Esto vive montado siempre en Home; reiniciar al pasar de cerrado a abierto evita que
+    /// quede pegado el gasto anterior (mismo motivo que en DirectPaymentModal).</summary>
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            if (TargetExpense != null)
+            {
+                _concept = TargetExpense.Concept;
+                _amount = TargetExpense.Amount;
+                _category = TargetExpense.Category;
+                _expenseDate = TargetExpense.ExpenseDate;
+                _paidBy = TargetExpense.PaidBy ?? "";
+                _notes = TargetExpense.Notes;
+            }
+            else
+            {
+                _concept = "Arbitraje Jornada";
+                _amount = 45.00m;
+                _category = "Árbitros";
+                _expenseDate = DateTime.Today;
+                _paidBy = "";
+                _notes = "";
+            }
+        }
+        _wasOpen = IsOpen;
+    }
 
     private async Task Close()
     {
@@ -80,15 +139,29 @@
     {
         if (string.IsNullOrWhiteSpace(_concept) || _amount <= 0) return;
 
-        var expense = new TeamExpense
+        if (TargetExpense != null)
         {
-            Concept = _concept,
-            Amount = _amount,
-            Category = _category,
-            ExpenseDate = _expenseDate
-        };
-
-        await TeamService.AddExpenseAsync(expense);
+            TargetExpense.Concept = _concept;
+            TargetExpense.Amount = _amount;
+            TargetExpense.Category = _category;
+            TargetExpense.ExpenseDate = _expenseDate;
+            TargetExpense.PaidBy = _paidBy;
+            TargetExpense.Notes = _category == "Otros" ? _notes : "";
+            await TeamService.UpdateExpenseAsync(TargetExpense);
+        }
+        else
+        {
+            var expense = new TeamExpense
+            {
+                Concept = _concept,
+                Amount = _amount,
+                Category = _category,
+                ExpenseDate = _expenseDate,
+                PaidBy = _paidBy,
+                Notes = _category == "Otros" ? _notes : ""
+            };
+            await TeamService.AddExpenseAsync(expense);
+        }
         await Close();
     }
 }

@@ -47,12 +47,27 @@
             <div class="text-[13px] text-heromuted">¿Hiciste un pago por Bizum? El tesorero lo cargará al recibirlo.</div>
         }
 
-        <!-- SHARE TREASURY SUMMARY VIA WHATSAPP -->
-        <button type="button" @onclick="ShareTreasuryWhatsApp"
-                class="w-full h-10 rounded-[10px] bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-sm">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
-            <span>Compartir Balance de Caja por WhatsApp</span>
-        </button>
+        <!-- SHARE VIA WHATSAPP (solo admin/tesorero: es quien decide qué comunicar al grupo) -->
+        @if (IsAdmin)
+        {
+            <div class="space-y-1.5">
+                <button type="button" @onclick="ShareTreasuryWhatsApp"
+                        class="w-full h-10 rounded-[10px] bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                    <span>Compartir Balance de Caja por WhatsApp</span>
+                </button>
+                <button type="button" @onclick="SharePlayerContributionsWhatsApp"
+                        class="w-full h-10 rounded-[10px] bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                    <span>Compartir Aportes por Jugador por WhatsApp</span>
+                </button>
+                <button type="button" @onclick="ShareCajaWhatsApp"
+                        class="w-full h-10 rounded-[10px] bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                    <span>Compartir Caja (Recibido y Pagado) por WhatsApp</span>
+                </button>
+            </div>
+        }
     </div>
 
     <!-- VIEW SELECTOR TABS -->
@@ -60,6 +75,7 @@
         <button @onclick='() => _subTab = "players"' class="apn-tab @(_subTab == "players" ? "active" : "")">Aportes</button>
         <button @onclick='() => _subTab = "history"' class="apn-tab @(_subTab == "history" ? "active" : "")">Historial</button>
         <button @onclick='() => _subTab = "expenses"' class="apn-tab @(_subTab == "expenses" ? "active" : "")">Gastos</button>
+        <button @onclick='() => _subTab = "budget"' class="apn-tab @(_subTab == "budget" ? "active" : "")">Presupuesto</button>
     </div>
     <!-- SUB-TAB 1: APORTES POR JUGADOR (TRANSPARENCIA TOTAL: CADA UNO VE LO QUE PAGÓ CADA COMPAÑERO) -->
     @if (_subTab == "players")
@@ -84,8 +100,56 @@
                 </div>
 
                 <div class="text-xs text-muted self-end sm:self-auto font-cond">
-                    Total cubierto: <strong class="text-oktext">@allPaidPayments.Sum(p => p.Amount).ToString("N0") €</strong> / @((seasonFee * profiles.Count).ToString("N0")) €
+                    Total cubierto: <strong class="text-oktext">@allPaidPayments.Where(p => p.IsPlayerPayment).Sum(p => p.Amount).ToString("N0") €</strong> / @((seasonFee * profiles.Count).ToString("N0")) €
                 </div>
+            </div>
+
+            <!-- Otros Ingresos del Club (remanente, patrocinios, rifas...) -->
+            @{
+                var otherIncome = allPaidPayments.Where(p => !p.IsPlayerPayment).OrderByDescending(p => p.PaidAt).ToList();
+            }
+            <div class="bg-surface border border-line rounded-xl p-3.5 space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs font-bold uppercase tracking-wider text-ink2">💰 Otros Ingresos del Club</div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-cond font-extrabold text-sm text-oktext">@otherIncome.Sum(p => p.Amount).ToString("N0") €</span>
+                        @if (IsAdmin)
+                        {
+                            <button type="button" @onclick="() => OnOpenDirectPayment.InvokeAsync(null)"
+                                    class="text-xs font-extrabold text-oktext hover:text-ok flex items-center gap-1">
+                                <span>+</span> Cargar
+                            </button>
+                        }
+                    </div>
+                </div>
+                @if (!otherIncome.Any())
+                {
+                    <p class="text-[11px] text-faint m-0">Remanente de temporadas anteriores, patrocinios o rifas: se cargan acá, aparte de las cuotas de los jugadores.</p>
+                }
+                else
+                {
+                    <div class="space-y-1.5">
+                        @foreach (var inc in otherIncome)
+                        {
+                            <div class="flex items-center justify-between text-xs bg-well px-2.5 py-1.5 rounded-lg">
+                                <div>
+                                    <div class="font-bold text-ink">@inc.Category</div>
+                                    <div class="text-faint">@inc.Concept • @(inc.PaidAt?.ToString("dd/MM/yyyy") ?? "")</div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-extrabold text-oktext font-cond">+@inc.Amount.ToString("N0") €</span>
+                                    @if (IsAdmin)
+                                    {
+                                        <button type="button" @onclick="() => OnEditPayment.InvokeAsync(inc)"
+                                                class="text-faint hover:text-ink p-0.5" title="Editar ingreso">
+                                            ✎
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
             </div>
 
             <div class="flex items-center justify-between text-xs text-muted px-1">
@@ -233,20 +297,32 @@
                 <div class="space-y-2">
                     @foreach (var pay in allPayments)
                     {
-                        var player = TeamService.GetProfiles().FirstOrDefault(p => p.Id == pay.PlayerId);
+                        var player = pay.IsPlayerPayment ? TeamService.GetProfiles().FirstOrDefault(p => p.Id == pay.PlayerId) : null;
+                        var receiver = !string.IsNullOrEmpty(pay.ReceivedByPlayerId) ? TeamService.GetProfileById(pay.ReceivedByPlayerId) : null;
 
                         <div class="bg-surface border border-line rounded-xl p-3 flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-lg bg-okbg border border-ok/40 flex items-center justify-center font-bold text-xs text-oktext shrink-0">
-                                    ✓
+                                <div class="w-8 h-8 rounded-lg @(pay.IsPlayerPayment ? "bg-okbg border border-ok/40 text-oktext" : "bg-clubbg border border-club/40 text-clubtext") flex items-center justify-center font-bold text-xs shrink-0">
+                                    @(pay.IsPlayerPayment ? "✓" : "💰")
                                 </div>
                                 <div>
-                                    <div class="font-bold text-sm text-ink">
-                                        @player?.Nickname
-                                        <span class="font-normal text-xs text-muted">(@player?.FullName)</span>
-                                    </div>
+                                    @if (pay.IsPlayerPayment)
+                                    {
+                                        <div class="font-bold text-sm text-ink">
+                                            @player?.Nickname
+                                            <span class="font-normal text-xs text-muted">(@player?.FullName)</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="font-bold text-sm text-ink">@pay.Category</div>
+                                    }
                                     <div class="text-xs text-muted">
                                         @pay.Concept • @(pay.PaidAt?.ToString("dd/MM/yyyy") ?? "") • Vía <span class="text-ink2 font-semibold">@pay.Method</span>
+                                        @if (receiver != null)
+                                        {
+                                            <span> • Recibió <span class="text-ink2 font-semibold">@receiver.Nickname</span></span>
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -269,6 +345,10 @@
                                     }
                                     else
                                     {
+                                        <button type="button" @onclick="() => OnEditPayment.InvokeAsync(pay)"
+                                                class="text-faint hover:text-ink text-xs p-1" title="Editar cobro">
+                                            ✎
+                                        </button>
                                         <button type="button" @onclick="() => _confirmDeletePaymentId = pay.Id"
                                                 class="text-faint hover:text-club text-xs p-1" title="Eliminar cobro (registrado por error)">
                                             ✕
@@ -305,6 +385,8 @@
                 <div class="space-y-2">
                     @foreach (var exp in expenses)
                     {
+                        var payer = !string.IsNullOrEmpty(exp.PaidBy) ? TeamService.GetProfileById(exp.PaidBy) : null;
+
                         <div class="bg-surface border border-line rounded-xl p-3.5 flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <div class="w-9 h-9 rounded-lg bg-well2 border border-line2 flex items-center justify-center text-sm shrink-0">
@@ -314,7 +396,15 @@
                                     <div class="font-bold text-sm text-ink">@exp.Concept</div>
                                     <div class="text-xs text-muted">
                                         @exp.ExpenseDate.ToString("dd/MM/yyyy") • @exp.Category
+                                        @if (payer != null)
+                                        {
+                                            <span> • Pagó <span class="text-ink2 font-semibold">@payer.Nickname</span></span>
+                                        }
                                     </div>
+                                    @if (!string.IsNullOrWhiteSpace(exp.Notes))
+                                    {
+                                        <div class="text-[11px] text-faint italic mt-0.5">"@exp.Notes"</div>
+                                    }
                                 </div>
                             </div>
 
@@ -336,6 +426,10 @@
                                     }
                                     else
                                     {
+                                        <button type="button" @onclick="() => OnEditExpense.InvokeAsync(exp)"
+                                                class="text-faint hover:text-ink text-xs p-1" title="Editar gasto">
+                                            ✎
+                                        </button>
                                         <button type="button" @onclick="() => _confirmDeleteExpenseId = exp.Id"
                                                 class="text-faint hover:text-club text-xs p-1" title="Eliminar gasto">
                                             ✕
@@ -350,13 +444,133 @@
         </div>
     }
 
+    <!-- SUB-TAB 4: PRESUPUESTO ANUAL ESTIMADO POR CATEGORÍA -->
+    @if (_subTab == "budget")
+    {
+        var budget = TeamService.GetExpenseBudget();
+        var allExpenses = TeamService.GetExpenses();
+        var totalBudget = budget.Values.Sum();
+        var totalSpent = allExpenses.Sum(e => e.Amount);
+
+        <div class="space-y-3">
+            <div class="bg-well p-3.5 rounded-xl border border-line flex items-center justify-between gap-2">
+                <div>
+                    <div class="text-xs text-muted font-bold uppercase tracking-wider">Presupuesto Anual Estimado</div>
+                    <div class="text-sm font-extrabold text-ink">
+                        Gastado: <span class="text-clubtext">@totalSpent.ToString("N0") €</span>
+                        @if (totalBudget > 0)
+                        {
+                            <span> / @totalBudget.ToString("N0") €</span>
+                        }
+                    </div>
+                </div>
+                @if (totalBudget > 0)
+                {
+                    var totalPct = (int)Math.Min(100, Math.Round(100.0m * totalSpent / totalBudget));
+                    <div class="font-cond font-extrabold text-2xl @(totalPct >= 100 ? "text-club" : totalPct >= 80 ? "text-warntext" : "text-oktext")">
+                        @totalPct%
+                    </div>
+                }
+            </div>
+
+            <p class="text-[11px] text-faint px-1 m-0">Estimación de gasto por categoría para la temporada; se compara contra lo ya cargado en Gastos.</p>
+
+            @if (IsAdmin)
+            {
+            <button type="button" @onclick="ShareBudgetWhatsApp"
+                    class="w-full h-10 rounded-[10px] bg-ok hover:bg-okdeep text-white text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-sm">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"></path></svg>
+                <span>Compartir Ejecución del Presupuesto por WhatsApp</span>
+            </button>
+            }
+
+            <div class="space-y-2">
+                @foreach (var cat in ExpenseCategories)
+                {
+                    var spent = allExpenses.Where(e => e.Category == cat).Sum(e => e.Amount);
+                    var budgeted = budget.TryGetValue(cat, out var b) ? b : 0;
+                    var pct = budgeted > 0 ? (int)Math.Min(150, Math.Round(100.0m * spent / budgeted)) : 0;
+                    var isEditing = IsAdmin && _editingBudgetCategory == cat;
+
+                    <div class="bg-surface border border-line rounded-xl p-3.5 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-bold text-sm text-ink shrink-0">@cat</span>
+                            @if (isEditing)
+                            {
+                                <div class="flex items-center gap-1.5">
+                                    <input @bind="_editingBudgetAmount" type="number" step="10" min="0"
+                                           class="w-24 bg-well border border-line2 rounded-lg px-2 py-1 text-ink font-cond font-bold text-right focus:border-club focus:outline-none" />
+                                    <span class="text-xs text-muted">€</span>
+                                    <button type="button" @onclick="SaveBudgetCategory" class="text-oktext hover:text-ok text-xs font-bold px-1" title="Guardar">✓</button>
+                                    <button type="button" @onclick="() => _editingBudgetCategory = null" class="text-faint hover:text-ink text-xs px-1" title="Cancelar">✕</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-xs text-muted">
+                                        <span class="font-bold text-ink font-cond">@spent.ToString("N0") €</span>
+                                        @(budgeted > 0 ? $" / {budgeted:N0} €" : " · sin presupuestar")
+                                    </span>
+                                    @if (IsAdmin)
+                                    {
+                                        <button type="button" @onclick="() => StartEditBudget(cat, budgeted)"
+                                                class="text-faint hover:text-ink text-xs p-0.5" title="Editar presupuesto">
+                                            ✎
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        @if (budgeted > 0)
+                        {
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 bg-well rounded-full h-1.5 overflow-hidden border border-line">
+                                    <div class="h-full @(pct >= 100 ? "bg-club" : pct >= 80 ? "bg-warn" : "bg-ok") transition-all duration-300" style="width: @(Math.Min(100, pct))%"></div>
+                                </div>
+                                <span class="text-xs font-cond text-muted font-bold shrink-0">@pct%</span>
+                            </div>
+                        }
+                        @if (budgeted > 0 && totalBudget > 0)
+                        {
+                            var sharePct = (int)Math.Round(100.0m * budgeted / totalBudget);
+                            <div class="text-[11px] text-faint m-0">@sharePct% del presupuesto total estimado</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
 </div>
 
 @code {
     [Parameter] public EventCallback<string?> OnOpenDirectPayment { get; set; }
+    [Parameter] public EventCallback<Payment> OnEditPayment { get; set; }
     [Parameter] public EventCallback OnAddExpense { get; set; }
+    [Parameter] public EventCallback<TeamExpense> OnEditExpense { get; set; }
 
-    private string _subTab = "players"; // "players", "history", "expenses"
+    private static readonly string[] ExpenseCategories = { "Árbitros", "Campos", "Material", "Tercer Tiempo", "Inscripción", "Sanciones", "Fichas", "Otros" };
+    private string? _editingBudgetCategory = null;
+    private decimal _editingBudgetAmount = 0;
+
+    private void StartEditBudget(string category, decimal current)
+    {
+        _editingBudgetCategory = category;
+        _editingBudgetAmount = current;
+    }
+
+    private async Task SaveBudgetCategory()
+    {
+        if (_editingBudgetCategory == null) return;
+        var budget = TeamService.GetExpenseBudget();
+        if (_editingBudgetAmount <= 0) budget.Remove(_editingBudgetCategory);
+        else budget[_editingBudgetCategory] = _editingBudgetAmount;
+        await TeamService.SaveExpenseBudgetAsync(budget);
+        _editingBudgetCategory = null;
+    }
+
+    private string _subTab = "players"; // "players", "history", "expenses", "budget"
     private string? _expandedPlayerId = null;
     private string? _confirmDeletePaymentId = null;
     private string? _confirmDeleteExpenseId = null;
@@ -393,9 +607,11 @@
         var profiles = TeamService.GetProfiles().Where(p => p.CountsForSeasonFee).ToList();
         var allPayments = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).ToList();
 
+        var totalPlayerIn = allPayments.Where(p => p.IsPlayerPayment).Sum(p => p.Amount);
+        var otherIncomeTotal = allPayments.Where(p => !p.IsPlayerPayment).Sum(p => p.Amount);
         var fullyPaidCount = profiles.Count(p => allPayments.Where(x => x.PlayerId == p.Id).Sum(x => x.Amount) >= fee);
         var totalSeasonTarget = fee * profiles.Count;
-        var percentCollected = totalSeasonTarget > 0 ? Math.Round(100.0m * totalIn / totalSeasonTarget, 1) : 0;
+        var percentCollected = totalSeasonTarget > 0 ? Math.Round(100.0m * totalPlayerIn / totalSeasonTarget, 1) : 0;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("💶 *BALANCE DE CAJA · ATLÈTIC POBLENOU*");
@@ -408,9 +624,99 @@
         sb.AppendLine($"🎯 *Cuota Temporada ({fee:N0} €/jugador):*");
         sb.AppendLine($"• {fullyPaidCount} de {profiles.Count} jugadores con cuota completa");
         sb.AppendLine($"• Progreso anual: {percentCollected}% cubierto");
+        if (otherIncomeTotal > 0)
+        {
+            sb.AppendLine($"• Otros ingresos (remanente, patrocinios, etc.): +{otherIncomeTotal:N2} €");
+        }
         sb.AppendLine();
         sb.AppendLine("📋 *Transparencia total:* Cada compañero puede consultar sus recibos individuales en la app.");
         sb.AppendLine("🔴⚪ *¡Força Poblenou!*");
+
+        var text = sb.ToString();
+        var url = $"https://wa.me/?text={Uri.EscapeDataString(text)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>Mismo orden que la lista de "Aportes" (por dorsal), con lo que aportó cada uno hasta ahora.</summary>
+    private async Task SharePlayerContributionsWhatsApp()
+    {
+        var profiles = TeamService.GetProfiles().Where(p => p.CountsForSeasonFee).ToList();
+        var allPaidPayments = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).ToList();
+        var seasonName = TeamService.GetClubSettings().SeasonName;
+        var seasonFee = TeamService.GetClubSettings().SeasonFeePerPlayer;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"💶 *PAGOS TEMPORADA {seasonName}*");
+        sb.AppendLine();
+
+        var i = 1;
+        foreach (var player in profiles)
+        {
+            var total = allPaidPayments.Where(p => p.PlayerId == player.Id).Sum(p => p.Amount);
+            var mark = total >= seasonFee ? " ✅" : "";
+            sb.AppendLine($"{i}. {player.Nickname} - {total:N0}€{mark}");
+            i++;
+        }
+
+        var text = sb.ToString();
+        var url = $"https://wa.me/?text={Uri.EscapeDataString(text)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>Cuánto recibió cada persona autorizada este año, y qué se pagó (gastos del año, con la
+    /// observación entre paréntesis cuando la tiene, típicamente en "Otros").</summary>
+    private async Task ShareCajaWhatsApp()
+    {
+        var year = DateTime.Now.Year;
+        var receivers = TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
+        var allPaid = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid && p.PaidAt?.Year == year).ToList();
+        var expenses = TeamService.GetExpenses().Where(e => e.ExpenseDate.Year == year).ToList();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"💶 *CAJA {year}*");
+        sb.AppendLine();
+        foreach (var r in receivers)
+        {
+            var total = allPaid.Where(p => p.ReceivedByPlayerId == r.Id).Sum(p => p.Amount);
+            sb.AppendLine($"{r.Nickname} {total:N0}€");
+        }
+        sb.AppendLine();
+        sb.AppendLine("*Pagado*");
+        foreach (var e in expenses)
+        {
+            var noteSuffix = !string.IsNullOrWhiteSpace(e.Notes) ? $" ({e.Notes})" : "";
+            sb.AppendLine($"{e.Amount:N0}€ {e.Category}{noteSuffix}");
+        }
+
+        var text = sb.ToString();
+        var url = $"https://wa.me/?text={Uri.EscapeDataString(text)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>Ejecución del presupuesto anual: solo categorías con algo presupuestado.</summary>
+    private async Task ShareBudgetWhatsApp()
+    {
+        var budget = TeamService.GetExpenseBudget();
+        var expenses = TeamService.GetExpenses();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("📊 *PRESUPUESTO ANUAL · EJECUCIÓN*");
+        sb.AppendLine();
+
+        decimal totalSpent = 0, totalBudget = 0;
+        foreach (var cat in ExpenseCategories)
+        {
+            if (!budget.TryGetValue(cat, out var budgeted) || budgeted <= 0) continue;
+            var spent = expenses.Where(e => e.Category == cat).Sum(e => e.Amount);
+            totalSpent += spent;
+            totalBudget += budgeted;
+            var pct = Math.Round(100.0m * spent / budgeted, 0);
+            sb.AppendLine($"{cat}: {spent:N0}€ / {budgeted:N0}€ ({pct}%)");
+        }
+
+        sb.AppendLine();
+        var totalPct = totalBudget > 0 ? Math.Round(100.0m * totalSpent / totalBudget, 0) : 0;
+        sb.AppendLine($"*Total: {totalSpent:N0}€ / {totalBudget:N0}€ ({totalPct}%)*");
 
         var text = sb.ToString();
         var url = $"https://wa.me/?text={Uri.EscapeDataString(text)}";

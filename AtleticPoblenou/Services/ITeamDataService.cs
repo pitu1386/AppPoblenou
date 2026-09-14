@@ -42,6 +42,8 @@ public interface ITeamDataService
     // Club Identity & Settings
     ClubSettings GetClubSettings();
     Task SaveClubSettingsAsync(ClubSettings settings);
+    Dictionary<string, decimal> GetExpenseBudget();
+    Task SaveExpenseBudgetAsync(Dictionary<string, decimal> budget);
 
     // Profiles & Player Sheets
     List<UserProfile> GetProfiles();
@@ -89,10 +91,11 @@ public interface ITeamDataService
     // Payments & Treasury
     List<Payment> GetPayments();
     List<Payment> GetPaymentsForUser(string playerId);
-    Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "");
+    Task AddPaymentAsync(string playerId, string concept, decimal amount, PaymentMethod method, DateTime? paidAt = null, string notes = "", string category = "Cuota Jugador", string receivedByPlayerId = "");
     Task AddBatchFeeAsync(string concept, decimal amount, DateTime dueDate);
     Task MarkPaymentAsPaidAsync(string paymentId, PaymentMethod method, string notes = "");
     /// <summary>Elimina un cobro o cuota registrado por error. Solo admin o tesorero (lo aplica el servidor).</summary>
+    Task UpdatePaymentAsync(Payment payment);
     Task DeletePaymentAsync(string paymentId);
     decimal GetTeamBalance();
     decimal GetTotalCollectedThisMonth();
@@ -101,6 +104,7 @@ public interface ITeamDataService
     // Expenses
     List<TeamExpense> GetExpenses();
     Task AddExpenseAsync(TeamExpense expense);
+    Task UpdateExpenseAsync(TeamExpense expense);
     Task DeleteExpenseAsync(string expenseId);
 
     // Stats & Events

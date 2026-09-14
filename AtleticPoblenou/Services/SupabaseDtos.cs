@@ -25,6 +25,7 @@ public class SupabaseProfileDto
     public string? avatar_url { get; set; }
     public bool is_active { get; set; } = true;
     public bool counts_for_season_fee { get; set; } = true;
+    public bool can_receive_payments { get; set; } = false;
     public DateTime? created_at { get; set; }
 }
 
@@ -73,7 +74,7 @@ public class SupabaseAttendanceDto
 public class SupabasePaymentDto
 {
     public string id { get; set; } = "";
-    public string player_id { get; set; } = "";
+    public string? player_id { get; set; }
     public string concept { get; set; } = "";
     public decimal amount { get; set; }
     public int status { get; set; }
@@ -81,6 +82,8 @@ public class SupabasePaymentDto
     public DateTime? paid_at { get; set; }
     public int? method { get; set; }
     public string? notes { get; set; }
+    public string? category { get; set; }
+    public string? received_by { get; set; }
 }
 
 public class SupabaseExpenseDto
@@ -146,6 +149,12 @@ public class SupabaseClubSettingsDto
     public List<SeasonArchive>? season_history { get; set; }
 }
 
+public class SupabaseExpenseBudgetDto
+{
+    public string id { get; set; } = "current";
+    public Dictionary<string, decimal>? budget { get; set; }
+}
+
 // ==========================================
 // MAPEADORES modelo <-> DTO
 // ==========================================
@@ -171,6 +180,7 @@ public static class SupabaseMappers
         avatar_url = p.AvatarUrl,
         is_active = p.IsActive,
         counts_for_season_fee = p.CountsForSeasonFee,
+        can_receive_payments = p.CanReceivePayments,
         created_at = p.CreatedAt
     };
 
@@ -194,6 +204,7 @@ public static class SupabaseMappers
         AvatarUrl = d.avatar_url ?? "",
         IsActive = d.is_active,
         CountsForSeasonFee = d.counts_for_season_fee,
+        CanReceivePayments = d.can_receive_payments,
         CreatedAt = d.created_at ?? DateTime.UtcNow
     };
 
@@ -322,27 +333,31 @@ public static class SupabaseMappers
     public static SupabasePaymentDto ToDto(Payment p) => new()
     {
         id = p.Id,
-        player_id = p.PlayerId,
+        player_id = string.IsNullOrEmpty(p.PlayerId) ? null : p.PlayerId,
         concept = p.Concept,
         amount = p.Amount,
         status = (int)p.Status,
         due_date = p.DueDate?.ToString("yyyy-MM-dd"),
         paid_at = p.PaidAt,
         method = p.Method.HasValue ? (int)p.Method.Value : null,
-        notes = p.Notes
+        notes = p.Notes,
+        category = p.Category,
+        received_by = string.IsNullOrEmpty(p.ReceivedByPlayerId) ? null : p.ReceivedByPlayerId
     };
 
     public static Payment FromDto(SupabasePaymentDto d) => new()
     {
         Id = d.id,
-        PlayerId = d.player_id,
+        PlayerId = d.player_id ?? "",
         Concept = d.concept,
         Amount = d.amount,
         Status = (PaymentStatus)d.status,
         DueDate = DateTime.TryParse(d.due_date, out var dt) ? dt : null,
         PaidAt = d.paid_at,
         Method = d.method.HasValue ? (PaymentMethod)d.method.Value : null,
-        Notes = d.notes ?? ""
+        Notes = d.notes ?? "",
+        Category = string.IsNullOrEmpty(d.category) ? "Cuota Jugador" : d.category,
+        ReceivedByPlayerId = d.received_by ?? ""
     };
 
     public static SupabaseExpenseDto ToDto(TeamExpense e) => new()

@@ -29,6 +29,9 @@ create unique index if not exists profiles_auth_uid_key on public.profiles (auth
 -- Si se lo contempla o no en la cartera de pagos (cuota de temporada). Solo lo cambia un admin.
 alter table public.profiles add column if not exists counts_for_season_fee boolean not null default true;
 
+-- Si aparece como opción de "recibido por" al registrar un cobro. Solo lo cambia un admin.
+alter table public.profiles add column if not exists can_receive_payments boolean not null default false;
+
 alter table public.matches add column if not exists round integer default 1;
 -- Competición del partido: 'liga' | 'copa' | 'amistoso'. Cada una tiene su fixture y su tabla;
 -- el amistoso no computa en ninguna.
@@ -53,6 +56,32 @@ alter table public.club_settings add column if not exists away_kit_primary_color
 alter table public.club_settings add column if not exists away_kit_secondary_color_hex text default '#FFFFFF';
 alter table public.club_settings add column if not exists away_kit_description text default '';
 
+-- Presupuesto anual estimado por categoría de gasto, ej. {"Árbitros": 1600}.
+-- Tabla propia (no club_settings): así el Tesorero puede editarlo sin ganar acceso a
+-- ajustes del club que no le corresponden (nombre, colores, sede, código de equipo, etc.).
+create table if not exists public.expense_budget (
+    id text primary key default 'current',
+    budget jsonb not null default '{}'::jsonb
+);
+-- Migra lo que ya hubiera cargado en club_settings.expense_budget (versión anterior de este script)
+-- y quita esa columna. Se comprueba que exista antes: en una segunda pasada ya no estará.
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'club_settings' and column_name = 'expense_budget'
+    ) then
+        insert into public.expense_budget (id, budget)
+        select 'current', cs.expense_budget
+          from public.club_settings cs
+         where cs.id = 'current' and cs.expense_budget is not null and cs.expense_budget <> '{}'::jsonb
+        on conflict (id) do update set budget = excluded.budget;
+
+        alter table public.club_settings drop column expense_budget;
+    end if;
+end $$;
+insert into public.expense_budget (id, budget) values ('current', '{}'::jsonb) on conflict (id) do nothing;
+
 -- Alineación guardada de cada partido: la pizarra táctica no persistía nada antes de esto.
 create table if not exists public.match_lineups (
     match_id text primary key references public.matches(id) on delete cascade,
@@ -67,6 +96,13 @@ alter table public.match_lineups add column if not exists is_confirmed boolean n
 alter table public.team_expenses alter column category type text using category::text;
 alter table public.team_expenses alter column category set default 'Otros';
 alter table public.team_expenses add column if not exists paid_by text;
+
+-- Ingresos generales del club (remanente, patrocinio, etc.), no asociados a un jugador.
+alter table public.payments alter column player_id drop not null;
+alter table public.payments add column if not exists category text not null default 'Cuota Jugador';
+
+-- Quién recibió físicamente el cobro (perfil marcado como "recibe cobros").
+alter table public.payments add column if not exists received_by text references public.profiles(id) on delete set null;
 
 -- -------------------------------------------------------------------------
 -- 2. MIGRAR USUARIOS EXISTENTES A auth.users
@@ -231,7 +267,8 @@ begin
            or new.is_sub_captain is distinct from old.is_sub_captain
            or new.auth_uid is distinct from old.auth_uid
            or new.email is distinct from old.email
-           or new.counts_for_season_fee is distinct from old.counts_for_season_fee then
+           or new.counts_for_season_fee is distinct from old.counts_for_season_fee
+           or new.can_receive_payments is distinct from old.can_receive_payments then
             raise exception 'No tienes permiso para cambiar rol, capitanía, estado, cuenta o cuota';
         end if;
     end if;
@@ -259,7 +296,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget'] loop
         execute format('alter table public.%I enable row level security', t);
         execute format('alter table public.%I force row level security', t);
         execute format('drop policy if exists "Permiso Total Anon" on public.%I', t);
@@ -337,6 +374,11 @@ create policy "apn_delete" on public.announcements for delete to authenticated u
 create policy "apn_select" on public.club_settings for select to authenticated using (public.is_member());
 create policy "apn_insert" on public.club_settings for insert to authenticated with check (public.is_admin());
 create policy "apn_update" on public.club_settings for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- expense_budget: lectura miembros, escritura tesorería (tabla propia para no dar acceso a club_settings).
+create policy "apn_select" on public.expense_budget for select to authenticated using (public.is_member());
+create policy "apn_insert" on public.expense_budget for insert to authenticated with check (public.is_treasury());
+create policy "apn_update" on public.expense_budget for update to authenticated using (public.is_treasury()) with check (public.is_treasury());
 
 -- -------------------------------------------------------------------------
 -- 6. FUNCIONES RPC
@@ -509,7 +551,7 @@ grant execute on function public.close_season(jsonb, text, numeric) to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget'] loop
         if not exists (
             select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
         ) then
@@ -529,3 +571,4 @@ alter table public.rival_teams replica identity full;
 alter table public.announcements replica identity full;
 alter table public.club_settings replica identity full;
 alter table public.match_lineups replica identity full;
+alter table public.expense_budget replica identity full;

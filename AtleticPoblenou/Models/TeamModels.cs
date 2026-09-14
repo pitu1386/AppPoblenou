@@ -71,6 +71,8 @@ public class UserProfile
     public bool IsActive { get; set; } = true;
     /// <summary>Si se lo contempla para la cuota de temporada (cartera de pagos). Solo lo cambia un Admin.</summary>
     public bool CountsForSeasonFee { get; set; } = true;
+    /// <summary>Si es una persona autorizada a recibir cobros (aparece como opción al registrar un pago). Solo lo cambia un Admin.</summary>
+    public bool CanReceivePayments { get; set; } = false;
 
     public int? Age => BirthDate.HasValue
         ? DateTime.Today.Year - BirthDate.Value.Year - (DateTime.Today.DayOfYear < BirthDate.Value.DayOfYear ? 1 : 0)
@@ -280,6 +282,7 @@ public enum PaymentMethod
 public class Payment
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
+    /// <summary>Vacío = ingreso general del club, no asociado a ningún jugador (remanente, patrocinio, etc.).</summary>
     public string PlayerId { get; set; } = string.Empty;
     public string Concept { get; set; } = "Quota Mensual";
     public decimal Amount { get; set; } = 20.00m;
@@ -288,6 +291,11 @@ public class Payment
     public DateTime? PaidAt { get; set; }
     public PaymentMethod? Method { get; set; }
     public string Notes { get; set; } = string.Empty;
+    /// <summary>Rubro del ingreso: "Cuota Jugador" para los pagos de jugadores; otro rubro cuando PlayerId está vacío.</summary>
+    public string Category { get; set; } = "Cuota Jugador";
+    public bool IsPlayerPayment => !string.IsNullOrEmpty(PlayerId);
+    /// <summary>Quién recibió físicamente el cobro (perfil marcado como "recibe cobros"). Vacío = sin especificar.</summary>
+    public string ReceivedByPlayerId { get; set; } = string.Empty;
 }
 
 public class TeamExpense

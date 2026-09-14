@@ -169,6 +169,12 @@ public class SupabaseClientService
         return first == null ? null : SupabaseMappers.FromDto(first);
     }
 
+    public async Task<Dictionary<string, decimal>> FetchExpenseBudgetAsync()
+    {
+        var rows = await GetAsync<SupabaseExpenseBudgetDto>("expense_budget", "id=eq.current&select=*");
+        return rows.FirstOrDefault()?.budget ?? new();
+    }
+
     // ==========================================
     // ESCRITURAS TIPADAS (por fila o lote explícito)
     // ==========================================
@@ -184,6 +190,7 @@ public class SupabaseClientService
     public Task UpsertAnnouncementAsync(TeamAnnouncement a) => UpsertRowAsync("announcements", SupabaseMappers.ToDto(a));
     public Task UpsertMatchLineupAsync(MatchLineup l) => UpsertRowAsync("match_lineups", SupabaseMappers.ToDto(l));
     public Task UpsertClubSettingsAsync(ClubSettings s) => UpsertRowAsync("club_settings", SupabaseMappers.ToDto(s));
+    public Task UpsertExpenseBudgetAsync(Dictionary<string, decimal> budget) => UpsertRowAsync("expense_budget", new SupabaseExpenseBudgetDto { id = "current", budget = budget });
 
     public Task DeleteByIdAsync(string table, string id) => DeleteAsync(table, $"id=eq.{Uri.EscapeDataString(id)}");
     public Task DeleteWhereAsync(string table, string column, string value) => DeleteAsync(table, $"{column}=eq.{Uri.EscapeDataString(value)}");
