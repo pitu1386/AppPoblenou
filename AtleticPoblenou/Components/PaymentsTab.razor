@@ -76,6 +76,7 @@
         <button @onclick='() => _subTab = "history"' class="apn-tab @(_subTab == "history" ? "active" : "")">Historial</button>
         <button @onclick='() => _subTab = "expenses"' class="apn-tab @(_subTab == "expenses" ? "active" : "")">Gastos</button>
         <button @onclick='() => _subTab = "budget"' class="apn-tab @(_subTab == "budget" ? "active" : "")">Presupuesto</button>
+        <button @onclick='() => _subTab = "persons"' class="apn-tab @(_subTab == "persons" ? "active" : "")">Por Persona</button>
     </div>
     <!-- SUB-TAB 1: APORTES POR JUGADOR (TRANSPARENCIA TOTAL: CADA UNO VE LO QUE PAGÓ CADA COMPAÑERO) -->
     @if (_subTab == "players")
@@ -542,6 +543,142 @@
         </div>
     }
 
+    <!-- SUB-TAB 5: RECIBIDO Y PAGADO POR PERSONA (DEBE / HABER DE CADA UNO QUE MANEJA CAJA) -->
+    @if (_subTab == "persons")
+    {
+        var receivers = TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
+        var allPaidPayments = TeamService.GetPayments().Where(p => p.Status == PaymentStatus.Paid).ToList();
+        var allExpenses = TeamService.GetExpenses();
+
+        <div class="space-y-3">
+            <p class="text-[11px] text-faint px-1 m-0">Lo que cobró y lo que pagó de su bolsillo cada persona autorizada a manejar caja. El saldo es a favor de esa persona (a reintegrarle) si es negativo.</p>
+
+            @if (!receivers.Any())
+            {
+                <div class="p-6 bg-surface border border-line rounded-xl text-center text-faint text-xs">
+                    Nadie está marcado como "persona que recibe cobros" todavía (se hace desde la ficha del jugador).
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2">
+                    @foreach (var person in receivers)
+                    {
+                        var received = allPaidPayments.Where(p => p.ReceivedByPlayerId == person.Id).OrderByDescending(p => p.PaidAt).ToList();
+                        var paid = allExpenses.Where(e => e.PaidBy == person.Id).OrderByDescending(e => e.ExpenseDate).ToList();
+                        var totalReceived = received.Sum(p => p.Amount);
+                        var totalPaid = paid.Sum(e => e.Amount);
+                        var saldo = totalReceived - totalPaid;
+                        var isExpanded = _expandedPersonId == person.Id;
+
+                        <div class="bg-surface border border-line rounded-xl overflow-hidden transition hover:border-line2">
+                            <div @onclick="() => TogglePersonDetail(person.Id)" class="p-3.5 cursor-pointer select-none">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="font-bold text-sm text-ink">@person.Nickname</div>
+                                    <span class="text-faint text-xs font-bold transition-transform @(isExpanded ? "rotate-90 text-ink" : "")">›</span>
+                                </div>
+                                <div class="mt-1.5 flex items-center gap-3 text-xs">
+                                    <span class="text-muted">Recibido <span class="font-cond font-extrabold text-oktext">+@totalReceived.ToString("N0") €</span></span>
+                                    <span class="text-muted">Pagado <span class="font-cond font-extrabold text-clubtext">−@totalPaid.ToString("N0") €</span></span>
+                                    <span class="ml-auto font-cond font-extrabold @(saldo >= 0 ? "text-oktext" : "text-clubtext")">Saldo @saldo.ToString("N0") €</span>
+                                </div>
+                            </div>
+
+                            @if (isExpanded)
+                            {
+                                <div class="p-3 bg-well border-t border-line space-y-3 text-xs">
+                                    <div>
+                                        <div class="font-bold text-muted px-1 mb-1.5">Recibido (@received.Count)</div>
+                                        @if (!received.Any())
+                                        {
+                                            <div class="p-2.5 text-center text-faint italic bg-surface rounded-lg">Sin cobros a su nombre.</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="space-y-1.5">
+                                                @foreach (var p in received)
+                                                {
+                                                    <div class="p-2 bg-surface border border-line rounded-lg flex items-center justify-between">
+                                                        <div>
+                                                            <div class="font-bold text-ink">@(p.IsPlayerPayment ? TeamService.GetProfileById(p.PlayerId)?.Nickname ?? p.Concept : p.Category)</div>
+                                                            <div class="text-faint">@p.Concept • @(p.PaidAt?.ToString("dd/MM/yyyy") ?? "-")</div>
+                                                        </div>
+                                                        <div class="font-cond font-extrabold text-oktext">+@p.Amount.ToString("N2") €</div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-muted px-1 mb-1.5">Pagado (@paid.Count)</div>
+                                        @if (!paid.Any())
+                                        {
+                                            <div class="p-2.5 text-center text-faint italic bg-surface rounded-lg">Sin gastos a su nombre.</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="space-y-1.5">
+                                                @foreach (var e in paid)
+                                                {
+                                                    <div class="p-2 bg-surface border border-line rounded-lg flex items-center justify-between">
+                                                        <div>
+                                                            <div class="font-bold text-ink">@e.Category</div>
+                                                            <div class="text-faint">@e.Concept • @e.ExpenseDate.ToString("dd/MM/yyyy")@(!string.IsNullOrWhiteSpace(e.Notes) ? $" • \"{e.Notes}\"" : "")</div>
+                                                        </div>
+                                                        <div class="font-cond font-extrabold text-clubtext">−@e.Amount.ToString("N2") €</div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @{
+                var unassigned = allExpenses.Where(e => string.IsNullOrEmpty(e.PaidBy)).OrderByDescending(e => e.ExpenseDate).ToList();
+                var totalUnassigned = unassigned.Sum(e => e.Amount);
+                var isUnassignedExpanded = _expandedPersonId == UnassignedExpensesKey;
+            }
+            @if (unassigned.Any())
+            {
+                <div class="bg-surface border border-line rounded-xl overflow-hidden transition hover:border-line2">
+                    <div @onclick="() => TogglePersonDetail(UnassignedExpensesKey)" class="p-3.5 cursor-pointer select-none">
+                        <div class="flex items-center justify-between gap-2">
+                            <div>
+                                <div class="font-bold text-sm text-ink">Pagado con fondos del club</div>
+                                <div class="text-xs text-faint">Sin una persona responsable asignada (ej. remanente de años anteriores)</div>
+                            </div>
+                            <span class="text-faint text-xs font-bold transition-transform @(isUnassignedExpanded ? "rotate-90 text-ink" : "")">›</span>
+                        </div>
+                        <div class="mt-1.5 text-xs">
+                            <span class="text-muted">Pagado <span class="font-cond font-extrabold text-clubtext">−@totalUnassigned.ToString("N0") €</span></span>
+                        </div>
+                    </div>
+
+                    @if (isUnassignedExpanded)
+                    {
+                        <div class="p-3 bg-well border-t border-line space-y-1.5 text-xs">
+                            @foreach (var e in unassigned)
+                            {
+                                <div class="p-2 bg-surface border border-line rounded-lg flex items-center justify-between">
+                                    <div>
+                                        <div class="font-bold text-ink">@e.Category</div>
+                                        <div class="text-faint">@e.Concept • @e.ExpenseDate.ToString("dd/MM/yyyy")@(!string.IsNullOrWhiteSpace(e.Notes) ? $" • \"{e.Notes}\"" : "")</div>
+                                    </div>
+                                    <div class="font-cond font-extrabold text-clubtext">−@e.Amount.ToString("N2") €</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
 </div>
 
 @code {
@@ -572,6 +709,8 @@
 
     private string _subTab = "players"; // "players", "history", "expenses", "budget"
     private string? _expandedPlayerId = null;
+    private string? _expandedPersonId = null;
+    private const string UnassignedExpensesKey = "__unassigned__";
     private string? _confirmDeletePaymentId = null;
     private string? _confirmDeleteExpenseId = null;
 
@@ -596,6 +735,14 @@
             _expandedPlayerId = null;
         else
             _expandedPlayerId = playerId;
+    }
+
+    private void TogglePersonDetail(string personId)
+    {
+        if (_expandedPersonId == personId)
+            _expandedPersonId = null;
+        else
+            _expandedPersonId = personId;
     }
 
     private async Task ShareTreasuryWhatsApp()
@@ -663,8 +810,10 @@
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
-    /// <summary>Cuánto recibió cada persona autorizada este año, y qué se pagó (gastos del año, con la
-    /// observación entre paréntesis cuando la tiene, típicamente en "Otros").</summary>
+    /// <summary>Cuánto recibió y cuánto pagó de su bolsillo cada persona autorizada este año (saldo tipo
+    /// Debe/Haber), y abajo el desglose de todo lo pagado (gastos del año, con la observación entre
+    /// paréntesis cuando la tiene, típicamente en "Otros"), incluido lo pagado con fondos del club sin
+    /// una persona responsable (ej. remanente de años anteriores).</summary>
     private async Task ShareCajaWhatsApp()
     {
         var year = DateTime.Now.Year;
@@ -677,15 +826,18 @@
         sb.AppendLine();
         foreach (var r in receivers)
         {
-            var total = allPaid.Where(p => p.ReceivedByPlayerId == r.Id).Sum(p => p.Amount);
-            sb.AppendLine($"{r.Nickname} {total:N0}€");
+            var totalReceived = allPaid.Where(p => p.ReceivedByPlayerId == r.Id).Sum(p => p.Amount);
+            var totalPaid = expenses.Where(e => e.PaidBy == r.Id).Sum(e => e.Amount);
+            var saldo = totalReceived - totalPaid;
+            sb.AppendLine($"{r.Nickname}: recibió {totalReceived:N0}€, pagó {totalPaid:N0}€ → saldo {saldo:N0}€");
         }
         sb.AppendLine();
         sb.AppendLine("*Pagado*");
         foreach (var e in expenses)
         {
             var noteSuffix = !string.IsNullOrWhiteSpace(e.Notes) ? $" ({e.Notes})" : "";
-            sb.AppendLine($"{e.Amount:N0}€ {e.Category}{noteSuffix}");
+            var payer = string.IsNullOrEmpty(e.PaidBy) ? " [fondos del club]" : "";
+            sb.AppendLine($"{e.Amount:N0}€ {e.Category}{noteSuffix}{payer}");
         }
 
         var text = sb.ToString();

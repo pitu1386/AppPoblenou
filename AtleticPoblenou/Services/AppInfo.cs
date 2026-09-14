@@ -32,6 +32,12 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.13", new[]
+        {
+            "⚖️ El mensaje de WhatsApp 'Caja' ahora muestra, por cada persona, cuánto recibió y cuánto pagó de su bolsillo, con el saldo (Debe/Haber) entre los dos.",
+            "🧑‍🤝‍🧑 Nueva pestaña 'Por Persona' en Pagos: el saldo de cada quien maneja caja, con el detalle de lo que cobró y lo que pagó al tocarlo.",
+            "🏦 Los gastos pagados con fondos del club (sin una persona responsable, como el remanente de años anteriores) ahora se ven desglosados aparte.",
+        }),
         ("2.12", new[]
         {
             "💰 En Pagos → Aportes se pueden cargar ingresos del club no asociados a un jugador (remanente, patrocinio, rifa...), con su propio resumen 'Otros Ingresos'.",
