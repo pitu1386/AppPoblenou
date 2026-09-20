@@ -728,7 +728,11 @@
                             <th class="py-2.5 text-center w-8 hidden sm:table-cell">PG</th>
                             <th class="py-2.5 text-center w-8 hidden sm:table-cell">PE</th>
                             <th class="py-2.5 text-center w-8 hidden sm:table-cell">PP</th>
-                            <th class="py-2.5 text-center w-10 hidden xs:table-cell">DG</th>
+                            <th class="py-2.5 text-center w-12 whitespace-nowrap sm:hidden">G/E/P</th>
+                            <th class="py-2.5 text-center w-8 hidden sm:table-cell">GF</th>
+                            <th class="py-2.5 text-center w-8 hidden sm:table-cell">GC</th>
+                            <th class="py-2.5 text-center w-12 whitespace-nowrap sm:hidden">GF-GC</th>
+                            <th class="py-2.5 text-center w-10">DG</th>
                             <th class="py-2.5 text-right pr-3 w-10 font-extrabold text-ink">PTS</th>
                         </tr>
                     </thead>
@@ -776,9 +780,16 @@
                                 <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Won</td>
                                 <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Drawn</td>
                                 <td class="py-3 text-center font-cond text-muted hidden sm:table-cell">@row.Lost</td>
+                                <!-- En móvil G/E/P en una sola columna "8/2/2" -->
+                                <td class="py-3 text-center font-cond text-muted whitespace-nowrap sm:hidden">@($"{row.Won}/{row.Drawn}/{row.Lost}")</td>
+
+                                <!-- GF, GC separadas en pantallas grandes; en móvil una sola columna "3-0" -->
+                                <td class="py-3 text-center font-cond text-ink2 hidden sm:table-cell">@row.GoalsFor</td>
+                                <td class="py-3 text-center font-cond text-ink2 hidden sm:table-cell">@row.GoalsAgainst</td>
+                                <td class="py-3 text-center font-cond text-ink2 whitespace-nowrap sm:hidden">@($"{row.GoalsFor}-{row.GoalsAgainst}")</td>
 
                                 <!-- DG -->
-                                <td class="py-3 text-center font-cond text-xs hidden xs:table-cell @(row.GoalDifference > 0 ? "text-oktext" : row.GoalDifference < 0 ? "text-clubtext" : "text-muted")">
+                                <td class="py-3 text-center font-cond text-xs @(row.GoalDifference > 0 ? "text-oktext" : row.GoalDifference < 0 ? "text-clubtext" : "text-muted")">
                                     @(row.GoalDifference > 0 ? $"+{row.GoalDifference}" : row.GoalDifference.ToString())
                                 </td>
 
@@ -793,7 +804,7 @@
             </div>
 
             <div class="text-xs text-faint px-1 text-center">
-                PJ: Partidos Jugados • PG: Ganados • PE: Empatados • PP: Perdidos • DG: Dif. de Gol • PTS: Puntos
+                PJ: Partidos Jugados • PG: Ganados • PE: Empatados • PP: Perdidos • GF: Goles a Favor • GC: Goles en Contra • DG: Dif. de Gol • PTS: Puntos
             </div>
         </div>
     }

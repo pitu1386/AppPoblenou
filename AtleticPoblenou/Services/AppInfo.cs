@@ -32,6 +32,11 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.14", new[]
+        {
+            "⚽ La tabla de posiciones ahora muestra los goles a favor y en contra de cada equipo (GF y GC), y la diferencia de gol vuelve a verse en todas las pantallas.",
+            "📱 En el móvil, para que la tabla entre en una línea, ganados/empatados/perdidos y goles se muestran compactos como G/E/P (8/2/2) y GF-GC (27-12).",
+        }),
         ("2.13", new[]
         {
             "⚖️ El mensaje de WhatsApp 'Caja' ahora muestra, por cada persona, cuánto recibió y cuánto pagó de su bolsillo, con el saldo (Debe/Haber) entre los dos.",
