@@ -1,0 +1,269 @@
+@inject ITeamDataService TeamService
+@implements IDisposable
+
+@if (IsOpen)
+{
+    var schedules = TeamService.GetTrainingSchedules();
+    var now = DateTime.Now;
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
+        <div class="bg-surface border border-line2 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+
+            <div class="flex items-center justify-between border-b border-line pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🏃</span>
+                    <h3 class="font-extrabold text-ink text-base">Días de Entrenamiento</h3>
+                </div>
+                <button type="button" @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                    ✕
+                </button>
+            </div>
+
+            <p class="text-xs text-muted m-0 leading-relaxed">
+                Cada día se repite todas las semanas. Pasada <strong class="text-ink2">1 hora</strong> del inicio, la portada salta sola a la semana siguiente y las respuestas arrancan de cero.
+                Desactivar un día lo oculta de la portada sin borrar nada.
+            </p>
+
+            <!-- LISTA DE HORARIOS -->
+            @if (!schedules.Any())
+            {
+                <div class="p-4 bg-well rounded-lg border border-dashed border-line2 text-center text-xs text-muted">
+                    Todavía no hay ningún día cargado.
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2">
+                    @foreach (var s in schedules)
+                    {
+                        var next = s.NextSessionAt(now);
+                        var isEditing = _editing != null && _editing.Id == s.Id;
+
+                        <div @key="s.Id" class="p-3 rounded-lg border @(s.IsActive ? "bg-well border-line2" : "bg-surface border-line opacity-70") space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="font-cond font-extrabold text-lg leading-tight text-ink capitalize">
+                                        @DayLabel(s.DayOfWeek) · <span class="@(s.IsActive ? "text-oktext" : "text-muted")">@s.StartTime.ToString("HH:mm")</span>
+                                    </div>
+                                    <div class="text-[11px] text-muted">
+                                        @if (s.IsActive)
+                                        {
+                                            <span>Próximo: <strong class="text-ink2 capitalize">@next.ToString("ddd d MMM", EsCulture).Replace(".", "")</strong></span>
+                                        }
+                                        else
+                                        {
+                                            <span>Desactivado · no se muestra en la portada</span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <button type="button" @onclick="() => ToggleActive(s)" disabled="@_busy"
+                                        class="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition disabled:opacity-50 @(s.IsActive ? "bg-ok text-white border-ok" : "bg-surface text-muted border-line2 hover:text-ink")">
+                                    @(s.IsActive ? "ACTIVO" : "DESACTIVADO")
+                                </button>
+                            </div>
+
+                            @if (isEditing)
+                            {
+                                @RenderForm(_editing!)
+                            }
+                            else
+                            {
+                                <div class="flex items-center justify-end gap-3 text-xs">
+                                    @if (_confirmDeleteId == s.Id)
+                                    {
+                                        <span class="text-clubtext font-bold">¿Borrar este día y sus respuestas?</span>
+                                        <button type="button" @onclick="() => DeleteConfirmed(s.Id)" disabled="@_busy"
+                                                class="px-2.5 py-1 rounded-lg bg-club text-white font-bold disabled:opacity-50">Sí, borrar</button>
+                                        <button type="button" @onclick="() => _confirmDeleteId = null"
+                                                class="px-2.5 py-1 rounded-lg bg-well2 text-ink2 font-bold">No</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" @onclick="() => StartEdit(s)"
+                                                class="text-muted hover:text-ink font-semibold transition">✏️ Editar</button>
+                                        <button type="button" @onclick="() => _confirmDeleteId = s.Id"
+                                                class="text-faint hover:text-club font-semibold transition">Borrar</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- AGREGAR OTRO DÍA -->
+            @if (_editing != null && _isNew)
+            {
+                <div class="p-3 rounded-lg border border-ok/40 bg-okbg/40 space-y-2">
+                    <div class="text-xs font-bold text-oktext">Nuevo día de entrenamiento</div>
+                    @RenderForm(_editing)
+                </div>
+            }
+            else if (_editing == null)
+            {
+                <button type="button" @onclick="StartNew"
+                        class="w-full py-2.5 rounded-lg border border-dashed border-line2 bg-surface hover:bg-well text-ink text-xs font-bold transition">
+                    + Agregar otro día
+                </button>
+            }
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="text-xs font-bold text-clubtext">@_error</div>
+            }
+
+            <div class="pt-2">
+                <button type="button" @onclick="Close" class="w-full py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private TrainingSchedule? _editing;
+    private bool _isNew;
+    private bool _busy;
+    private string? _error;
+    private string? _confirmDeleteId;
+
+    private static readonly System.Globalization.CultureInfo EsCulture = GetEsCulture();
+    private static System.Globalization.CultureInfo GetEsCulture()
+    {
+        try { return new System.Globalization.CultureInfo("es-ES"); }
+        catch { return System.Globalization.CultureInfo.InvariantCulture; }
+    }
+
+    // Lunes → domingo, como se piensa la semana del club (DayOfWeek de .NET arranca en domingo).
+    private static readonly DayOfWeek[] WeekDays =
+    {
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+    };
+
+    private static string DayLabel(DayOfWeek d) => d switch
+    {
+        DayOfWeek.Monday => "Lunes",
+        DayOfWeek.Tuesday => "Martes",
+        DayOfWeek.Wednesday => "Miércoles",
+        DayOfWeek.Thursday => "Jueves",
+        DayOfWeek.Friday => "Viernes",
+        DayOfWeek.Saturday => "Sábado",
+        _ => "Domingo"
+    };
+
+    private RenderFragment RenderForm(TrainingSchedule model) => __builder =>
+    {
+        <div class="space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Día de la semana</label>
+                    <select @bind="model.DayOfWeek" class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none">
+                        @foreach (var d in WeekDays)
+                        {
+                            <option value="@d">@DayLabel(d)</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="font-bold text-ink2 block mb-1">Hora de inicio</label>
+                    <input @bind="model.StartTime" type="time"
+                           class="w-full bg-surface border border-line2 rounded-lg px-3 py-2 text-ink font-cond font-bold focus:border-club focus:outline-none" />
+                </div>
+            </div>
+            <div class="flex gap-2 pt-1">
+                <button type="button" @onclick="CancelEdit" class="flex-1 py-2 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg transition">
+                    Cancelar
+                </button>
+                <button type="button" @onclick="SaveEdit" disabled="@_busy" class="flex-1 py-2 bg-club hover:bg-clubdeep disabled:opacity-50 text-white font-extrabold rounded-lg transition">
+                    @(_busy ? "Guardando…" : "Guardar")
+                </button>
+            </div>
+        </div>
+    };
+
+    protected override void OnInitialized()
+    {
+        TeamService.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+    }
+
+    private void StartNew()
+    {
+        _error = null;
+        _confirmDeleteId = null;
+        _isNew = true;
+        _editing = new TrainingSchedule();
+    }
+
+    private void StartEdit(TrainingSchedule s)
+    {
+        _error = null;
+        _confirmDeleteId = null;
+        _isNew = false;
+        // Copia: si cancela, la fila original queda intacta.
+        _editing = s.Clone();
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _isNew = false;
+        _error = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editing == null) return;
+
+        // Dos filas con el mismo día y hora no aportan nada y confunden en la portada.
+        var duplicate = TeamService.GetTrainingSchedules()
+            .Any(s => s.Id != _editing.Id && s.DayOfWeek == _editing.DayOfWeek && s.StartTime == _editing.StartTime);
+        if (duplicate)
+        {
+            _error = $"Ya hay un entrenamiento el {DayLabel(_editing.DayOfWeek).ToLowerInvariant()} a las {_editing.StartTime.ToString("HH:mm")}.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        await TeamService.SaveTrainingScheduleAsync(_editing);
+        _busy = false;
+        _editing = null;
+        _isNew = false;
+    }
+
+    private async Task ToggleActive(TrainingSchedule s)
+    {
+        _busy = true;
+        var copy = s.Clone();
+        copy.IsActive = !s.IsActive;
+        await TeamService.SaveTrainingScheduleAsync(copy);
+        _busy = false;
+    }
+
+    private async Task DeleteConfirmed(string id)
+    {
+        _busy = true;
+        await TeamService.DeleteTrainingScheduleAsync(id);
+        _busy = false;
+        _confirmDeleteId = null;
+        if (_editing?.Id == id) CancelEdit();
+    }
+
+    private async Task Close()
+    {
+        CancelEdit();
+        _confirmDeleteId = null;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

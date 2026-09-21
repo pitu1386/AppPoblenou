@@ -5,6 +5,8 @@
 -- activar Supabase Auth, RLS, funciones RPC y Realtime.
 -- ==========================================================
 
+DROP TABLE IF EXISTS public.training_attendance CASCADE;
+DROP TABLE IF EXISTS public.training_schedules CASCADE;
 DROP TABLE IF EXISTS public.match_events CASCADE;
 DROP TABLE IF EXISTS public.match_lineups CASCADE;
 DROP TABLE IF EXISTS public.attendance CASCADE;
@@ -56,6 +58,7 @@ CREATE TABLE public.matches (
     rival_score INTEGER,
     status INTEGER DEFAULT 0, -- 0: Upcoming, 1: Finished, 2: Cancelled
     is_time_confirmed BOOLEAN NOT NULL DEFAULT TRUE,
+    use_away_kit BOOLEAN NOT NULL DEFAULT FALSE, -- marcado a mano en el fixture: se juega con la segunda equipación
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT check_no_mock_matches CHECK (id NOT IN ('match-1', 'match-2'))
@@ -167,6 +170,26 @@ CREATE TABLE public.club_settings (
     season_fee_per_player NUMERIC(10,2) DEFAULT 200.00,
     team_secret_code TEXT DEFAULT 'APN1929',
     season_history JSONB DEFAULT '[]'::jsonb
+);
+
+-- 9c. ENTRENAMIENTOS SEMANALES (día + hora fijos; la sesión vigente la calcula el cliente)
+CREATE TABLE public.training_schedules (
+    id TEXT PRIMARY KEY,
+    day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6), -- 0 domingo … 6 sábado (igual que DayOfWeek de .NET)
+    start_time TIME NOT NULL DEFAULT '22:00',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9d. ASISTENCIA A ENTRENAMIENTOS (Voy / No voy por jugador y sesión concreta)
+CREATE TABLE public.training_attendance (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL REFERENCES public.training_schedules(id) ON DELETE CASCADE,
+    session_date DATE NOT NULL,
+    player_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    status INTEGER NOT NULL DEFAULT 0, -- 0: Going, 1: NotGoing
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_training_session_player UNIQUE (schedule_id, session_date, player_id)
 );
 
 -- 9b. PRESUPUESTO ANUAL (tabla propia: solo Admin/Tesorero, separada de club_settings)

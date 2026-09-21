@@ -10,7 +10,7 @@ Este documento contiene la arquitectura, modelos de datos, reglas de negocio, se
 - **Propósito:** PWA para la gestión del equipo de fútbol veterano: convocatorias y asistencia, cuotas y caja común, roles de plantilla, tablón con encuestas, resultados, clasificación y estadísticas.
 - **Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
 - **Repositorio:** `https://github.com/pitu1386/AppPoblenou.git` (código en `main`, hosting en `gh-pages`)
-- **Versión activa:** `v2.7.1` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
+- **Versión activa:** `v2.15.0` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
 - **Regla:** cualquier cambio que se despliegue a producción sube el número de versión (al menos el minor, `2.X.0`) en `AtleticPoblenou.csproj` y en `AtleticPoblenou/package.json`, y añade una entrada nueva al principio de `AppInfo.ReleaseNotes`. Sin esto, `WhatsNewModal` no tiene nada que avisar y el club no distingue una versión de otra.
 
 ---
@@ -46,7 +46,7 @@ Requisito en el Dashboard: **Authentication → Providers → Email → "Confirm
 
 ### 3.3. Tablas
 1. `profiles`: ficha de jugador. `id` texto (para cuentas nuevas coincide con el UID de Auth; el admin principal es `user-1`), `auth_uid` UUID único, datos deportivos y personales, `role`, `is_captain`, `is_active`. Sin contraseña.
-2. `matches`: fixture (`round`, fecha, rival, local/visitante, marcador, `status` 0 Por jugar / 1 Finalizado / 2 Suspendido, notas, `match_kind` 'liga' / 'copa' / 'amistoso', `reminder_sent_at` para el cron de recordatorio push). Los partidos ajenos de la liga se guardan con `notes = 'LM|homeId|homeName|awayId|awayName'`.
+2. `matches`: fixture (`round`, fecha, rival, local/visitante, marcador, `status` 0 Por jugar / 1 Finalizado / 2 Suspendido, notas, `match_kind` 'liga' / 'copa' / 'amistoso', `is_time_confirmed`, `use_away_kit` (marcado a mano en el fixture: se juega con la segunda equipación; pisa la sugerencia de `KitAdvisor`), `reminder_sent_at` para el cron de recordatorio push). Los partidos ajenos de la liga se guardan con `notes = 'LM|homeId|homeName|awayId|awayName'`.
 3. `attendance`: asistencia por `match_id` + `player_id` (único). 0 Asiste / 1 No asiste / 2 Duda.
 4. `payments`: cuotas por jugador (0 Pendiente / 1 Pagado; método 0 Bizum / 1 Efectivo / 2 Transferencia).
 5. `team_expenses`: gastos de caja (`category` texto, `paid_by`).
@@ -56,6 +56,8 @@ Requisito en el Dashboard: **Authentication → Providers → Email → "Confirm
 9. `club_settings`: fila única `'current'` con identidad del club, cuota, `team_secret_code`, la segunda equipación (`away_kit_*`) e historial de temporadas.
 10. `match_lineups`: alineación de la pizarra táctica por partido (`match_id` es la clave primaria). `formation` y `starting_player_ids` (JSONB, 11 huecos en orden; `null` = hueco vacío). El banquillo no se guarda: se recalcula cada vez a partir de la asistencia confirmada menos quien ya está en la XI.
 11. `push_subscriptions` *(script separado `push_setup.sql`, v2.7)*: una fila por navegador/dispositivo suscripto (`profile_id`, `endpoint`, `p256dh`, `auth`). RLS propia: cada jugador solo ve/crea/borra sus propias suscripciones (no sigue el patrón staff/tesorería del resto).
+12. `training_schedules` *(v2.15)*: horarios de entrenamiento recurrentes. `day_of_week` (0 domingo … 6 sábado, igual que `DayOfWeek` de .NET), `start_time` (`time`), `is_active`. **No guardan fecha**: la sesión vigente la calcula el cliente (ver 5.8).
+13. `training_attendance` *(v2.15)*: respuesta Voy (0) / No voy (1) de cada jugador a una sesión concreta. Único por (`schedule_id`, `session_date`, `player_id`). Las sesiones pasadas quedan como historial; `close_season` las vacía.
 
 ### 3.4. Permisos (RLS)
 Funciones de apoyo: `my_profile_id()`, `my_role()`, `is_member()`, `is_admin()` (rol 0), `is_staff()` (0, 2 Delegado, 4 DT), `is_treasury()` (0, 1 Tesorero).
@@ -70,6 +72,8 @@ Funciones de apoyo: `my_profile_id()`, `my_role()`, `is_member()`, `is_admin()` 
 | club_settings | miembros | admin |
 | match_lineups | miembros | staff |
 | push_subscriptions | propia fila | propia fila (insert/select/delete; sin update) |
+| training_schedules | miembros | staff |
+| training_attendance | miembros | propia fila o staff |
 
 Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`, impide su borrado) y `prevent_privilege_escalation` (un no-admin no puede cambiar rol, capitanía, estado, email ni `auth_uid`).
 
@@ -83,7 +87,7 @@ Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`
 | `admin_set_password(p_profile_id, p_new_password)` | admin | Restablece la contraseña de otro jugador. |
 | `vote_poll(p_announcement_id, p_option)` | autenticado | Guarda solo el voto propio en el JSON. |
 | `clear_all_matches()` | staff | Vacía fixture, asistencias y eventos. |
-| `close_season(p_archive, p_new_season_name, p_new_fee)` | admin | Archiva la temporada y limpia partidos, asistencias, eventos y cobros en una transacción. |
+| `close_season(p_archive, p_new_season_name, p_new_fee)` | admin | Archiva la temporada y limpia partidos, asistencias, eventos, cobros y respuestas a entrenamientos en una transacción (los horarios de entrenamiento se conservan). |
 
 ---
 
@@ -100,7 +104,7 @@ Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`
 - `PushService`: suscribe el navegador a Web Push, guarda la suscripción en `push_subscriptions`, expone `IsSupported`/`Permission`/`IsEnabled`. El envío real lo hace la Edge Function `send-push` (firma VAPID), invocada por trigger (comunicado nuevo), por el staff a mano, o por `pg_cron` (recordatorio de partido).
 
 ### 4.2. Ciclo de sincronización
-1. **Arranque:** se carga la sesión; si existe, se pinta desde la caché `apn2_*` y en paralelo se leen las diez tablas de `TeamDataService.Tables` (`push_subscriptions` queda afuera: la gestiona `PushService` directo). Cada tabla que llega sustituye su copia local y su caché.
+1. **Arranque:** se carga la sesión; si existe, se pinta desde la caché `apn2_*` y en paralelo se leen todas las tablas de `TeamDataService.Tables` (`push_subscriptions` queda afuera: la gestiona `PushService` directo). Cada tabla que llega sustituye su copia local y su caché.
 2. **Mutación:** cambio optimista en memoria → escritura en la nube de **solo la fila afectada** (o RPC) → relectura de la(s) tabla(s) implicada(s). Si la nube rechaza, `OnError` muestra el motivo y la relectura deshace el cambio local. No se hacen upserts de listas completas.
 3. **Realtime:** `window.apnRealtime` (index.html) se suscribe a `postgres_changes` de todo el esquema `public` con el token del usuario y llama a `TeamDataService.OnCloudChange(tabla)`, que relee esa tabla. Al volver la pestaña a primer plano o recuperar la conexión se relee todo.
 4. **Sin conexión:** la app muestra la caché y avisa de cada escritura fallida. No hay cola de escrituras offline.
@@ -138,6 +142,12 @@ Cada partido es `Liga`, `Copa` o `Amistoso` (`matches.match_kind`). El amistoso 
 
 ### 5.7. Notificaciones push (v2.7)
 Disparadores: comunicado nuevo (trigger automático en `announcements`), aviso manual del staff (Admin → Comunicados → "Enviar notificación"), recordatorio de partido el día antes (`pg_cron` cada hora, marca `matches.reminder_sent_at` para no repetir), y un toque directo a quien no confirmó asistencia (filtro "Sin responder"). Cada jugador activa/desactiva las suyas desde el menú de su perfil; en iPhone requiere tener la app instalada en la pantalla de inicio (iOS 16.4+). Puesta en marcha completa (Edge Function, secretos, extensiones) en [`PUSH_SETUP.md`](./PUSH_SETUP.md).
+
+### 5.8. Entrenamientos (v2.15)
+- El Admin carga uno o más horarios semanales (día + hora) en Admin → Club y Liga → *Días de Entrenamiento* (o con el botón *Configurar* de la sección en la portada). Cada horario se activa/desactiva sin borrarlo; desactivado no aparece en la portada.
+- `TrainingAttendanceCard` (al final del tab "Próximo") muestra una tarjeta por horario activo con la **fecha concreta** de la próxima sesión, la cuenta atrás (`MatchCountdown` reutilizado), los botones **Voy / No voy** (no hay "duda") y quiénes respondieron.
+- La sesión vigente la calcula `TrainingSchedule.NextSessionAt(now)` en hora local del navegador: es la próxima ocurrencia del día de la semana a esa hora; si ya pasó más de `RolloverGrace` (1 h) desde el inicio, salta a la semana siguiente. No hay cron ni proceso en el servidor: como las respuestas se guardan por (`schedule_id`, `session_date`), cambiar de fecha equivale a "reiniciar" la tarjeta. La tarjeta se redibuja cada minuto para que el salto ocurra aunque la app quede abierta.
+- Cambiar el día o la hora de un horario cambia la fecha calculada y, por tanto, las respuestas visibles pasan a ser las de la nueva fecha (las anteriores no se borran, solo dejan de mostrarse).
 
 ---
 
@@ -198,13 +208,15 @@ Compila Tailwind (si hay npm), publica en Release, ajusta `<base href="/AppPoble
 - `AtleticPoblenou/Components/TacticalBoardModal.razor`: pizarra táctica — arma y guarda el once, o lo muestra de solo lectura.
 - `AtleticPoblenou/Components/CreateMatchModal.razor`: alta/edición de partido; avisa si la camiseta elegida choca con la del rival.
 - `AtleticPoblenou/Components/PaymentsTab.razor`: cuotas y caja.
-- `AtleticPoblenou/Components/AdminTab.razor`: roles, bajas, código de equipo, club, temporadas.
+- `AtleticPoblenou/Components/AdminTab.razor`: roles, bajas, código de equipo, club, temporadas, días de entrenamiento.
 - `AtleticPoblenou/Components/ClubSettingsModal.razor`: identidad del club, equipación titular y alternativa.
 - `AtleticPoblenou/Components/PlayerSheetModal.razor`: ficha de jugador, edición y cambio/restablecimiento de contraseña.
 - `AtleticPoblenou/Components/DbConfigModal.razor`: estado de conexión y sincronización manual.
 - `AtleticPoblenou/Components/WhatsNewModal.razor`: aviso de novedades por versión (ver 7.0).
-- `AtleticPoblenou/Components/MatchCountdown.razor`: cuenta atrás hasta el próximo partido.
-- `AtleticPoblenou/Services/KitAdvisor.cs`: compara colores propios/rivales y recomienda titular o alternativa.
+- `AtleticPoblenou/Components/MatchCountdown.razor`: cuenta atrás hasta el próximo partido (también la usa la tarjeta de entrenamientos).
+- `AtleticPoblenou/Components/TrainingAttendanceCard.razor`: sección Entrenamientos de la portada — próxima sesión de cada horario activo, Voy / No voy y quiénes van (ver 5.8).
+- `AtleticPoblenou/Components/TrainingSchedulesModal.razor`: alta, edición, activar/desactivar y borrado de horarios de entrenamiento (Admin).
+- `AtleticPoblenou/Services/KitAdvisor.cs`: compara colores propios/rivales y recomienda titular o alternativa; si el partido tiene `UseAwayKit` marcado, la alternativa gana siempre (`IsManual`).
 - `AtleticPoblenou/Services/PushService.cs`: notificaciones push (ver 5.7).
 - `AtleticPoblenou/wwwroot/index.html`: tema, service worker, puente Realtime, puente `apnPush` y helpers JS.
 - `AtleticPoblenou/tailwind.config.js`, `Styles/tailwind.input.css`, `package.json`: compilación de Tailwind.

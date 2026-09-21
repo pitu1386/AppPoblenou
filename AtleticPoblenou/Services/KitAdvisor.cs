@@ -2,7 +2,8 @@ using AtleticPoblenou.Models;
 
 namespace AtleticPoblenou.Services;
 
-public record KitRecommendation(string Description, string PrimaryColorHex, string SecondaryColorHex, bool IsClash, bool UsingAwayKit);
+/// <param name="IsManual">La alternativa está marcada a mano en el fixture (<see cref="Match.UseAwayKit"/>), no es una sugerencia por choque de colores.</param>
+public record KitRecommendation(string Description, string PrimaryColorHex, string SecondaryColorHex, bool IsClash, bool UsingAwayKit, bool IsManual = false);
 
 /// <summary>Decide qué camiseta llevar comparando el color principal de ambos equipos.</summary>
 public static class KitAdvisor
@@ -10,14 +11,20 @@ public static class KitAdvisor
     /// <summary>Distancia RGB por debajo de la cual dos colores se consideran "el mismo" a efectos de camiseta.</summary>
     private const double ClashThreshold = 90;
 
-    public static KitRecommendation Recommend(ClubSettings club, RivalTeam? rival)
+    /// <param name="forceAwayKit">Marca manual del partido (<see cref="Match.UseAwayKit"/>): si hay alternativa configurada, gana siempre a la sugerencia automática.</param>
+    public static KitRecommendation Recommend(ClubSettings club, RivalTeam? rival, bool forceAwayKit = false)
     {
         var homeDescription = string.IsNullOrWhiteSpace(club.KitDescription) ? "titular" : club.KitDescription;
         var home = new KitRecommendation(homeDescription, club.PrimaryColorHex, club.SecondaryColorHex, false, false);
 
-        if (rival == null) return home;
+        var clash = rival != null && AreSimilar(club.PrimaryColorHex, rival.PrimaryColorHex);
 
-        var clash = AreSimilar(club.PrimaryColorHex, rival.PrimaryColorHex);
+        if (forceAwayKit && club.HasAwayKit)
+        {
+            return new KitRecommendation(club.AwayKitDescription, club.AwayKitPrimaryColorHex, club.AwayKitSecondaryColorHex, clash, true, IsManual: true);
+        }
+
+        if (rival == null) return home;
         if (!clash) return home;
 
         if (club.HasAwayKit)

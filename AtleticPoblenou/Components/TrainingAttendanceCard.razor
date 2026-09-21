@@ -1,0 +1,190 @@
+@inject ITeamDataService TeamService
+@implements IDisposable
+
+@{
+    var schedules = TeamService.GetTrainingSchedules();
+    var activeSchedules = schedules.Where(s => s.IsActive).ToList();
+    var now = DateTime.Now;
+}
+
+@if (activeSchedules.Any() || (IsAdmin && !schedules.Any()))
+{
+    <div class="space-y-3">
+
+        <div class="flex items-center justify-between px-0.5">
+            <div class="flex items-center gap-2">
+                <span class="w-7 h-7 rounded-full bg-okbg text-oktext flex items-center justify-center">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5h11v11h-11z"></path><path d="M6.5 12h11M12 6.5v11"></path><path d="M3 9v6M21 9v6"></path></svg>
+                </span>
+                <h3 class="font-cond font-bold text-[20px] leading-none text-ink m-0">Entrenamientos</h3>
+            </div>
+
+            @if (IsAdmin)
+            {
+                <button type="button" @onclick="() => _showSettings = true"
+                        class="h-8 px-3 rounded-lg border border-line bg-surface text-[13px] font-bold text-ink hover:bg-well transition">
+                    ⚙️ Configurar
+                </button>
+            }
+        </div>
+
+        @if (!activeSchedules.Any())
+        {
+            <!-- Solo lo ve el admin y solo cuando nunca cargó un horario: para que sepa dónde se configura -->
+            <div class="bg-surface border border-dashed border-line2 rounded-xl p-5 text-center space-y-1.5">
+                <div class="font-bold text-ink text-sm">Todavía no hay ningún día de entrenamiento cargado</div>
+                <p class="text-xs text-muted m-0">Tocá <strong class="text-ink2">Configurar</strong> para agregar el día y la hora (por ejemplo, miércoles a las 22:00). El equipo verá acá quién va cada semana.</p>
+            </div>
+        }
+
+        @foreach (var schedule in activeSchedules)
+        {
+            var sessionAt = schedule.NextSessionAt(now);
+            var sessionDate = DateOnly.FromDateTime(sessionAt);
+            var attendanceList = TeamService.GetTrainingAttendance(schedule.Id, sessionDate);
+            var goingCount = attendanceList.Count(a => a.Status == AttendanceStatus.Going);
+            var notGoingCount = attendanceList.Count(a => a.Status == AttendanceStatus.NotGoing);
+            var answered = goingCount + notGoingCount;
+            var goingPct = answered == 0 ? 0 : (int)Math.Round(100.0 * goingCount / answered);
+            var notGoingPct = answered == 0 ? 0 : 100 - goingPct;
+            var myAttendance = TeamService.GetUserTrainingAttendance(schedule.Id, sessionDate, CurrentUser.Id);
+            var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
+            var answeredIds = attendanceList.Select(a => a.PlayerId).ToHashSet();
+            var unansweredCount = allProfiles.Count(p => !answeredIds.Contains(p.Id));
+            var dayName = sessionAt.ToString("dddd", EsCulture).ToLowerInvariant();
+            var isToday = sessionAt.Date == now.Date;
+
+            <div @key="schedule.Id" class="bg-surface border border-line rounded-xl px-[18px] pt-4 pb-4 space-y-3">
+
+                <div class="flex items-center justify-between gap-2">
+                    <div class="text-[11px] font-bold tracking-[0.1em] uppercase text-oktext truncate">
+                        Entrenamiento semanal
+                    </div>
+                    @if (isToday)
+                    {
+                        <div class="text-[11px] font-bold tracking-wider px-2 py-0.5 rounded bg-okbg text-oktext border border-ok/40 shrink-0">HOY</div>
+                    }
+                </div>
+
+                <div class="flex items-baseline gap-2.5 flex-wrap">
+                    <div class="font-cond font-extrabold text-[32px] leading-none text-ink capitalize">
+                        @sessionAt.ToString("ddd d MMM", EsCulture).Replace(".", "")
+                    </div>
+                    <div class="font-cond font-extrabold text-[32px] leading-none text-oktext">
+                        @sessionAt.ToString("HH:mm")
+                    </div>
+                </div>
+
+                <!-- CUENTA ATRÁS (misma pieza que el próximo partido) -->
+                <MatchCountdown MatchDate="sessionAt" />
+
+                <!-- ¿VAS? -->
+                <div class="pt-2.5 border-t border-line space-y-2.5">
+                    <div class="flex items-baseline justify-between gap-2">
+                        <div class="font-cond font-bold text-[20px] leading-none text-ink">¿Vas a entrenar el @dayName?</div>
+                        @if (myAttendance != null)
+                        {
+                            <span class="text-xs font-bold tracking-wider px-2 py-0.5 rounded shrink-0 @(myAttendance.Status == AttendanceStatus.Going ? "bg-okbg text-oktext" : "bg-clubbg text-clubtext")">
+                                @(myAttendance.Status == AttendanceStatus.Going ? "VOY" : "NO VOY")
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-[13px] text-muted shrink-0">Sin responder</span>
+                        }
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @onclick="() => SetMyRsvp(schedule, sessionDate, AttendanceStatus.Going)"
+                                class="h-12 rounded-[10px] text-[15px] flex items-center justify-center gap-1.5 border transition @(myAttendance?.Status == AttendanceStatus.Going ? "bg-ok text-white border-ok font-bold" : "bg-surface text-ink2 border-line2 font-semibold hover:bg-well")">
+                            <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                            Voy
+                        </button>
+                        <button type="button" @onclick="() => SetMyRsvp(schedule, sessionDate, AttendanceStatus.NotGoing)"
+                                class="h-12 rounded-[10px] text-[15px] flex items-center justify-center gap-1.5 border transition @(myAttendance?.Status == AttendanceStatus.NotGoing ? "bg-club text-white border-club font-bold" : "bg-surface text-ink2 border-line2 font-semibold hover:bg-well")">
+                            <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                            No voy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- QUIÉNES VAN -->
+                <div class="pt-2.5 border-t border-line space-y-2.5">
+                    <div class="flex items-baseline justify-between gap-2">
+                        <div class="text-[13px] font-semibold text-muted">
+                            <span class="text-oktext font-bold">@goingCount @(goingCount == 1 ? "va" : "van")</span> · @notGoingCount no @(notGoingCount == 1 ? "va" : "van")
+                        </div>
+                        <div class="text-[12px] text-faint shrink-0">@unansweredCount sin responder</div>
+                    </div>
+
+                    <div class="apn-meter">
+                        <div class="bg-ok h-full transition-all" style="width: @goingPct%"></div>
+                        <div class="bg-club h-full transition-all" style="width: @notGoingPct%"></div>
+                    </div>
+
+                    @if (!attendanceList.Any())
+                    {
+                        <div class="text-[13px] text-faint">Nadie respondió todavía para esta fecha.</div>
+                    }
+                    else
+                    {
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var att in attendanceList.OrderBy(a => a.Status).ThenBy(a => a.UpdatedAt))
+                            {
+                                var player = allProfiles.FirstOrDefault(p => p.Id == att.PlayerId) ?? TeamService.GetProfileById(att.PlayerId);
+                                if (player != null)
+                                {
+                                    <span class="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full text-[13px] font-semibold @(att.Status == AttendanceStatus.Going ? "bg-okbg text-oktext" : "bg-well text-faint line-through")">
+                                        <span class="w-5 h-5 rounded-full flex items-center justify-center font-cond font-bold text-xs text-white @(att.Status == AttendanceStatus.Going ? "bg-ok" : "bg-line2")">
+                                            @(player.JerseyNumber?.ToString() ?? "-")
+                                        </span>
+                                        @player.Nickname
+                                    </span>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (IsAdmin)
+    {
+        <TrainingSchedulesModal @bind-IsOpen="_showSettings" />
+    }
+}
+
+@code {
+    private bool _showSettings = false;
+    private Timer? _timer;
+
+    private UserProfile CurrentUser => TeamService.GetCurrentUser();
+    private bool IsAdmin => CurrentUser.Role == UserRole.Admin;
+
+    private static readonly System.Globalization.CultureInfo EsCulture = GetEsCulture();
+    private static System.Globalization.CultureInfo GetEsCulture()
+    {
+        try { return new System.Globalization.CultureInfo("es-ES"); }
+        catch { return System.Globalization.CultureInfo.InvariantCulture; }
+    }
+
+    protected override void OnInitialized()
+    {
+        TeamService.OnChange += StateHasChanged;
+        // La sesión "vigente" depende de la hora actual: se recalcula cada minuto para que, pasada
+        // una hora del inicio, la tarjeta salte sola a la semana siguiente sin que nadie toque nada.
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    private async Task SetMyRsvp(TrainingSchedule schedule, DateOnly sessionDate, AttendanceStatus status)
+    {
+        await TeamService.SetTrainingAttendanceAsync(schedule.Id, sessionDate, CurrentUser.Id, status);
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= StateHasChanged;
+        _timer?.Dispose();
+    }
+}

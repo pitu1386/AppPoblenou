@@ -32,6 +32,14 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.15", new[]
+        {
+            "🏃 Nueva sección 'Entrenamientos' al final de la portada: marcá si vas o no vas al entrenamiento de la semana y mirá quiénes van.",
+            "🔁 Es automático: pasada una hora del inicio, la tarjeta salta sola al mismo día de la semana siguiente y las respuestas arrancan de cero.",
+            "⚙️ El Admin configura el día y la hora en Admin → Club y Liga → Días de Entrenamiento (o desde el botón Configurar de la portada). Se pueden cargar varios días y activar o desactivar cada uno.",
+            "👕 En el próximo partido, al lado del nombre de cada equipo se ven los colores de su camiseta (la nuestra, la que toca ese día).",
+            "✅ En el Fixture, el staff puede tildar 'Jugamos con la segunda equipación' en cada partido por jugar. La portada y la convocatoria de WhatsApp lo respetan.",
+        }),
         ("2.14", new[]
         {
             "⚽ La tabla de posiciones ahora muestra los goles a favor y en contra de cada equipo (GF y GC), y la diferencia de gol vuelve a verse en todas las pantallas.",

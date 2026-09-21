@@ -18,7 +18,8 @@ public class TeamDataService : ITeamDataService, IDisposable
 
     private static readonly string[] Tables =
     {
-        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements", "match_lineups", "expense_budget"
+        "profiles", "club_settings", "rival_teams", "matches", "attendance", "payments", "team_expenses", "match_events", "announcements", "match_lineups", "expense_budget",
+        "training_schedules", "training_attendance"
     };
 
     private readonly IJSRuntime _js;
@@ -42,6 +43,8 @@ public class TeamDataService : ITeamDataService, IDisposable
     private List<MatchEvent> _matchEvents = new();
     private List<MatchLineup> _matchLineups = new();
     private Dictionary<string, decimal> _expenseBudget = new();
+    private List<TrainingSchedule> _trainingSchedules = new();
+    private List<TrainingAttendance> _trainingAttendance = new();
 
     public TeamDataService(IJSRuntime js, SupabaseAuthService auth, SupabaseClientService supabase)
     {
@@ -178,6 +181,12 @@ public class TeamDataService : ITeamDataService, IDisposable
                     break;
                 case "expense_budget":
                     _expenseBudget = await _supabase.FetchExpenseBudgetAsync();
+                    break;
+                case "training_schedules":
+                    _trainingSchedules = await _supabase.FetchTrainingSchedulesAsync();
+                    break;
+                case "training_attendance":
+                    _trainingAttendance = await _supabase.FetchTrainingAttendanceAsync();
                     break;
                 default:
                     return false;
@@ -325,6 +334,8 @@ public class TeamDataService : ITeamDataService, IDisposable
             _matchLineups = await ReadCacheAsync<List<MatchLineup>>("match_lineups") ?? new();
             _announcements = await ReadCacheAsync<List<TeamAnnouncement>>("announcements") ?? new();
             _expenseBudget = await ReadCacheAsync<Dictionary<string, decimal>>("expense_budget") ?? new();
+            _trainingSchedules = await ReadCacheAsync<List<TrainingSchedule>>("training_schedules") ?? new();
+            _trainingAttendance = await ReadCacheAsync<List<TrainingAttendance>>("training_attendance") ?? new();
         }
         catch
         {
@@ -353,6 +364,8 @@ public class TeamDataService : ITeamDataService, IDisposable
             "match_lineups" => _matchLineups,
             "announcements" => _announcements,
             "expense_budget" => _expenseBudget,
+            "training_schedules" => _trainingSchedules,
+            "training_attendance" => _trainingAttendance,
             _ => new()
         };
         try { await _js.InvokeVoidAsync("blazorLocalStorage.set", CachePrefix + table, JsonSerializer.Serialize(data)); } catch { }
@@ -380,6 +393,8 @@ public class TeamDataService : ITeamDataService, IDisposable
         _matchLineups = new();
         _announcements = new();
         _expenseBudget = new();
+        _trainingSchedules = new();
+        _trainingAttendance = new();
     }
 
     private void EnsureOwnerAdminProtected()
@@ -1046,6 +1061,53 @@ public class TeamDataService : ITeamDataService, IDisposable
     }
 
     // ==========================================
+    // ENTRENAMIENTOS
+    // ==========================================
+    public List<TrainingSchedule> GetTrainingSchedules() =>
+        _trainingSchedules.OrderBy(s => s.WeekOrder).ThenBy(s => s.StartTime).ToList();
+
+    public async Task SaveTrainingScheduleAsync(TrainingSchedule schedule)
+    {
+        var idx = _trainingSchedules.FindIndex(s => s.Id == schedule.Id);
+        if (idx >= 0) _trainingSchedules[idx] = schedule; else _trainingSchedules.Add(schedule);
+        NotifyStateChanged();
+        await WriteAndRefreshAsync(() => _supabase.UpsertTrainingScheduleAsync(schedule), "training_schedules");
+    }
+
+    public async Task DeleteTrainingScheduleAsync(string scheduleId)
+    {
+        _trainingSchedules.RemoveAll(s => s.Id == scheduleId);
+        _trainingAttendance.RemoveAll(a => a.ScheduleId == scheduleId);
+        NotifyStateChanged();
+        // Las respuestas caen en cascada por la clave foránea.
+        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("training_schedules", scheduleId), "training_schedules", "training_attendance");
+    }
+
+    public List<TrainingAttendance> GetTrainingAttendance(string scheduleId, DateOnly sessionDate) =>
+        _trainingAttendance.Where(a => a.ScheduleId == scheduleId && a.SessionDate == sessionDate).ToList();
+
+    public TrainingAttendance? GetUserTrainingAttendance(string scheduleId, DateOnly sessionDate, string playerId) =>
+        _trainingAttendance.FirstOrDefault(a => a.ScheduleId == scheduleId && a.SessionDate == sessionDate && a.PlayerId == playerId);
+
+    public async Task SetTrainingAttendanceAsync(string scheduleId, DateOnly sessionDate, string playerId, AttendanceStatus status)
+    {
+        var att = _trainingAttendance.FirstOrDefault(a => a.ScheduleId == scheduleId && a.SessionDate == sessionDate && a.PlayerId == playerId);
+        if (att != null)
+        {
+            att.Status = status;
+            att.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            att = new TrainingAttendance { ScheduleId = scheduleId, SessionDate = sessionDate, PlayerId = playerId, Status = status, UpdatedAt = DateTime.UtcNow };
+            _trainingAttendance.Add(att);
+        }
+        NotifyStateChanged();
+
+        await WriteAndRefreshAsync(() => _supabase.UpsertTrainingAttendanceAsync(att), "training_attendance");
+    }
+
+    // ==========================================
     // PAGOS Y CAJA
     // ==========================================
     public List<Payment> GetPayments() => _payments.OrderByDescending(p => p.PaidAt ?? p.DueDate ?? DateTime.MinValue).ToList();
@@ -1226,6 +1288,7 @@ public class TeamDataService : ITeamDataService, IDisposable
             _matchEvents.Clear();
             _attendance.Clear();
             _payments.Clear();
+            _trainingAttendance.Clear();
         }
         await RefreshFromCloudAsync();
     }

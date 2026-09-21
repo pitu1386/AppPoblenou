@@ -45,6 +45,7 @@ public class SupabaseMatchDto
     public int? rival_score { get; set; }
     public int status { get; set; }
     public bool is_time_confirmed { get; set; } = true;
+    public bool use_away_kit { get; set; } = false;
     public string? notes { get; set; }
 }
 
@@ -68,6 +69,25 @@ public class SupabaseAttendanceDto
     public string player_id { get; set; } = "";
     public int status { get; set; }
     public string? note { get; set; }
+    public DateTime? updated_at { get; set; }
+}
+
+public class SupabaseTrainingScheduleDto
+{
+    public string id { get; set; } = "";
+    public int day_of_week { get; set; }        // 0 domingo … 6 sábado (igual que DayOfWeek de .NET)
+    public string start_time { get; set; } = ""; // columna time: llega como "22:00:00"
+    public bool is_active { get; set; } = true;
+    public DateTime? created_at { get; set; }
+}
+
+public class SupabaseTrainingAttendanceDto
+{
+    public string id { get; set; } = "";
+    public string schedule_id { get; set; } = "";
+    public string session_date { get; set; } = ""; // columna date: "yyyy-MM-dd"
+    public string player_id { get; set; } = "";
+    public int status { get; set; }
     public DateTime? updated_at { get; set; }
 }
 
@@ -227,6 +247,7 @@ public static class SupabaseMappers
             rival_score = isOur ? m.RivalScore : m.AwayScore,
             status = (int)m.Status,
             is_time_confirmed = m.IsTimeConfirmed,
+            use_away_kit = m.UseAwayKit,
             notes = isOur ? m.Notes : $"LM|{m.HomeTeamId}|{m.HomeTeamName}|{m.AwayTeamId}|{m.AwayTeamName}"
         };
     }
@@ -249,7 +270,8 @@ public static class SupabaseMappers
             LocationName = d.location_name,
             LocationUrl = d.location_url ?? "",
             Status = (MatchStatus)d.status,
-            IsTimeConfirmed = d.is_time_confirmed
+            IsTimeConfirmed = d.is_time_confirmed,
+            UseAwayKit = d.use_away_kit
         };
 
         if (!string.IsNullOrEmpty(d.notes) && d.notes.StartsWith("LM|"))
@@ -327,6 +349,47 @@ public static class SupabaseMappers
         PlayerId = d.player_id,
         Status = (AttendanceStatus)d.status,
         Note = d.note,
+        UpdatedAt = d.updated_at ?? DateTime.UtcNow
+    };
+
+    public static SupabaseTrainingScheduleDto ToDto(TrainingSchedule s) => new()
+    {
+        id = s.Id,
+        day_of_week = (int)s.DayOfWeek,
+        start_time = s.StartTime.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+        is_active = s.IsActive,
+        created_at = s.CreatedAt
+    };
+
+    public static TrainingSchedule FromDto(SupabaseTrainingScheduleDto d) => new()
+    {
+        Id = d.id,
+        DayOfWeek = d.day_of_week is >= 0 and <= 6 ? (DayOfWeek)d.day_of_week : DayOfWeek.Wednesday,
+        // Postgres devuelve "22:00:00"; se acepta también "22:00" por si alguna vez se carga a mano.
+        StartTime = TimeOnly.TryParseExact(d.start_time, new[] { "HH:mm:ss", "HH:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t)
+            ? t : new TimeOnly(22, 0),
+        IsActive = d.is_active,
+        CreatedAt = d.created_at ?? DateTime.UtcNow
+    };
+
+    public static SupabaseTrainingAttendanceDto ToDto(TrainingAttendance a) => new()
+    {
+        id = a.Id,
+        schedule_id = a.ScheduleId,
+        session_date = a.SessionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        player_id = a.PlayerId,
+        status = (int)a.Status,
+        updated_at = a.UpdatedAt
+    };
+
+    public static TrainingAttendance FromDto(SupabaseTrainingAttendanceDto d) => new()
+    {
+        Id = d.id,
+        ScheduleId = d.schedule_id,
+        SessionDate = DateOnly.TryParseExact(d.session_date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var sd)
+            ? sd : DateOnly.MinValue,
+        PlayerId = d.player_id,
+        Status = (AttendanceStatus)d.status,
         UpdatedAt = d.updated_at ?? DateTime.UtcNow
     };
 

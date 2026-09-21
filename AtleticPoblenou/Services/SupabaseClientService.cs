@@ -161,6 +161,8 @@ public class SupabaseClientService
     public async Task<List<MatchEvent>> FetchMatchEventsAsync() => (await GetAsync<SupabaseEventDto>("match_events")).Select(SupabaseMappers.FromDto).ToList();
     public async Task<List<TeamAnnouncement>> FetchAnnouncementsAsync() => (await GetAsync<SupabaseAnnouncementDto>("announcements")).Select(SupabaseMappers.FromDto).ToList();
     public async Task<List<MatchLineup>> FetchMatchLineupsAsync() => (await GetAsync<SupabaseMatchLineupDto>("match_lineups")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<TrainingSchedule>> FetchTrainingSchedulesAsync() => (await GetAsync<SupabaseTrainingScheduleDto>("training_schedules")).Select(SupabaseMappers.FromDto).ToList();
+    public async Task<List<TrainingAttendance>> FetchTrainingAttendanceAsync() => (await GetAsync<SupabaseTrainingAttendanceDto>("training_attendance")).Select(SupabaseMappers.FromDto).ToList();
 
     public async Task<ClubSettings?> FetchClubSettingsAsync()
     {
@@ -189,6 +191,9 @@ public class SupabaseClientService
     public Task UpsertMatchEventsAsync(IEnumerable<MatchEvent> evs) => UpsertAsync("match_events", evs.Select(SupabaseMappers.ToDto));
     public Task UpsertAnnouncementAsync(TeamAnnouncement a) => UpsertRowAsync("announcements", SupabaseMappers.ToDto(a));
     public Task UpsertMatchLineupAsync(MatchLineup l) => UpsertRowAsync("match_lineups", SupabaseMappers.ToDto(l));
+    public Task UpsertTrainingScheduleAsync(TrainingSchedule s) => UpsertRowAsync("training_schedules", SupabaseMappers.ToDto(s));
+    /// <summary>on_conflict sobre (schedule_id, session_date, player_id): si otro dispositivo creó la fila antes, se actualiza en vez de duplicar.</summary>
+    public Task UpsertTrainingAttendanceAsync(TrainingAttendance a) => UpsertRowAsync("training_attendance?on_conflict=schedule_id,session_date,player_id", SupabaseMappers.ToDto(a));
     public Task UpsertClubSettingsAsync(ClubSettings s) => UpsertRowAsync("club_settings", SupabaseMappers.ToDto(s));
     public Task UpsertExpenseBudgetAsync(Dictionary<string, decimal> budget) => UpsertRowAsync("expense_budget", new SupabaseExpenseBudgetDto { id = "current", budget = budget });
 

@@ -134,6 +134,48 @@
                 <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
             </button>
 
+            <!-- Días de Entrenamiento -->
+            @{
+                var trainings = TeamService.GetTrainingSchedules();
+                var activeTrainings = trainings.Where(t => t.IsActive).ToList();
+            }
+            <button type="button" @onclick="() => _showTrainingModal = true"
+                    class="w-full p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group shadow-xs">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-xl bg-okbg border border-ok/30 text-oktext flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition">
+                        🏃
+                    </div>
+                    <div>
+                        <div class="font-bold text-sm text-ink flex items-center gap-2">
+                            <span>Días de Entrenamiento</span>
+                            @if (activeTrainings.Any())
+                            {
+                                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-okbg text-oktext border border-ok/30">
+                                    @activeTrainings.Count @(activeTrainings.Count == 1 ? "activo" : "activos")
+                                </span>
+                            }
+                            else if (trainings.Any())
+                            {
+                                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-well border border-line text-muted">
+                                    Desactivado
+                                </span>
+                            }
+                        </div>
+                        <div class="text-xs text-muted">
+                            @if (activeTrainings.Any())
+                            {
+                                @string.Join(" · ", activeTrainings.Select(t => $"{TrainingDayLabel(t.DayOfWeek)} {t.StartTime.ToString("HH:mm")}"))
+                            }
+                            else
+                            {
+                                <span>Día y hora de cada semana; la portada pregunta quién va</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
+            </button>
+
             <!-- Gestión de Temporadas -->
             <button type="button" @onclick="() => _showSeasonModal = true"
                     class="w-full p-4 bg-surface hover:bg-well border border-line rounded-xl flex items-center justify-between text-left transition group shadow-xs">
@@ -276,6 +318,7 @@
     <ClubSettingsModal @bind-IsOpen="_showClubSettingsModal" />
     <ManageRolesModal @bind-IsOpen="_showRolesModal" />
     <SeasonManagerModal @bind-IsOpen="_showSeasonModal" />
+    <TrainingSchedulesModal @bind-IsOpen="_showTrainingModal" />
     <PlayerHistoryModal @bind-IsOpen="_showPlayerHistoryModal" OnOpenPlayerSheet="OnOpenPlayerSheet" />
     <AnnouncementHistoryModal @bind-IsOpen="_showAnnouncementHistoryModal" />
 
@@ -296,8 +339,20 @@
     private bool _showClubSettingsModal = false;
     private bool _showRolesModal = false;
     private bool _showSeasonModal = false;
+    private bool _showTrainingModal = false;
     private bool _showPlayerHistoryModal = false;
     private bool _showAnnouncementHistoryModal = false;
+
+    private static string TrainingDayLabel(DayOfWeek d) => d switch
+    {
+        DayOfWeek.Monday => "Lunes",
+        DayOfWeek.Tuesday => "Martes",
+        DayOfWeek.Wednesday => "Miércoles",
+        DayOfWeek.Thursday => "Jueves",
+        DayOfWeek.Friday => "Viernes",
+        DayOfWeek.Saturday => "Sábado",
+        _ => "Domingo"
+    };
 
     private async Task GenerateNewCode()
     {

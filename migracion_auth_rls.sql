@@ -40,6 +40,9 @@ alter table public.matches add column if not exists match_kind text not null def
 -- Hora "a confirmar" vs. ya definitiva, para que no se filtre un horario provisional como si fuera el real.
 alter table public.matches add column if not exists is_time_confirmed boolean not null default true;
 
+-- Marcado a mano en el fixture: ese partido se juega con la segunda equipación (v2.15).
+alter table public.matches add column if not exists use_away_kit boolean not null default false;
+
 alter table public.rival_teams add column if not exists venue_name text;
 alter table public.rival_teams add column if not exists venue_maps_url text;
 alter table public.rival_teams add column if not exists logo_url text;
@@ -92,6 +95,28 @@ create table if not exists public.match_lineups (
 
 -- Si el DT ya la dio por definitiva o sigue siendo un borrador sujeto a cambios.
 alter table public.match_lineups add column if not exists is_confirmed boolean not null default false;
+
+-- Entrenamientos semanales (v2.15): día + hora fijos que se repiten cada semana. No guardan
+-- fecha: la sesión vigente la calcula el cliente y salta a la semana siguiente pasada 1 h del inicio.
+create table if not exists public.training_schedules (
+    id text primary key,
+    day_of_week integer not null check (day_of_week between 0 and 6), -- 0 domingo … 6 sábado (igual que DayOfWeek de .NET)
+    start_time time not null default '22:00',
+    is_active boolean not null default true,
+    created_at timestamptz default now()
+);
+
+-- Respuesta (Voy / No voy) de cada jugador a una sesión concreta: horario + fecha del día.
+-- Al cambiar la fecha, la sesión nueva arranca sin respuestas; las anteriores quedan como historial.
+create table if not exists public.training_attendance (
+    id text primary key,
+    schedule_id text not null references public.training_schedules(id) on delete cascade,
+    session_date date not null,
+    player_id text not null references public.profiles(id) on delete cascade,
+    status integer not null default 0, -- 0 Voy / 1 No voy
+    updated_at timestamptz default now(),
+    constraint unique_training_session_player unique (schedule_id, session_date, player_id)
+);
 
 alter table public.team_expenses alter column category type text using category::text;
 alter table public.team_expenses alter column category set default 'Otros';
@@ -296,7 +321,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget','training_schedules','training_attendance'] loop
         execute format('alter table public.%I enable row level security', t);
         execute format('alter table public.%I force row level security', t);
         execute format('drop policy if exists "Permiso Total Anon" on public.%I', t);
@@ -379,6 +404,22 @@ create policy "apn_update" on public.club_settings for update to authenticated u
 create policy "apn_select" on public.expense_budget for select to authenticated using (public.is_member());
 create policy "apn_insert" on public.expense_budget for insert to authenticated with check (public.is_treasury());
 create policy "apn_update" on public.expense_budget for update to authenticated using (public.is_treasury()) with check (public.is_treasury());
+
+-- training_schedules: lectura miembros, escritura staff (igual que el fixture).
+create policy "apn_select" on public.training_schedules for select to authenticated using (public.is_member());
+create policy "apn_insert" on public.training_schedules for insert to authenticated with check (public.is_staff());
+create policy "apn_update" on public.training_schedules for update to authenticated using (public.is_staff()) with check (public.is_staff());
+create policy "apn_delete" on public.training_schedules for delete to authenticated using (public.is_staff());
+
+-- training_attendance: cada jugador su propia respuesta; staff cualquiera (mismo criterio que attendance).
+create policy "apn_select" on public.training_attendance for select to authenticated using (public.is_member());
+create policy "apn_insert" on public.training_attendance for insert to authenticated
+    with check (public.is_staff() or player_id = public.my_profile_id());
+create policy "apn_update" on public.training_attendance for update to authenticated
+    using (public.is_staff() or player_id = public.my_profile_id())
+    with check (public.is_staff() or player_id = public.my_profile_id());
+create policy "apn_delete" on public.training_attendance for delete to authenticated
+    using (public.is_staff() or player_id = public.my_profile_id());
 
 -- -------------------------------------------------------------------------
 -- 6. FUNCIONES RPC
@@ -531,6 +572,8 @@ begin
     delete from public.attendance;
     delete from public.matches;
     delete from public.payments;
+    -- Historial de respuestas a entrenamientos: se limpia; los horarios (training_schedules) se conservan.
+    delete from public.training_attendance;
     return true;
 end $$;
 
@@ -551,7 +594,7 @@ grant execute on function public.close_season(jsonb, text, numeric) to authentic
 do $$
 declare t text;
 begin
-    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget'] loop
+    foreach t in array array['profiles','matches','attendance','payments','team_expenses','match_events','rival_teams','announcements','club_settings','match_lineups','expense_budget','training_schedules','training_attendance'] loop
         if not exists (
             select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
         ) then
@@ -572,3 +615,5 @@ alter table public.announcements replica identity full;
 alter table public.club_settings replica identity full;
 alter table public.match_lineups replica identity full;
 alter table public.expense_budget replica identity full;
+alter table public.training_schedules replica identity full;
+alter table public.training_attendance replica identity full;

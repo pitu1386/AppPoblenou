@@ -180,6 +180,12 @@ public class Match
     /// <summary>Si la hora todavía puede cambiar (a confirmar con el rival/liga) o ya es definitiva.</summary>
     public bool IsTimeConfirmed { get; set; } = true;
 
+    /// <summary>
+    /// Marcado a mano en el fixture: jugamos con la segunda equipación. Pisa la sugerencia automática
+    /// de <c>KitAdvisor</c> (que solo mira si los colores chocan) para cuando lo decide el delegado o la liga.
+    /// </summary>
+    public bool UseAwayKit { get; set; } = false;
+
     // Cancha y notas
     public string LocationName { get; set; } = "Camp Agapito Fernández (Poblenou)";
     public string LocationUrl { get; set; } = "https://maps.google.com/?q=Camp+Municipal+de+Futbol+Agapito+Fernandez+Barcelona";
@@ -263,6 +269,49 @@ public class Attendance
     public string PlayerId { get; set; } = string.Empty;
     public AttendanceStatus Status { get; set; } = AttendanceStatus.Going;
     public string? Note { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Día y hora fijos de entrenamiento, recurrente cada semana. No tiene fecha propia: la sesión
+/// "vigente" se calcula sola (<see cref="NextSessionAt"/>) y pasa a la semana siguiente cuando
+/// ya transcurrió más de una hora desde el inicio. Se puede desactivar sin borrarlo.
+/// </summary>
+public class TrainingSchedule
+{
+    /// <summary>Margen tras el inicio durante el cual la sesión sigue siendo "la de hoy" antes de saltar a la próxima semana.</summary>
+    public static readonly TimeSpan RolloverGrace = TimeSpan.FromHours(1);
+
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public DayOfWeek DayOfWeek { get; set; } = DayOfWeek.Wednesday;
+    public TimeOnly StartTime { get; set; } = new(22, 0);
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Fecha y hora (local) de la próxima sesión a partir de <paramref name="now"/>.</summary>
+    public DateTime NextSessionAt(DateTime now)
+    {
+        var daysAhead = ((int)DayOfWeek - (int)now.DayOfWeek + 7) % 7;
+        var session = now.Date.AddDays(daysAhead).Add(StartTime.ToTimeSpan());
+        if (now > session + RolloverGrace) session = session.AddDays(7);
+        return session;
+    }
+
+    /// <summary>Orden lunes → domingo (DayOfWeek de .NET arranca en domingo).</summary>
+    public int WeekOrder => ((int)DayOfWeek + 6) % 7;
+
+    public TrainingSchedule Clone() => (TrainingSchedule)MemberwiseClone();
+}
+
+/// <summary>Respuesta de un jugador a una sesión concreta de entrenamiento (horario + fecha). Solo Voy / No voy.</summary>
+public class TrainingAttendance
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string ScheduleId { get; set; } = string.Empty;
+    public DateOnly SessionDate { get; set; }
+    public string PlayerId { get; set; } = string.Empty;
+    /// <summary>Solo se usan Going y NotGoing; no hay "duda" para entrenar.</summary>
+    public AttendanceStatus Status { get; set; } = AttendanceStatus.Going;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 

@@ -88,6 +88,15 @@ public interface ITeamDataService
     Attendance? GetUserAttendance(string matchId, string playerId);
     Task SetAttendanceAsync(string matchId, string playerId, AttendanceStatus status, string? note = null);
 
+    // Entrenamientos (horarios semanales recurrentes + asistencia por sesión)
+    /// <summary>Todos los horarios, activos o no, ordenados lunes → domingo.</summary>
+    List<TrainingSchedule> GetTrainingSchedules();
+    Task SaveTrainingScheduleAsync(TrainingSchedule schedule);
+    Task DeleteTrainingScheduleAsync(string scheduleId);
+    List<TrainingAttendance> GetTrainingAttendance(string scheduleId, DateOnly sessionDate);
+    TrainingAttendance? GetUserTrainingAttendance(string scheduleId, DateOnly sessionDate, string playerId);
+    Task SetTrainingAttendanceAsync(string scheduleId, DateOnly sessionDate, string playerId, AttendanceStatus status);
+
     // Payments & Treasury
     List<Payment> GetPayments();
     List<Payment> GetPaymentsForUser(string playerId);
