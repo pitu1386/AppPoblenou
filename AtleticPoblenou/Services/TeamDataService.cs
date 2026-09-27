@@ -577,6 +577,25 @@ public class TeamDataService : ITeamDataService, IDisposable
         }
     }
 
+    public async Task<(bool Success, string ErrorMessage)> ResetPasswordWithCodeAsync(string identifier, string teamCode, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+            return (false, "Ingresa tu email o apodo.");
+        if (string.IsNullOrWhiteSpace(teamCode))
+            return (false, "Ingresa el código de equipo.");
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            return (false, "La contraseña debe tener al menos 6 caracteres.");
+        try
+        {
+            await _supabase.RpcAsync("reset_password_with_code", new { p_identifier = identifier.Trim(), p_team_code = teamCode, p_new_password = newPassword });
+            return (true, "");
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, ex.StatusCode == null ? ex.Message : "No se pudo restablecer la contraseña. ¿Está ejecutado el script SQL de migración?");
+        }
+    }
+
     public async Task LogoutAsync()
     {
         await StopRealtimeAsync();

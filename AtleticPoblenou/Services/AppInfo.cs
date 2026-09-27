@@ -32,6 +32,11 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.16", new[]
+        {
+            "🔑 Arreglado: restablecer la contraseña de un jugador desde su ficha (Admin) daba error y no guardaba el cambio.",
+            "🔓 Nuevo: en el login, '¿Olvidaste tu contraseña?' — cualquier jugador puede ponerse una nueva él mismo con su email/apodo y el código de seguridad del equipo, sin depender del Admin.",
+        }),
         ("2.15", new[]
         {
             "🏃 Nueva sección 'Entrenamientos' al final de la portada: marcá si vas o no vas al entrenamiento de la semana y mirá quiénes van.",

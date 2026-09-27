@@ -10,7 +10,7 @@ Este documento contiene la arquitectura, modelos de datos, reglas de negocio, se
 - **Propósito:** PWA para la gestión del equipo de fútbol veterano: convocatorias y asistencia, cuotas y caja común, roles de plantilla, tablón con encuestas, resultados, clasificación y estadísticas.
 - **Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
 - **Repositorio:** `https://github.com/pitu1386/AppPoblenou.git` (código en `main`, hosting en `gh-pages`)
-- **Versión activa:** `v2.15.0` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
+- **Versión activa:** `v2.16.0` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
 - **Regla:** cualquier cambio que se despliegue a producción sube el número de versión (al menos el minor, `2.X.0`) en `AtleticPoblenou.csproj` y en `AtleticPoblenou/package.json`, y añade una entrada nueva al principio de `AppInfo.ReleaseNotes`. Sin esto, `WhatsNewModal` no tiene nada que avisar y el club no distingue una versión de otra.
 
 ---
@@ -85,6 +85,7 @@ Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`
 | `register_profile(...)` | autenticado | Crea la ficha del usuario logueado validando el código. Si no hay ningún admin activo, el primero lo es. |
 | `reactivate_with_code(p_team_code)` | autenticado | Reactiva la propia ficha dada de baja. |
 | `admin_set_password(p_profile_id, p_new_password)` | admin | Restablece la contraseña de otro jugador. |
+| `reset_password_with_code(p_identifier, p_team_code, p_new_password)` | anon | Un jugador sin sesión se pone contraseña nueva probando que conoce el código de equipo (pantalla de login → "¿Olvidaste tu contraseña?"). |
 | `vote_poll(p_announcement_id, p_option)` | autenticado | Guarda solo el voto propio en el JSON. |
 | `clear_all_matches()` | staff | Vacía fixture, asistencias y eventos. |
 | `close_season(p_archive, p_new_season_name, p_new_fee)` | admin | Archiva la temporada y limpia partidos, asistencias, eventos, cobros y respuestas a entrenamientos en una transacción (los horarios de entrenamiento se conservan). |
@@ -132,7 +133,7 @@ Triggers en `profiles`: `protect_owner_admin` (fuerza Admin y activo en `user-1`
 ### 5.4. Altas y bajas
 - Alta: el jugador crea cuenta con email y contraseña (mínimo 6 caracteres) y código de equipo. La ficha se crea con `register_profile`.
 - Baja: el admin marca `is_active = false`. El jugador sigue pudiendo iniciar sesión pero solo ve la pantalla de reactivación.
-- Contraseña olvidada: un admin la restablece desde la ficha del jugador (`admin_set_password`).
+- Contraseña olvidada: un admin la restablece desde la ficha del jugador (`admin_set_password`), o el propio jugador la cambia solo desde el login con "¿Olvidaste tu contraseña?" probando el código de equipo (`reset_password_with_code`).
 
 ### 5.5. Temporadas
 `CloseSeasonAndStartNewAsync` calcula el resumen en cliente y llama a `close_season`, que archiva en `club_settings.season_history` y borra partidos, asistencias, eventos y cobros en una sola transacción. Los perfiles y rivales se conservan.
@@ -162,6 +163,7 @@ Disparadores: comunicado nuevo (trigger automático en `announcements`), aviso m
 7. **Pizarra táctica sin guardar, ciega a las posiciones, con gente que no confirmó y sin forma de revisarla después:** `TacticalBoardModal` no persistía nada (se perdía al cerrar el modal), el reparto automático tomaba los primeros 11 jugadores sin mirar su posición real, si faltaba gente de una posición completaba con cualquiera de la plantilla aunque no hubiera confirmado que va, y el único botón para abrirla apuntaba siempre a `NextMatch` (imposible volver a ver la alineación de un partido ya jugado). Ahora la alineación se guarda en `match_lineups` en cada cambio y se recarga al reabrir; el pool de titulares y banquillo se arma solo con quienes tienen asistencia confirmada (`AttendanceStatus.Going`, sin cuerpo técnico); el reparto automático (al abrir el partido o al cambiar de dibujo) asigna cada hueco según la posición real del jugador dentro de ese pool (`AutoAssignByPosition`), dejando el hueco vacío si no hay nadie confirmado de esa posición; y cada partido del fixture (`MatchesTab`) tiene su propio botón "Ver Alineación" que abre la pizarra para ESE partido, no solo el próximo. Un partido `Finished`, o quien no es staff (`CanEdit="false"`), la ve de solo lectura; si el partido ya se jugó y nunca se guardó nada, se muestra un estado vacío explícito en vez de inventar una sugerencia sobre un partido que ya pasó.
 8. **Acta de partido que no releía lo guardado, con un campo de goles por jugador poco práctico:** `RecordResultModal` (nunca tocado desde el scaffold original) no recargaba goleadores, asistencias, tarjetas ni MVP al editar un acta ya guardada — arrancaba siempre en blanco. Además, cargar un hat-trick exigía repetir una fila entera por cada gol. Ahora `LoadFromMatch` reconstruye todo desde `GetMatchEvents()` al abrir el modal, y cada fila de gol tiene un campo de **cantidad** (`GoalEntry.Goals`): con más de un gol en la fila no se pide minuto ni asistencia individual (no tiene sentido para varios goles distintos). Para emparejar una asistencia con su gol al recargar, se usa `MatchEvent.Minute` como una clave interna de correlación (índice de fila al guardar) — nunca fue ni es un minuto real, no hay ningún campo de minuto visible en la UI.
 9. **Fixture que no se refrescaba solo al editar un resultado:** `MatchesTab` era el único de los componentes principales que no se suscribía directamente a `TeamService.OnChange` (sí lo hacen `BottomNav` y el resto de las pestañas); dependía por completo de que el padre (`Home.razor`) volviera a dibujar por otro motivo. Se agregó la suscripción propia (`OnInitialized`/`Dispose`) y un `@key="match.Id"` en el `@foreach` del fixture para que Blazor nunca confunda una fila con otra al redibujar.
+10. **Restablecer la contraseña de un jugador fallaba con `function gen_salt(unknown) does not exist` (v2.16):** `admin_set_password` estaba declarada con `set search_path = public, auth`, pero en Supabase `pgcrypto` (que da `crypt`/`gen_salt`) vive en el esquema `extensions`, no en `public`. El bloque de migración inicial que hashea las contraseñas al crear las cuentas (sección 2 de `migracion_auth_rls.sql`) nunca tuvo este problema porque es un bloque anónimo que corre con el `search_path` de la sesión del SQL Editor (que sí incluye `extensions`); una función con `search_path` declarado explícito, en cambio, ignora el de la sesión que la llama. Se agregó `extensions` al `search_path` de `admin_set_password` y de la nueva `reset_password_with_code`.
 
 ---
 

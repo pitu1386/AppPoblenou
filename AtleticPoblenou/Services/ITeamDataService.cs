@@ -35,6 +35,8 @@ public interface ITeamDataService
     Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string securityCode);
     Task<(bool Success, string ErrorMessage)> ChangeMyPasswordAsync(string newPassword);
     Task<(bool Success, string ErrorMessage)> AdminSetPasswordAsync(string profileId, string newPassword);
+    /// <summary>Un jugador sin sesión cambia su propia contraseña probando que conoce el código de equipo (sin admin).</summary>
+    Task<(bool Success, string ErrorMessage)> ResetPasswordWithCodeAsync(string identifier, string teamCode, string newPassword);
     Task LogoutAsync();
     string GetTeamSecretCode();
     Task<string> GenerateNewTeamCodeAsync();

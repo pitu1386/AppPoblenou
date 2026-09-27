@@ -508,8 +508,12 @@ begin
 end $$;
 
 -- Cambia la contraseña de otro miembro (solo admin), útil si alguien la olvida.
+-- El search_path incluye "extensions": ahí vive pgcrypto en Supabase (crypt/gen_salt), no en
+-- "public". Sin esto la función fallaba con "function gen_salt(unknown) does not exist" al
+-- llamarla como RPC (a diferencia del bloque de migración de arriba, que sí la encontraba porque
+-- corre con el search_path del SQL Editor, no con uno declarado explícito como esta función).
 create or replace function public.admin_set_password(p_profile_id text, p_new_password text)
-returns boolean language plpgsql security definer set search_path = public, auth as $$
+returns boolean language plpgsql security definer set search_path = public, auth, extensions as $$
 declare v_uid uuid;
 begin
     if not public.is_admin() then
@@ -522,6 +526,36 @@ begin
     if v_uid is null then
         raise exception 'Ese perfil no tiene cuenta vinculada';
     end if;
+    update auth.users set encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = now() where id = v_uid;
+    return true;
+end $$;
+
+-- Autorestablecimiento de contraseña (v2.16): un jugador que no se acuerda su contraseña
+-- la cambia él mismo, sin admin, probando que conoce el código secreto del equipo — el mismo
+-- criterio de confianza que ya usan register_profile() y reactivate_with_code(). Corre como
+-- "anon" porque se usa desde la pantalla de login, sin sesión iniciada.
+create or replace function public.reset_password_with_code(p_identifier text, p_team_code text, p_new_password text)
+returns boolean language plpgsql security definer set search_path = public, auth, extensions as $$
+declare v_uid uuid;
+begin
+    if not public.validate_team_code(p_team_code) then
+        raise exception 'Código de equipo incorrecto';
+    end if;
+    if length(coalesce(p_new_password, '')) < 6 then
+        raise exception 'La contraseña debe tener al menos 6 caracteres';
+    end if;
+
+    select p.auth_uid into v_uid from public.profiles p
+     where lower(trim(p.nickname)) = lower(trim(p_identifier))
+        or lower(trim(p.full_name)) = lower(trim(p_identifier))
+        or lower(trim(p.email)) = lower(trim(p_identifier))
+     order by (lower(trim(p.email)) = lower(trim(p_identifier))) desc
+     limit 1;
+
+    if v_uid is null then
+        raise exception 'No se encontró ningún jugador con ese apodo o email.';
+    end if;
+
     update auth.users set encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = now() where id = v_uid;
     return true;
 end $$;
@@ -584,6 +618,8 @@ grant execute on function public.validate_team_code(text) to anon, authenticated
 grant execute on function public.register_profile(text, text, text, integer, integer, integer, text, date) to authenticated;
 grant execute on function public.reactivate_with_code(text) to authenticated;
 grant execute on function public.admin_set_password(text, text) to authenticated;
+revoke all on function public.reset_password_with_code(text, text, text) from public;
+grant execute on function public.reset_password_with_code(text, text, text) to anon, authenticated;
 grant execute on function public.vote_poll(text, integer) to authenticated;
 grant execute on function public.clear_all_matches() to authenticated;
 grant execute on function public.close_season(jsonb, text, numeric) to authenticated;

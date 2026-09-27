@@ -113,23 +113,68 @@
 
             @if (_activeAuthTab == "login")
             {
-                <form @onsubmit="HandleLogin" class="space-y-3.5 text-xs">
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Email o Apodo</label>
-                        <input @bind="_loginModel.EmailOrNickname" type="text" autocomplete="username" placeholder="Ej: pitu1386 o tu@email.com"
-                               class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
-                    </div>
-                    <div>
-                        <label class="font-bold text-ink2 block mb-1">Contraseña</label>
-                        <input @bind="_loginModel.Password" type="password" autocomplete="current-password" placeholder="Tu contraseña"
-                               class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
-                    </div>
-                    <button type="submit" disabled="@_busy"
-                            class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-2 disabled:opacity-60">
-                        <span>@(_busy ? "Entrando..." : "Ingresar al Club")</span>
-                        <span>→</span>
-                    </button>
-                </form>
+                @if (!_showForgotPassword)
+                {
+                    <form @onsubmit="HandleLogin" class="space-y-3.5 text-xs">
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Email o Apodo</label>
+                            <input @bind="_loginModel.EmailOrNickname" type="text" autocomplete="username" placeholder="Ej: pitu1386 o tu@email.com"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Contraseña</label>
+                            <input @bind="_loginModel.Password" type="password" autocomplete="current-password" placeholder="Tu contraseña"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        <button type="submit" disabled="@_busy"
+                                class="w-full py-3 bg-club hover:bg-clubdeep text-white font-extrabold text-sm rounded-lg transition flex items-center justify-center gap-2 mt-2 disabled:opacity-60">
+                            <span>@(_busy ? "Entrando..." : "Ingresar al Club")</span>
+                            <span>→</span>
+                        </button>
+                        <button type="button" @onclick="OpenForgotPassword"
+                                class="w-full text-center text-[12px] font-bold text-muted hover:text-clubtext transition">
+                            ¿Olvidaste tu contraseña?
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <!-- OLVIDÉ MI CONTRASEÑA: mismo criterio de confianza que el alta/reactivación (código del equipo) -->
+                    <form @onsubmit="HandleForgotPassword" class="space-y-3 text-xs">
+                        <p class="text-muted leading-relaxed">
+                            Escribe tu email o apodo, el <strong class="text-ink2">código de seguridad</strong> del equipo (te lo da el capitán/admin) y tu nueva contraseña.
+                        </p>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Email o Apodo</label>
+                            <input @bind="_forgotIdentifier" type="text" autocomplete="username" placeholder="Ej: pitu1386 o tu@email.com"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3.5 py-2.5 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        <div class="bg-warnbg border border-warn/40 p-3 rounded-xl">
+                            <label class="font-bold text-warntext block mb-0.5">Código Secreto del Club</label>
+                            <input @bind="_forgotTeamCode" type="text" placeholder="Ej: APN-XXXX"
+                                   class="w-full bg-well border border-warn/40 rounded-lg px-3 py-2 text-warntext font-cond font-extrabold uppercase tracking-wider focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="font-bold text-ink2 block mb-1">Nueva Contraseña</label>
+                            <input @bind="_forgotNewPassword" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres"
+                                   class="w-full bg-well border border-line2 rounded-lg px-3 py-2 text-ink font-medium focus:border-club focus:outline-none" />
+                        </div>
+                        @if (!string.IsNullOrEmpty(_forgotError))
+                        {
+                            <div class="text-xs text-club font-bold">@_forgotError</div>
+                        }
+                        <div class="flex gap-2 pt-1">
+                            <button type="button" @onclick="CloseForgotPassword" disabled="@_busy"
+                                    class="flex-1 py-2.5 bg-well hover:bg-well2 text-ink font-bold rounded-lg transition">
+                                Cancelar
+                            </button>
+                            <button type="submit" disabled="@_busy"
+                                    class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg transition disabled:opacity-60">
+                                @(_busy ? "Guardando..." : "Restablecer")
+                            </button>
+                        </div>
+                    </form>
+                }
             }
             else
             {
@@ -181,6 +226,12 @@
     private string _reactivationCode = "";
     private string _reactivationError = "";
     private bool _busy = false;
+
+    private bool _showForgotPassword = false;
+    private string _forgotIdentifier = "";
+    private string _forgotTeamCode = "";
+    private string _forgotNewPassword = "";
+    private string _forgotError = "";
 
     private LoginModel _loginModel = new();
     private RegisterModel _registerModel = new() { Position = Position.Centrocampista, Foot = DominantFoot.Diestro };
@@ -255,6 +306,8 @@
         _activeAuthTab = tab;
         _errorMessage = "";
         _infoMessage = "";
+        _showForgotPassword = false;
+        _forgotError = "";
     }
 
     private async Task HandleLogin()
@@ -286,6 +339,48 @@
         {
             var result = await TeamService.ReactivateWithCodeAsync(_reactivationCode);
             if (!result.Success) _reactivationError = result.ErrorMessage;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OpenForgotPassword()
+    {
+        _showForgotPassword = true;
+        _forgotIdentifier = _loginModel.EmailOrNickname;
+        _forgotTeamCode = "";
+        _forgotNewPassword = "";
+        _forgotError = "";
+        _errorMessage = "";
+        _infoMessage = "";
+    }
+
+    private void CloseForgotPassword()
+    {
+        _showForgotPassword = false;
+        _forgotError = "";
+    }
+
+    private async Task HandleForgotPassword()
+    {
+        if (_busy) return;
+        _busy = true;
+        _forgotError = "";
+        try
+        {
+            var result = await TeamService.ResetPasswordWithCodeAsync(_forgotIdentifier, _forgotTeamCode, _forgotNewPassword);
+            if (!result.Success)
+            {
+                _forgotError = result.ErrorMessage;
+                return;
+            }
+            // Vuelve al login con el email/apodo ya cargado para que solo falte poner la contraseña nueva.
+            _loginModel.EmailOrNickname = _forgotIdentifier;
+            _loginModel.Password = "";
+            _showForgotPassword = false;
+            _infoMessage = "Contraseña actualizada. Ya puedes iniciar sesión con la nueva.";
         }
         finally
         {
