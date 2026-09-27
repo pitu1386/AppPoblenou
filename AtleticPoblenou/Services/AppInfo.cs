@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.16.1", new[]
+        {
+            "💬 El mensaje de WhatsApp 'Caja' ahora suma los gastos repetidos (por ejemplo, árbitros de cada jornada) en una sola línea, en vez de repetir una línea idéntica por cada pago.",
+        }),
         ("2.16", new[]
         {
             "🔑 Arreglado: restablecer la contraseña de un jugador desde su ficha (Admin) daba error y no guardaba el cambio.",

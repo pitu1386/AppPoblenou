@@ -833,11 +833,31 @@
         }
         sb.AppendLine();
         sb.AppendLine("*Pagado*");
-        foreach (var e in expenses)
+        // Agrupado por (categoría, nota): los gastos sin nota (árbitros, campos, etc. — AddExpenseModal
+        // solo pide nota en "Otros") se repiten jornada tras jornada con el mismo par categoría/nota vacía,
+        // así que antes salía una línea idéntica por cada pago. Sumados, "Otros" con notas distintas sigue
+        // viéndose como líneas separadas, porque ahí la nota es justamente lo que distingue un gasto de otro.
+        var groupedExpenses = expenses
+            .GroupBy(e => (e.Category, Notes: e.Notes ?? ""))
+            .Select(g => new
+            {
+                g.Key.Category,
+                g.Key.Notes,
+                Total = g.Sum(e => e.Amount),
+                Count = g.Count(),
+                AllClubFunds = g.All(e => string.IsNullOrEmpty(e.PaidBy))
+            })
+            .OrderBy(g => { var i = Array.IndexOf(ExpenseCategories, g.Category); return i < 0 ? int.MaxValue : i; })
+            .ThenByDescending(g => g.Total)
+            .ToList();
+
+        foreach (var g in groupedExpenses)
         {
-            var noteSuffix = !string.IsNullOrWhiteSpace(e.Notes) ? $" ({e.Notes})" : "";
-            var payer = string.IsNullOrEmpty(e.PaidBy) ? " [fondos del club]" : "";
-            sb.AppendLine($"{e.Amount:N0}€ {e.Category}{noteSuffix}{payer}");
+            var noteSuffix = !string.IsNullOrWhiteSpace(g.Notes)
+                ? (g.Count > 1 ? $" ({g.Notes} · x{g.Count})" : $" ({g.Notes})")
+                : (g.Count > 1 ? $" (x{g.Count})" : "");
+            var payer = g.AllClubFunds ? " [fondos del club]" : "";
+            sb.AppendLine($"{g.Total:N0}€ {g.Category}{noteSuffix}{payer}");
         }
 
         var text = sb.ToString();
