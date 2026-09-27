@@ -13,7 +13,7 @@
                         <p class="text-xs text-muted">Colores de camiseta y cancha local</p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_saving" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -231,11 +231,11 @@
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-line">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SaveSettings" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    Guardar Configuración
+                <button @onclick="SaveSettings" disabled="@_saving" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition disabled:opacity-60">
+                    @(_saving ? "Guardando..." : "Guardar Configuración")
                 </button>
             </div>
 
@@ -249,6 +249,7 @@
 
     private ClubSettings _settings = new();
     private bool _savedSuccessfully = false;
+    private bool _saving = false;
 
     protected override void OnParametersSet()
     {
@@ -292,10 +293,19 @@
 
     private async Task SaveSettings()
     {
-        await TeamService.SaveClubSettingsAsync(_settings);
-        _savedSuccessfully = true;
-        await Task.Delay(600);
-        await Close();
+        if (_saving) return;
+        _saving = true;
+        try
+        {
+            await TeamService.SaveClubSettingsAsync(_settings);
+            _savedSuccessfully = true;
+            await Task.Delay(600);
+            await Close();
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 }
 

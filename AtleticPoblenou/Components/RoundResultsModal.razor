@@ -14,7 +14,7 @@
                         <p class="text-xs text-muted">Ingresa los marcadores de toda la jornada para la tabla</p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_busy" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -96,8 +96,8 @@
                                         <div class="w-3.5 h-3.5 rounded-full shrink-0 border border-line2" style="background-color: @awayColor"></div>
 
                                         <!-- Delete match button -->
-                                        <button type="button" @onclick="() => RemoveMatchFromRound(m)"
-                                                class="text-faint hover:text-club text-xs ml-1" title="Eliminar partido de la jornada">
+                                        <button type="button" @onclick="() => RemoveMatchFromRound(m)" disabled="@_busy"
+                                                class="text-faint hover:text-club text-xs ml-1 disabled:opacity-40" title="Eliminar partido de la jornada">
                                             ✕
                                         </button>
                                     </div>
@@ -170,12 +170,12 @@
 
             <!-- MODAL ACTIONS -->
             <div class="flex gap-2 pt-2 border-t border-line">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_busy" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SaveAllResults"
-                        class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5">
-                    <span>💾</span> Guardar Resultados
+                <button @onclick="SaveAllResults" disabled="@_busy"
+                        class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-60">
+                    <span>💾</span> @(_busy ? "Guardando..." : "Guardar Resultados")
                 </button>
             </div>
 
@@ -203,6 +203,7 @@
     private string _newAwayTeamName = "";
     private string _addError = "";
     private bool _savedSuccess = false;
+    private bool _busy = false;
 
     protected override void OnParametersSet()
     {
@@ -311,8 +312,17 @@
 
     private async Task RemoveMatchFromRound(Match m)
     {
-        _roundMatches.Remove(m);
-        await TeamService.DeleteMatchAsync(m.Id);
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            _roundMatches.Remove(m);
+            await TeamService.DeleteMatchAsync(m.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task TriggerDetailedReport(Match m)
@@ -322,11 +332,20 @@
 
     private async Task SaveAllResults()
     {
-        await TeamService.SaveBatchRoundResultsAsync(_currentRound, _roundMatches);
-        _savedSuccess = true;
-        StateHasChanged();
-        await Task.Delay(600);
-        await Close();
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await TeamService.SaveBatchRoundResultsAsync(_currentRound, _roundMatches);
+            _savedSuccess = true;
+            StateHasChanged();
+            await Task.Delay(600);
+            await Close();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task Close()

@@ -15,7 +15,7 @@
                         <p class="text-xs text-warntext">Acción exclusiva del Tesorero</p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_saving" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -151,11 +151,11 @@
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-line">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SavePayment" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition">
-                    @(TargetPayment != null ? "Guardar Cambios" : (_isPlayerPayment ? "Asentar Cobro" : "Registrar Ingreso"))
+                <button @onclick="SavePayment" disabled="@_saving" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition disabled:opacity-60">
+                    @(_saving ? "Guardando..." : (TargetPayment != null ? "Guardar Cambios" : (_isPlayerPayment ? "Asentar Cobro" : "Registrar Ingreso")))
                 </button>
             </div>
 
@@ -178,6 +178,10 @@
     private DateTime _paymentDate = DateTime.Today;
     private string _receivedByPlayerId = "";
     private bool _wasOpen = false;
+    /// <summary>Evita el doble guardado con mala señal: sin esto, tocar el botón dos veces al crear
+    /// un cobro (AddPaymentAsync genera un Id nuevo cada llamada, no es upsert) podía registrar el
+    /// mismo pago dos veces y contarlo doble en la caja.</summary>
+    private bool _saving = false;
 
     private string? _selectedPlayerName => TeamService.GetProfileById(_selectedPlayerId)?.FullName;
     private List<UserProfile> _receivers => TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
@@ -255,27 +259,35 @@
 
     private async Task SavePayment()
     {
-        if (_amount <= 0 || string.IsNullOrWhiteSpace(_concept)) return;
+        if (_amount <= 0 || string.IsNullOrWhiteSpace(_concept) || _saving) return;
         if (_isPlayerPayment && string.IsNullOrWhiteSpace(_selectedPlayerId)) return;
 
-        var playerId = _isPlayerPayment ? _selectedPlayerId : "";
+        _saving = true;
+        try
+        {
+            var playerId = _isPlayerPayment ? _selectedPlayerId : "";
 
-        if (TargetPayment != null)
-        {
-            TargetPayment.PlayerId = playerId;
-            TargetPayment.Concept = _concept;
-            TargetPayment.Amount = _amount;
-            TargetPayment.Method = _method;
-            TargetPayment.PaidAt = _paymentDate;
-            TargetPayment.Category = _category;
-            TargetPayment.ReceivedByPlayerId = _receivedByPlayerId;
-            await TeamService.UpdatePaymentAsync(TargetPayment);
+            if (TargetPayment != null)
+            {
+                TargetPayment.PlayerId = playerId;
+                TargetPayment.Concept = _concept;
+                TargetPayment.Amount = _amount;
+                TargetPayment.Method = _method;
+                TargetPayment.PaidAt = _paymentDate;
+                TargetPayment.Category = _category;
+                TargetPayment.ReceivedByPlayerId = _receivedByPlayerId;
+                await TeamService.UpdatePaymentAsync(TargetPayment);
+            }
+            else
+            {
+                await TeamService.AddPaymentAsync(playerId, _concept, _amount, _method, _paymentDate, category: _category, receivedByPlayerId: _receivedByPlayerId);
+            }
+            await Close();
         }
-        else
+        finally
         {
-            await TeamService.AddPaymentAsync(playerId, _concept, _amount, _method, _paymentDate, category: _category, receivedByPlayerId: _receivedByPlayerId);
+            _saving = false;
         }
-        await Close();
     }
 }
 

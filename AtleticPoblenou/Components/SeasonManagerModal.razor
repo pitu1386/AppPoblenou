@@ -27,7 +27,7 @@
                         </p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                <button @onclick="Close" disabled="@_closing" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -132,15 +132,19 @@
                         }
 
                         <div class="flex gap-2 pt-2">
-                            <button type="button" @onclick="() => _showConfirmClose = false"
-                                    class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold rounded-lg transition">
+                            <button type="button" @onclick="() => _showConfirmClose = false" disabled="@_closing"
+                                    class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold rounded-lg transition disabled:opacity-50">
                                 Cancelar
                             </button>
-                            <button type="button" @onclick="ConfirmCloseSeason"
-                                    class="flex-1 py-2 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg transition shadow-sm">
-                                Confirmar y Comenzar
+                            <button type="button" @onclick="ConfirmCloseSeason" disabled="@_closing"
+                                    class="flex-1 py-2 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg transition shadow-sm disabled:opacity-60">
+                                @(_closing ? "Cerrando temporada..." : "Confirmar y Comenzar")
                             </button>
                         </div>
+                        @if (_closing)
+                        {
+                            <p class="text-[11px] text-center text-muted -mt-1">No cierres esta ventana ni toques el botón de nuevo: se está archivando la temporada.</p>
+                        }
                     </div>
                 }
 
@@ -195,7 +199,7 @@
 
             <!-- Modal Footer -->
             <div class="p-4 border-t border-line bg-surface shrink-0">
-                <button @onclick="Close" class="w-full py-2.5 bg-well2 hover:bg-well text-ink font-bold rounded-xl text-xs transition">
+                <button @onclick="Close" disabled="@_closing" class="w-full py-2.5 bg-well2 hover:bg-well text-ink font-bold rounded-xl text-xs transition disabled:opacity-50">
                     Cerrar
                 </button>
             </div>
@@ -212,6 +216,10 @@
     private string _newSeasonName = "TEMP 27/28";
     private decimal _newSeasonFee = 200;
     private string _errorMessage = "";
+    /// <summary>close_season archiva el resumen agregándolo al array season_history (no es idempotente:
+    /// cada llamada suma una entrada más). Sin este guard, un doble toque con mala señal podía archivar
+    /// la misma temporada dos veces en el historial.</summary>
+    private bool _closing = false;
 
     private void PrepareNewSeasonWizard()
     {
@@ -225,15 +233,24 @@
 
     private async Task ConfirmCloseSeason()
     {
+        if (_closing) return;
         if (string.IsNullOrWhiteSpace(_newSeasonName))
         {
             _errorMessage = "Por favor ingresa el nombre de la nueva temporada.";
             return;
         }
 
-        await TeamService.CloseSeasonAndStartNewAsync(_newSeasonName.Trim(), _newSeasonFee);
-        _showConfirmClose = false;
-        await Close();
+        _closing = true;
+        try
+        {
+            await TeamService.CloseSeasonAndStartNewAsync(_newSeasonName.Trim(), _newSeasonFee);
+            _showConfirmClose = false;
+            await Close();
+        }
+        finally
+        {
+            _closing = false;
+        }
     }
 
     private async Task Close()

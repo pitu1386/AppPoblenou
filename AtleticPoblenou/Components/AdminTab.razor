@@ -90,9 +90,9 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button type="button" @onclick="GenerateNewCode"
-                                class="px-3 py-1.5 bg-well2 hover:bg-well2 text-ink font-bold text-xs rounded-lg transition border border-line2">
-                            Regenerar
+                        <button type="button" @onclick="GenerateNewCode" disabled="@_generatingCode"
+                                class="px-3 py-1.5 bg-well2 hover:bg-well2 text-ink font-bold text-xs rounded-lg transition border border-line2 disabled:opacity-50">
+                            @(_generatingCode ? "Generando..." : "Regenerar")
                         </button>
                         @{
                             var codeText = Uri.EscapeDataString($"¡Hola! Para registrarte en la App de Veteranos del Atlètic Poblenou usa este código de equipo: {TeamService.GetTeamSecretCode()}");
@@ -354,11 +354,21 @@
         _ => "Domingo"
     };
 
+    private bool _generatingCode = false;
+
     private async Task GenerateNewCode()
     {
-        await TeamService.GenerateNewTeamCodeAsync();
-        _codeJustGenerated = true;
-        StateHasChanged();
+        if (_generatingCode) return;
+        _generatingCode = true;
+        try
+        {
+            await TeamService.GenerateNewTeamCodeAsync();
+            _codeJustGenerated = true;
+        }
+        finally
+        {
+            _generatingCode = false;
+        }
     }
 
     private string _pushTitle = "";

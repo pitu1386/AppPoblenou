@@ -100,10 +100,10 @@
 
                             <!-- Actions Row -->
                             <div class="pt-2 border-t border-line/60 flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                                <button type="button" @onclick="() => Reactivate(player)"
-                                        class="flex-1 py-2 px-3 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-xs">
+                                <button type="button" @onclick="() => Reactivate(player)" disabled="@_reactivating.Contains(player.Id)"
+                                        class="flex-1 py-2 px-3 bg-ok hover:bg-okdeep text-white font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-60">
                                     <span>✓</span>
-                                    <span>Reactivar en Plantilla</span>
+                                    <span>@(_reactivating.Contains(player.Id) ? "Reactivando..." : "Reactivar en Plantilla")</span>
                                 </button>
 
                                 @if (!string.IsNullOrEmpty(player.Phone))
@@ -151,12 +151,20 @@
     [Parameter] public EventCallback<UserProfile> OnOpenPlayerSheet { get; set; }
 
     private string? _statusMessage;
+    private readonly HashSet<string> _reactivating = new();
 
     private async Task Reactivate(UserProfile player)
     {
-        await TeamService.ReactivatePlayerAsync(player.Id);
-        _statusMessage = $"¡{player.FullName} ha sido reactivado en el equipo con éxito!";
-        StateHasChanged();
+        if (!_reactivating.Add(player.Id)) return;
+        try
+        {
+            await TeamService.ReactivatePlayerAsync(player.Id);
+            _statusMessage = $"¡{player.FullName} ha sido reactivado en el equipo con éxito!";
+        }
+        finally
+        {
+            _reactivating.Remove(player.Id);
+        }
     }
 
     private async Task OpenSheet(UserProfile player)

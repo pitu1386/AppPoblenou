@@ -32,6 +32,11 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.17", new[]
+        {
+            "🔒 El mismo candado contra el doble guardado del acta se extendió a toda la app: cobros, gastos, cuotas por lote, cierre de temporada, alta/edición de partidos, equipos, comunicados, roles, ficha de jugador y configuración del club. Con mala señal, ya no se puede duplicar nada tocando el botón dos veces.",
+            "📊 Se ocultó la pestaña 'Asistencias' de Estadísticas (los datos siguen intactos por si se reactiva).",
+        }),
         ("2.16.2", new[]
         {
             "🐛 Arreglado: con mala señal, tocar 'Guardar Acta y Resultado' dos veces podía duplicar los goles cargados. Ahora el botón se bloquea y avisa 'Guardando...' mientras sube a la nube.",

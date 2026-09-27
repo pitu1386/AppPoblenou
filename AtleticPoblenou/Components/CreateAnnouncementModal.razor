@@ -13,7 +13,7 @@
                         <p class="text-xs text-muted">Novedades o encuestas para el equipo</p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_saving" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -85,11 +85,11 @@
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-line">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SaveAnnouncement" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    Publicar en Portada
+                <button @onclick="SaveAnnouncement" disabled="@_saving" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition disabled:opacity-60">
+                    @(_saving ? "Publicando..." : "Publicar en Portada")
                 </button>
             </div>
 
@@ -106,6 +106,7 @@
     private bool _hasPoll = true;
     private bool _isPinned = true;
     private List<string>_options = new() { "Me sumo al asado ", "En duda / aviso el viernes ", "No llego "};
+    private bool _saving = false;
 
     private void ResetAsadoPreset()
     {
@@ -123,8 +124,20 @@
 
     private async Task SaveAnnouncement()
     {
-        if (string.IsNullOrWhiteSpace(_title)) return;
+        if (string.IsNullOrWhiteSpace(_title) || _saving) return;
+        _saving = true;
+        try
+        {
+            await SaveAnnouncementCore();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
 
+    private async Task SaveAnnouncementCore()
+    {
         var user = TeamService.GetCurrentUser();
         var announcement = new TeamAnnouncement
         {

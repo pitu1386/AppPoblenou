@@ -10,7 +10,7 @@
 
                     <h3 class="font-extrabold text-ink text-base">@(TargetExpense != null ? "Editar Gasto de Caja" : "Registrar Gasto de Caja")</h3>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_saving" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -74,11 +74,11 @@
             </div>
 
             <div class="flex gap-2 pt-2">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SaveExpense" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition">
-                    @(TargetExpense != null ? "Guardar Cambios" : "Descontar de Caja")
+                <button @onclick="SaveExpense" disabled="@_saving" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition disabled:opacity-60">
+                    @(_saving ? "Guardando..." : (TargetExpense != null ? "Guardar Cambios" : "Descontar de Caja"))
                 </button>
             </div>
 
@@ -98,6 +98,10 @@
     private string _paidBy = "";
     private string _notes = "";
     private bool _wasOpen = false;
+    /// <summary>Evita el doble guardado con mala señal: AddExpenseAsync crea un Id nuevo cada vez
+    /// (no es upsert), así que un doble toque al cargar un gasto nuevo lo duplicaba en la caja —
+    /// exactamente el motivo por el que después había que sumar los árbitros repetidos en el WhatsApp.</summary>
+    private bool _saving = false;
 
     private List<UserProfile> _payers => TeamService.GetProfiles().Where(p => p.CanReceivePayments).ToList();
 
@@ -137,31 +141,38 @@
 
     private async Task SaveExpense()
     {
-        if (string.IsNullOrWhiteSpace(_concept) || _amount <= 0) return;
-
-        if (TargetExpense != null)
+        if (string.IsNullOrWhiteSpace(_concept) || _amount <= 0 || _saving) return;
+        _saving = true;
+        try
         {
-            TargetExpense.Concept = _concept;
-            TargetExpense.Amount = _amount;
-            TargetExpense.Category = _category;
-            TargetExpense.ExpenseDate = _expenseDate;
-            TargetExpense.PaidBy = _paidBy;
-            TargetExpense.Notes = _category == "Otros" ? _notes : "";
-            await TeamService.UpdateExpenseAsync(TargetExpense);
-        }
-        else
-        {
-            var expense = new TeamExpense
+            if (TargetExpense != null)
             {
-                Concept = _concept,
-                Amount = _amount,
-                Category = _category,
-                ExpenseDate = _expenseDate,
-                PaidBy = _paidBy,
-                Notes = _category == "Otros" ? _notes : ""
-            };
-            await TeamService.AddExpenseAsync(expense);
+                TargetExpense.Concept = _concept;
+                TargetExpense.Amount = _amount;
+                TargetExpense.Category = _category;
+                TargetExpense.ExpenseDate = _expenseDate;
+                TargetExpense.PaidBy = _paidBy;
+                TargetExpense.Notes = _category == "Otros" ? _notes : "";
+                await TeamService.UpdateExpenseAsync(TargetExpense);
+            }
+            else
+            {
+                var expense = new TeamExpense
+                {
+                    Concept = _concept,
+                    Amount = _amount,
+                    Category = _category,
+                    ExpenseDate = _expenseDate,
+                    PaidBy = _paidBy,
+                    Notes = _category == "Otros" ? _notes : ""
+                };
+                await TeamService.AddExpenseAsync(expense);
+            }
+            await Close();
         }
-        await Close();
+        finally
+        {
+            _saving = false;
+        }
     }
 }

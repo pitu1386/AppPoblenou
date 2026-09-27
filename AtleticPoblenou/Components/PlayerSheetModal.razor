@@ -17,7 +17,7 @@
                         <p class="text-xs text-muted">Atlètic Poblenou • Plantilla de Veteranos</p>
                     </div>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_busy" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -332,12 +332,12 @@
                 @if (!_isEditing)
                 {
                     <div class="flex gap-2">
-                        <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                        <button @onclick="Close" disabled="@_busy" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                             Cerrar
                         </button>
                         @if (canEdit)
                         {
-                            <button @onclick="StartEdit" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1">
+                            <button @onclick="StartEdit" disabled="@_busy" class="flex-1 py-2.5 bg-club hover:bg-clubdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1 disabled:opacity-60">
                                 Editar Ficha
                             </button>
                         }
@@ -347,18 +347,18 @@
                     {
                         @if (TargetProfile.IsActive)
                         {
-                            <button type="button" @onclick="() => _showConfirmDeactivate = true"
-                                    class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                            <button type="button" @onclick="() => _showConfirmDeactivate = true" disabled="@_busy"
+                                    class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-50">
                                 <span>🚫</span>
                                 <span>Dar de baja / Quitar del equipo</span>
                             </button>
                         }
                         else
                         {
-                            <button type="button" @onclick="ReactivatePlayer"
-                                    class="w-full py-2 bg-okbg hover:bg-ok/20 text-oktext border border-ok/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                            <button type="button" @onclick="ReactivatePlayer" disabled="@_busy"
+                                    class="w-full py-2 bg-okbg hover:bg-ok/20 text-oktext border border-ok/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-50">
                                 <span>✓</span>
-                                <span>Reactivar jugador en el equipo</span>
+                                <span>@(_busy ? "Reactivando..." : "Reactivar jugador en el equipo")</span>
                             </button>
                         }
                     }
@@ -366,11 +366,11 @@
                 else
                 {
                     <div class="flex gap-2">
-                        <button @onclick="CancelEdit" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                        <button @onclick="CancelEdit" disabled="@_busy" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                             Cancelar
                         </button>
-                        <button @onclick="SaveEdit" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1">
-                            Guardar Cambios
+                        <button @onclick="SaveEdit" disabled="@_busy" class="flex-1 py-2.5 bg-ok hover:bg-okdeep text-white font-extrabold rounded-lg text-xs transition flex items-center justify-center gap-1 disabled:opacity-60">
+                            @(_busy ? "Guardando..." : "Guardar Cambios")
                         </button>
                     </div>
                 }
@@ -388,11 +388,11 @@
                             Su acceso a la aplicación quedará revocado inmediatamente. Para volver a ingresar, necesitará introducir el <strong>código de seguridad</strong> del equipo que tú le proporciones.
                         </p>
                         <div class="flex gap-2 pt-1">
-                            <button type="button" @onclick="() => _showConfirmDeactivate = false" class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-lg transition">
+                            <button type="button" @onclick="() => _showConfirmDeactivate = false" disabled="@_busy" class="flex-1 py-2 bg-well hover:bg-well2 text-ink font-bold text-xs rounded-lg transition disabled:opacity-50">
                                 Cancelar
                             </button>
-                            <button type="button" @onclick="ConfirmDeactivatePlayer" class="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition">
-                                Sí, dar de baja
+                            <button type="button" @onclick="ConfirmDeactivatePlayer" disabled="@_busy" class="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition disabled:opacity-60">
+                                @(_busy ? "Dando de baja..." : "Sí, dar de baja")
                             </button>
                         </div>
                     </div>
@@ -413,6 +413,9 @@
     private string _newPassword = "";
     private string _passwordMessage = "";
     private bool _passwordOk = false;
+    /// <summary>Evita el doble guardado con mala señal (mismo motivo que en el acta de partido):
+    /// sin esto, guardar dos veces podía disparar dos upserts de la misma ficha en paralelo.</summary>
+    private bool _busy = false;
 
     protected override void OnParametersSet()
     {
@@ -464,6 +467,20 @@
 
     private async Task SaveEdit()
     {
+        if (TargetProfile == null || _busy) return;
+        _busy = true;
+        try
+        {
+            await SaveEditCore();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveEditCore()
+    {
         if (TargetProfile == null) return;
 
         TargetProfile.FullName = _editModel.FullName;
@@ -512,18 +529,33 @@
 
     private async Task ConfirmDeactivatePlayer()
     {
-        if (TargetProfile == null || TeamService.IsOwnerAdmin(TargetProfile)) return;
-        await TeamService.DeactivatePlayerAsync(TargetProfile.Id);
-        _showConfirmDeactivate = false;
-        await Close();
+        if (TargetProfile == null || _busy || TeamService.IsOwnerAdmin(TargetProfile)) return;
+        _busy = true;
+        try
+        {
+            await TeamService.DeactivatePlayerAsync(TargetProfile.Id);
+            _showConfirmDeactivate = false;
+            await Close();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task ReactivatePlayer()
     {
-        if (TargetProfile == null) return;
-        await TeamService.ReactivatePlayerAsync(TargetProfile.Id);
-        TargetProfile.IsActive = true;
-        StateHasChanged();
+        if (TargetProfile == null || _busy) return;
+        _busy = true;
+        try
+        {
+            await TeamService.ReactivatePlayerAsync(TargetProfile.Id);
+            TargetProfile.IsActive = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task Close()

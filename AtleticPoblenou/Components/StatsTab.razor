@@ -3,9 +3,10 @@
 <div class="space-y-4 pb-20">
 
     <!-- SUB-NAV FOR STATS -->
+    <!-- Pestaña "Asistencias" oculta a pedido (v2.17): el bloque de más abajo y GetTopAssisters()
+         siguen intactos por si se reactiva, solo se sacó el botón para entrar a esa vista. -->
     <div class="apn-tabs">
         <button @onclick='() => _statType = "goals"' class="apn-tab @(_statType == "goals" ? "active" : "")">Goleadores</button>
-        <button @onclick='() => _statType = "assists"' class="apn-tab @(_statType == "assists" ? "active" : "")">Asistencias</button>
         <button @onclick='() => _statType = "cards"' class="apn-tab @(_statType == "cards" ? "active" : "")">Tarjetas</button>
         <button @onclick='() => _statType = "mvp"' class="apn-tab @(_statType == "mvp" ? "active" : "")">MVP</button>
     </div>
