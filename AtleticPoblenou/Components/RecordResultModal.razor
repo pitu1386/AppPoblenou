@@ -10,7 +10,7 @@
                     <h3 class="font-extrabold text-ink text-base">Acta del Partido</h3>
                     <p class="text-xs text-muted">vs @TargetMatch.Opponent • Jornada @TargetMatch.Round</p>
                 </div>
-                <button @onclick="Close" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink">
+                <button @onclick="Close" disabled="@_saving" class="w-8 h-8 rounded-full bg-well2 flex items-center justify-center text-muted hover:text-ink disabled:opacity-50">
                     ✕
                 </button>
             </div>
@@ -171,13 +171,22 @@
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-line">
-                <button @onclick="Close" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition">
+                <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
                 </button>
-                <button @onclick="SaveResult" class="flex-1 py-2.5 bg-warn hover:bg-warn text-black font-extrabold rounded-lg text-xs transition">
-                    Guardar Acta y Resultado
+                <button @onclick="SaveResult" disabled="@_saving"
+                        class="flex-1 py-2.5 bg-warn hover:bg-warn text-black font-extrabold rounded-lg text-xs transition disabled:opacity-60 flex items-center justify-center gap-1.5">
+                    @if (_saving)
+                    {
+                        <span class="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin shrink-0"></span>
+                    }
+                    <span>@(_saving ? "Guardando..." : "Guardar Acta y Resultado")</span>
                 </button>
             </div>
+            @if (_saving)
+            {
+                <p class="text-[11px] text-center text-muted -mt-1">No cierres esta ventana ni toques Guardar de nuevo: se está subiendo a la nube.</p>
+            }
 
         </div>
     </div>
@@ -210,6 +219,11 @@
     private List<GoalEntry> _goals = new();
     private List<CardEntry> _cards = new();
     private string? _loadedForMatchId;
+    /// <summary>Evita el doble guardado con mala señal: sin esto, tocar "Guardar" dos veces mientras
+    /// la primera petición seguía en vuelo disparaba dos guardados en paralelo — cada uno borraba los
+    /// goles del partido y subía su propia lista con IDs nuevos, y si se entrelazaban mal (la segunda
+    /// borra después de que la primera ya insertó), los goles quedaban duplicados en la nube.</summary>
+    private bool _saving = false;
 
     /// <summary>Total real de goles (no de filas): una fila con cantidad 3 cuenta como 3.</summary>
     private int TotalGoals => _goals.Sum(g => g.IsOwnGoal ? 1 : Math.Max(1, g.Goals));
@@ -321,6 +335,20 @@
     }
 
     private async Task SaveResult()
+    {
+        if (TargetMatch == null || _saving) return;
+        _saving = true;
+        try
+        {
+            await SaveResultCore();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveResultCore()
     {
         if (TargetMatch == null) return;
 

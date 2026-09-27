@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.16.2", new[]
+        {
+            "🐛 Arreglado: con mala señal, tocar 'Guardar Acta y Resultado' dos veces podía duplicar los goles cargados. Ahora el botón se bloquea y avisa 'Guardando...' mientras sube a la nube.",
+        }),
         ("2.16.1", new[]
         {
             "💬 El mensaje de WhatsApp 'Caja' ahora suma los gastos repetidos (por ejemplo, árbitros de cada jornada) en una sola línea, en vez de repetir una línea idéntica por cada pago.",
