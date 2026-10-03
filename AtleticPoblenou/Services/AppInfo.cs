@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.17.1", new[]
+        {
+            "💬 En el mensaje de WhatsApp 'Caja', cualquier rubro con descripción (por ejemplo 'Otros') aparece una sola vez con el total, y cada descripción debajo con un guion — ya no se repite el nombre del rubro por cada tipo de gasto, tenga una descripción o varias.",
+        }),
         ("2.17", new[]
         {
             "🔒 El mismo candado contra el doble guardado del acta se extendió a toda la app: cobros, gastos, cuotas por lote, cierre de temporada, alta/edición de partidos, equipos, comunicados, roles, ficha de jugador y configuración del club. Con mala señal, ya no se puede duplicar nada tocando el botón dos veces.",
