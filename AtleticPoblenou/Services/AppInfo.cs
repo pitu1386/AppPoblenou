@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.17.2", new[]
+        {
+            "💬 El mensaje de WhatsApp 'Caja' ahora muestra directo el total por categoría (ej: '45€ Otros'), sin desglosar las descripciones de cada gasto.",
+        }),
         ("2.17.1", new[]
         {
             "💬 En el mensaje de WhatsApp 'Caja', cualquier rubro con descripción (por ejemplo 'Otros') aparece una sola vez con el total, y cada descripción debajo con un guion — ya no se repite el nombre del rubro por cada tipo de gasto, tenga una descripción o varias.",

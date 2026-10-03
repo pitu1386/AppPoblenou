@@ -833,53 +833,17 @@
         }
         sb.AppendLine();
         sb.AppendLine("*Pagado*");
-        // Un bloque por categoría (rubro), nunca repetida: adentro, los gastos sin nota (árbitros,
-        // campos, etc. — AddExpenseModal solo pide nota en "Otros") se suman en una sola línea aunque
-        // se repitan jornada tras jornada. La regla es por si hay descripción, no por cuántas distintas
-        // haya: en cuanto la categoría tiene AL MENOS UNA nota, pasa a encabezado + un guion por
-        // descripción (aunque sea una sola), así el formato no cambia de golpe el día que aparezca una
-        // segunda nota distinta — siempre se ve igual.
+        // Directo: total por categoría, sin desglosar por descripción ni por quién pagó. El detalle
+        // (notas, método, responsable) queda para la pestaña Gastos dentro de la app.
         var byCategory = expenses
             .GroupBy(e => e.Category)
-            .OrderBy(g => { var i = Array.IndexOf(ExpenseCategories, g.Key); return i < 0 ? int.MaxValue : i; })
-            .ThenByDescending(g => g.Sum(e => e.Amount));
+            .Select(g => new { Category = g.Key, Total = g.Sum(e => e.Amount) })
+            .OrderBy(g => { var i = Array.IndexOf(ExpenseCategories, g.Category); return i < 0 ? int.MaxValue : i; })
+            .ThenByDescending(g => g.Total);
 
-        foreach (var catGroup in byCategory)
+        foreach (var g in byCategory)
         {
-            var subGroups = catGroup
-                .GroupBy(e => e.Notes ?? "")
-                .Select(g => new
-                {
-                    Notes = g.Key,
-                    Total = g.Sum(e => e.Amount),
-                    Count = g.Count(),
-                    AllClubFunds = g.All(e => string.IsNullOrEmpty(e.PaidBy))
-                })
-                .OrderByDescending(g => g.Total)
-                .ToList();
-
-            var hasAnyNote = subGroups.Any(g => !string.IsNullOrWhiteSpace(g.Notes));
-
-            if (!hasAnyNote)
-            {
-                // Nadie puso descripción en esta categoría: una sola línea sumada, como siempre.
-                var g = subGroups[0];
-                var countSuffix = g.Count > 1 ? $" (x{g.Count})" : "";
-                var payer = g.AllClubFunds ? " [fondos del club]" : "";
-                sb.AppendLine($"{g.Total:N0}€ {catGroup.Key}{countSuffix}{payer}");
-            }
-            else
-            {
-                var categoryTotal = subGroups.Sum(g => g.Total);
-                sb.AppendLine($"{categoryTotal:N0}€ {catGroup.Key}:");
-                foreach (var g in subGroups)
-                {
-                    var label = string.IsNullOrWhiteSpace(g.Notes) ? "Sin detalle" : g.Notes;
-                    var countSuffix = g.Count > 1 ? $" (x{g.Count})" : "";
-                    var payer = g.AllClubFunds ? " [fondos del club]" : "";
-                    sb.AppendLine($"- {label}: {g.Total:N0}€{countSuffix}{payer}");
-                }
-            }
+            sb.AppendLine($"{g.Total:N0}€ {g.Category}");
         }
 
         var text = sb.ToString();
