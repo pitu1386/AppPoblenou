@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.18.0", new[]
+        {
+            "⏸ Ahora se puede marcar un partido como SUSPENDIDO (mal tiempo, etc.) desde el Fixture, y luego 'Reprogramar' cuando haya nueva fecha. Mientras está suspendido no cuenta como próximo partido ni entra en la tabla.",
+        }),
         ("2.17.2", new[]
         {
             "💬 El mensaje de WhatsApp 'Caja' ahora muestra directo el total por categoría (ej: '45€ Otros'), sin desglosar las descripciones de cada gasto.",
