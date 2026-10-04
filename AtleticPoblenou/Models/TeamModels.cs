@@ -141,7 +141,9 @@ public enum MatchStatus
 {
     Upcoming,
     Finished,
-    Cancelled
+    Cancelled,
+    /// <summary>Suspendido (mal tiempo, etc.): sigue pendiente, sin fecha firme, hasta reprogramarlo.</summary>
+    Suspended
 }
 
 /// <summary>Competición a la que pertenece un partido. Cada una tiene su propio fixture y su propia tabla.</summary>

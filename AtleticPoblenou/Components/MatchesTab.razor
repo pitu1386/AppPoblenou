@@ -441,7 +441,7 @@
             .Where(m => _fixtureFilter == "all" || m.IsOurMatch)
             .Where(m => _fixtureStatus switch
             {
-                "upcoming" => m.Status == MatchStatus.Upcoming,
+                "upcoming" => m.Status == MatchStatus.Upcoming || m.Status == MatchStatus.Suspended,
                 "finished" => m.Status == MatchStatus.Finished,
                 _ => true
             })
@@ -490,7 +490,7 @@
 
             <!-- STATUS FILTER -->
             @{
-                var compUpcoming = compFiltered.Count(m => m.Status == MatchStatus.Upcoming);
+                var compUpcoming = compFiltered.Count(m => m.Status == MatchStatus.Upcoming || m.Status == MatchStatus.Suspended);
                 var compFinished = compFiltered.Count(m => m.Status == MatchStatus.Finished);
             }
             <div class="flex items-center gap-1 bg-well p-1 rounded-xl border border-line text-xs w-full">
@@ -569,10 +569,17 @@
                             }
                         </span>
                         <span class="flex items-center gap-1.5 shrink-0">
-                            <span class="px-2 py-0.5 rounded text-xs font-bold shrink-0 @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
-                                @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
-                            </span>
-                            @if (match.Status != MatchStatus.Finished && !match.IsTimeConfirmed)
+                            @if (match.Status == MatchStatus.Suspended)
+                            {
+                                <span class="px-2 py-0.5 rounded text-xs font-bold shrink-0 bg-warnbg text-warntext border border-warn/40">⏸ SUSPENDIDO</span>
+                            }
+                            else
+                            {
+                                <span class="px-2 py-0.5 rounded text-xs font-bold shrink-0 @(match.Status == MatchStatus.Finished ? "bg-well2 text-ink2" : "bg-infobg text-infotext border border-info/40")">
+                                    @(match.Status == MatchStatus.Finished ? "FINALIZADO" : match.MatchDate.ToString("ddd dd/MM HH:mm") + "h")
+                                </span>
+                            }
+                            @if (match.Status == MatchStatus.Upcoming && !match.IsTimeConfirmed)
                             {
                                 <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold shrink-0 bg-warnbg text-warntext border border-warn/40">⏳ A confirmar</span>
                             }
@@ -678,6 +685,23 @@
                                     <button @onclick="() => OnEditMatch.InvokeAsync(match)"
                                             class="text-xs font-bold text-infotext hover:text-info flex items-center gap-1">
                                         @(match.Status == MatchStatus.Finished ? "Editar partido (liga/copa/amistoso)" : "Editar cancha / hora / tipo")
+                                    </button>
+                                }
+
+                                @if (CanManageMatches && match.Status == MatchStatus.Upcoming)
+                                {
+                                    <button @onclick="() => SetMatchSuspended(match, true)"
+                                            class="text-xs font-bold text-warntext hover:text-warn flex items-center gap-1"
+                                            title="Marcar el partido como suspendido (mal tiempo, etc.)">
+                                        ⏸ Suspender
+                                    </button>
+                                }
+                                else if (CanManageMatches && match.Status == MatchStatus.Suspended)
+                                {
+                                    <button @onclick="() => SetMatchSuspended(match, false)"
+                                            class="text-xs font-bold text-oktext hover:text-ok flex items-center gap-1"
+                                            title="Volver a dejarlo como partido programado">
+                                        ▶ Reprogramar
                                     </button>
                                 }
 
@@ -1021,6 +1045,12 @@
     {
         await TeamService.DeleteRivalTeamAsync(rivalId);
         _confirmDeleteRivalId = null;
+    }
+
+    private async Task SetMatchSuspended(Match match, bool suspended)
+    {
+        match.Status = suspended ? MatchStatus.Suspended : MatchStatus.Upcoming;
+        await TeamService.UpdateMatchDetailsAsync(match);
     }
 
     private async Task ToggleAwayKit(Match match, bool useAwayKit)

@@ -10,7 +10,7 @@ Este documento contiene la arquitectura, modelos de datos, reglas de negocio, se
 - **Propósito:** PWA para la gestión del equipo de fútbol veterano: convocatorias y asistencia, cuotas y caja común, roles de plantilla, tablón con encuestas, resultados, clasificación y estadísticas.
 - **Producción:** [https://pitu1386.github.io/AppPoblenou/](https://pitu1386.github.io/AppPoblenou/)
 - **Repositorio:** `https://github.com/pitu1386/AppPoblenou.git` (código en `main`, hosting en `gh-pages`)
-- **Versión activa:** `v2.17.2` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
+- **Versión activa:** `v2.18.0` (única fuente: `<Version>` en `AtleticPoblenou.csproj`, expuesta por `AppInfo.Version`)
 - **Regla:** cualquier cambio que se despliegue a producción sube el número de versión (al menos el minor, `2.X.0`) en `AtleticPoblenou.csproj` y en `AtleticPoblenou/package.json`, y añade una entrada nueva al principio de `AppInfo.ReleaseNotes`. Sin esto, `WhatsNewModal` no tiene nada que avisar y el club no distingue una versión de otra.
 
 ---
