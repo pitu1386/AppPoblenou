@@ -49,10 +49,10 @@
         try
         {
             var stored = await JS.InvokeAsync<string?>("blazorLocalStorage.get", StorageKey);
-            if (Version.TryParse(string.IsNullOrWhiteSpace(stored) ? BaselineVersion : stored, out var lastSeen))
+            if (TryParseVersion(string.IsNullOrWhiteSpace(stored) ? BaselineVersion : stored, out var lastSeen))
             {
                 _entries = AppInfo.ReleaseNotes
-                    .Where(e => Version.TryParse(e.Version, out var v) && v > lastSeen)
+                    .Where(e => TryParseVersion(e.Version, out var v) && v > lastSeen)
                     .ToList();
                 _visible = _entries.Count > 0;
             }
@@ -63,6 +63,19 @@
         {
             // Sin localStorage disponible, simplemente no se muestra el aviso.
         }
+    }
+
+    /// <summary>AppInfo.Version muestra "2.18" para un "2.18.0" redondo, y System.Version considera 2.18.0 > 2.18:
+    /// sin normalizar a 3 componentes, el aviso de una versión .0 volvía a salir en cada apertura.</summary>
+    private static bool TryParseVersion(string text, out Version version)
+    {
+        if (Version.TryParse(text, out var parsed))
+        {
+            version = new Version(parsed.Major, parsed.Minor, Math.Max(parsed.Build, 0));
+            return true;
+        }
+        version = new Version();
+        return false;
     }
 
     private void Dismiss()
