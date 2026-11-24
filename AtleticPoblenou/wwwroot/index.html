@@ -81,19 +81,26 @@
     <script src="_framework/blazor.webassembly.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
+            let swReg = null;
+            let lastSwCheck = 0;
+            const checkSwUpdate = () => {
+                if (!swReg) return;
+                const now = Date.now();
+                if (now - lastSwCheck < 60000) return;
+                lastSwCheck = now;
+                swReg.update().catch(() => { });
+            };
+
             navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' }).then(reg => {
-                reg.update();
-                reg.onupdatefound = () => {
-                    const installingWorker = reg.installing;
-                    if (installingWorker) {
-                        installingWorker.onstatechange = () => {
-                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('Nueva versión detectada, recargando...');
-                                window.location.reload();
-                            }
-                        };
-                    }
-                };
+                swReg = reg;
+                checkSwUpdate();
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') checkSwUpdate();
+            });
+            window.addEventListener('pageshow', (e) => {
+                if (e.persisted) checkSwUpdate();
             });
 
             let refreshing = false;
@@ -184,6 +191,12 @@
             let dotnet = null;
             let timers = {};
             let visibilityHooked = false;
+            let lastResumeMs = 0;
+            let reconnectTimer = null;
+            let manualStop = false;
+            let lastConfig = null;
+            let latestToken = null;
+            let backoffMs = 5000;
 
             function notify(table) {
                 if (!dotnet) return;
@@ -197,18 +210,79 @@
                 if (dotnet) dotnet.invokeMethodAsync('OnRealtimeStatus', connected).catch(() => { });
             }
 
+            function triggerResume() {
+                if (!dotnet) return;
+                const now = Date.now();
+                if (now - lastResumeMs < 1500) return;
+                lastResumeMs = now;
+                dotnet.invokeMethodAsync('OnAppResumed').catch(() => { });
+            }
+
+            function scheduleReconnect() {
+                if (manualStop || !lastConfig || reconnectTimer || navigator.onLine === false) return;
+                reconnectTimer = setTimeout(() => {
+                    reconnectTimer = null;
+                    if (manualStop || !lastConfig) return;
+                    connect(lastConfig.url, lastConfig.anonKey, latestToken, lastConfig.dotnetRef);
+                }, backoffMs);
+                backoffMs = Math.min(backoffMs * 2, 30000);
+            }
+
+            function cleanupSocket() {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+                const oldChannel = channel;
+                const oldClient = client;
+                channel = null;
+                client = null;
+                if (oldChannel && oldClient) { try { oldClient.removeChannel(oldChannel); } catch (e) { } }
+            }
+
+            function connect(url, anonKey, accessToken, dotnetRef) {
+                cleanupSocket();
+                const currentClient = window.supabase.createClient(url, anonKey, {
+                    auth: { persistSession: false, autoRefreshToken: false },
+                    realtime: { params: { eventsPerSecond: 5 } }
+                });
+                if (accessToken) currentClient.realtime.setAuth(accessToken);
+
+                const currentChannel = currentClient.channel('apn-club')
+                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                        notify(payload.table);
+                    });
+
+                client = currentClient;
+                channel = currentChannel;
+
+                currentChannel.subscribe((state) => {
+                    if (channel !== currentChannel) return;
+                    if (state === 'SUBSCRIBED') {
+                        backoffMs = 5000;
+                        status(true);
+                    } else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
+                        status(false);
+                        scheduleReconnect();
+                    }
+                });
+            }
+
             return {
                 start: function (url, anonKey, accessToken, dotnetRef) {
                     dotnet = dotnetRef;
+                    latestToken = accessToken;
+                    lastConfig = { url, anonKey, dotnetRef };
+                    manualStop = false;
+
                     if (!visibilityHooked) {
                         visibilityHooked = true;
                         document.addEventListener('visibilitychange', () => {
-                            if (document.visibilityState === 'visible' && dotnet) {
-                                dotnet.invokeMethodAsync('OnAppResumed').catch(() => { });
-                            }
+                            if (document.visibilityState === 'visible') triggerResume();
+                        });
+                        window.addEventListener('pageshow', (e) => {
+                            if (e.persisted) triggerResume();
                         });
                         window.addEventListener('online', () => {
-                            if (dotnet) dotnet.invokeMethodAsync('OnAppResumed').catch(() => { });
+                            triggerResume();
                         });
                     }
 
@@ -217,29 +291,16 @@
                         return false;
                     }
 
-                    this.stop();
-                    client = window.supabase.createClient(url, anonKey, {
-                        auth: { persistSession: false, autoRefreshToken: false },
-                        realtime: { params: { eventsPerSecond: 5 } }
-                    });
-                    if (accessToken) client.realtime.setAuth(accessToken);
-
-                    channel = client.channel('apn-club')
-                        .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                            notify(payload.table);
-                        })
-                        .subscribe((state) => {
-                            status(state === 'SUBSCRIBED');
-                        });
+                    connect(url, anonKey, accessToken, dotnetRef);
                     return true;
                 },
                 setAuth: function (accessToken) {
+                    latestToken = accessToken;
                     if (client && accessToken) client.realtime.setAuth(accessToken);
                 },
                 stop: function () {
-                    if (channel && client) { try { client.removeChannel(channel); } catch (e) { } }
-                    channel = null;
-                    client = null;
+                    manualStop = true;
+                    cleanupSocket();
                     status(false);
                 }
             };

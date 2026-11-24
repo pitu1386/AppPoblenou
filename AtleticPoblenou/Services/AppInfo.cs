@@ -32,6 +32,11 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.18.2", new[]
+        {
+            "🔄 Arreglado: la app ahora sincroniza mejor al volver de segundo plano, renueva la sesión sin fallos paralelos y reconecta el tiempo real automáticamente.",
+            "⚡ Arreglado: al cargar resultados de una jornada ya no se borran ni se pisan marcadores por refrescos en segundo plano, y si falla la nube avisa sin cerrar.",
+        }),
         ("2.18.1", new[]
         {
             "🛠️ Arreglado: el cartel de novedades volvía a aparecer cada vez que abrías la app. Ahora sale una sola vez por versión.",

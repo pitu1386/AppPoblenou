@@ -28,6 +28,8 @@ public class TeamDataService : ITeamDataService, IDisposable
     private DotNetObjectReference<TeamDataService>? _selfRef;
     private bool _initialized;
     private bool _profilesLoaded;
+    private Task? _refreshAllTask;
+    private Timer? _keepAliveTimer;
 
     public event Action? OnChange;
     public event Action<string>? OnError;
@@ -120,21 +122,36 @@ public class TeamDataService : ITeamDataService, IDisposable
         NotifyStateChanged();
     }
 
-    public async Task RefreshFromCloudAsync()
+    public Task RefreshFromCloudAsync()
     {
-        if (!_auth.IsSignedIn) return;
+        if (!_auth.IsSignedIn) return Task.CompletedTask;
+        if (_refreshAllTask != null) return _refreshAllTask;
 
-        var results = await Task.WhenAll(Tables.Select(t => RefreshTableCoreAsync(t)));
-        var anyOk = results.Any(r => r);
-        var allFailed = results.All(r => !r);
+        _refreshAllTask = RefreshFromCloudCoreAsync();
+        return _refreshAllTask;
+    }
 
-        IsCloudConnected = anyOk;
-        if (anyOk) LastSyncUtc = DateTime.UtcNow;
-        if (allFailed && _lastCloudError != null)
+    private async Task RefreshFromCloudCoreAsync()
+    {
+        try
         {
-            OnError?.Invoke(_lastCloudError);
+            _lastCloudError = null;
+            var results = await Task.WhenAll(Tables.Select(t => RefreshTableCoreAsync(t)));
+            var anyOk = results.Any(r => r);
+            var allOk = results.All(r => r);
+
+            IsCloudConnected = anyOk;
+            if (allOk) LastSyncUtc = DateTime.UtcNow;
+            if (!allOk && _lastCloudError != null)
+            {
+                OnError?.Invoke(_lastCloudError);
+            }
+            NotifyStateChanged();
         }
-        NotifyStateChanged();
+        finally
+        {
+            _refreshAllTask = null;
+        }
     }
 
     private string? _lastCloudError;
@@ -251,6 +268,7 @@ public class TeamDataService : ITeamDataService, IDisposable
     // ---------- Realtime (puente JS) ----------
     private async Task StartRealtimeAsync()
     {
+        StartKeepAliveTimer();
         try
         {
             _selfRef ??= DotNetObjectReference.Create(this);
@@ -265,6 +283,8 @@ public class TeamDataService : ITeamDataService, IDisposable
 
     private async Task StopRealtimeAsync()
     {
+        _keepAliveTimer?.Dispose();
+        _keepAliveTimer = null;
         try { await _js.InvokeVoidAsync("apnRealtime.stop"); } catch { }
         IsRealtimeConnected = false;
     }
@@ -296,8 +316,36 @@ public class TeamDataService : ITeamDataService, IDisposable
         return Task.CompletedTask;
     }
 
+    private void StartKeepAliveTimer()
+    {
+        _keepAliveTimer ??= new Timer(_ => _ = KeepAliveAsync(), null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+    }
+
+    private async Task KeepAliveAsync()
+    {
+        if (!_auth.IsSignedIn) return;
+        try
+        {
+            // Mantiene el JWT vigente para que Realtime no pierda permiso RLS tras 1 hora sin actividad.
+            await _auth.GetAccessTokenAsync();
+            if (!IsRealtimeConnected)
+            {
+                await StartRealtimeAsync();
+            }
+        }
+        catch { }
+    }
+
     [JSInvokable]
-    public Task OnAppResumed() => RefreshFromCloudAsync();
+    public async Task OnAppResumed()
+    {
+        if (!_auth.IsSignedIn) return;
+        await RefreshFromCloudAsync();
+        if (!IsRealtimeConnected)
+        {
+            await StartRealtimeAsync();
+        }
+    }
 
     // ---------- Caché local ----------
     private async Task PurgeLegacyCacheAsync()
@@ -957,32 +1005,32 @@ public class TeamDataService : ITeamDataService, IDisposable
                 .OrderBy(m => m.MatchDate)
                 .FirstOrDefault();
 
-    public async Task AddMatchAsync(Match match)
+    public async Task<bool> AddMatchAsync(Match match)
     {
         _matches.Add(match);
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
     }
 
-    public async Task AddLeagueMatchAsync(Match match)
+    public Task<bool> AddLeagueMatchAsync(Match match)
     {
         if (match.HomeScore.HasValue && match.AwayScore.HasValue) match.Status = MatchStatus.Finished;
-        await AddMatchAsync(match);
+        return AddMatchAsync(match);
     }
 
-    public async Task UpdateMatchDetailsAsync(Match match)
+    public async Task<bool> UpdateMatchDetailsAsync(Match match)
     {
         var idx = _matches.FindIndex(m => m.Id == match.Id);
-        if (idx < 0) return;
+        if (idx < 0) return false;
         _matches[idx] = match;
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
     }
 
-    public async Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events)
+    public async Task<bool> UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events)
     {
         var match = _matches.FirstOrDefault(m => m.Id == matchId);
-        if (match == null) return;
+        if (match == null) return false;
 
         match.OurScore = ourScore;
         match.RivalScore = rivalScore;
@@ -999,9 +1047,10 @@ public class TeamDataService : ITeamDataService, IDisposable
         }, "matches", "match_events");
 
         if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+        return ok;
     }
 
-    public async Task SaveBatchRoundResultsAsync(int round, List<Match> matches)
+    public async Task<bool> SaveBatchRoundResultsAsync(int round, List<Match> matches)
     {
         var changed = new List<Match>();
         foreach (var m in matches)
@@ -1011,13 +1060,10 @@ public class TeamDataService : ITeamDataService, IDisposable
             {
                 existing.HomeScore = m.HomeScore;
                 existing.AwayScore = m.AwayScore;
-                existing.HomeTeamName = m.HomeTeamName;
-                existing.AwayTeamName = m.AwayTeamName;
-                existing.HomeTeamId = m.HomeTeamId;
-                existing.AwayTeamId = m.AwayTeamId;
-                existing.Round = m.Round;
-                existing.MatchDate = m.MatchDate;
-                if (existing.HomeScore.HasValue && existing.AwayScore.HasValue) existing.Status = MatchStatus.Finished;
+                if (existing.HomeScore.HasValue && existing.AwayScore.HasValue)
+                    existing.Status = MatchStatus.Finished;
+                else if (existing.Status == MatchStatus.Finished)
+                    existing.Status = MatchStatus.Upcoming;
                 changed.Add(existing);
             }
             else
@@ -1027,8 +1073,9 @@ public class TeamDataService : ITeamDataService, IDisposable
                 changed.Add(m);
             }
         }
+        if (changed.Count == 0) return true;
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertMatchesAsync(changed), "matches");
+        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchesAsync(changed), "matches");
     }
 
     public async Task DeleteMatchAsync(string matchId)
@@ -1317,6 +1364,7 @@ public class TeamDataService : ITeamDataService, IDisposable
     public void Dispose()
     {
         _auth.OnSessionChanged -= HandleSessionChanged;
+        _keepAliveTimer?.Dispose();
         _selfRef?.Dispose();
     }
 }

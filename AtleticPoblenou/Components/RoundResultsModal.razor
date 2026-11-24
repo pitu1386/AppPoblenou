@@ -1,4 +1,5 @@
 @inject ITeamDataService TeamService
+@implements IDisposable
 
 @if (IsOpen && TeamService.GetCurrentUser().Role == UserRole.Admin)
 {
@@ -179,6 +180,13 @@
                 </button>
             </div>
 
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <div class="p-2.5 rounded-lg bg-clubbg border border-club/40 text-clubtext font-bold text-xs text-center animate-in">
+                    ⚠️ @_saveError
+                </div>
+            }
+
             @if (_savedSuccess)
             {
                 <div class="p-2.5 rounded-lg bg-okbg border border-ok/30 text-oktext font-bold text-xs text-center animate-in">
@@ -202,34 +210,111 @@
     private string _newHomeTeamName = "";
     private string _newAwayTeamName = "";
     private string _addError = "";
+    private string _saveError = "";
     private bool _savedSuccess = false;
     private bool _busy = false;
+    private bool _wasOpen = false;
+
+    // Borradores aislados por jornada: evita pisar _matches en memoria y conserva ediciones al cambiar de fecha o si llega un OnChange externo.
+    private readonly Dictionary<int, List<Match>> _draftByRound = new();
+    private readonly Dictionary<string, (int? HomeScore, int? AwayScore)> _originalSnapshots = new();
+    private readonly HashSet<string> _addedMatchIds = new();
+
+    protected override void OnInitialized()
+    {
+        TeamService.OnChange += HandleExternalDataChange;
+    }
+
+    public void Dispose()
+    {
+        TeamService.OnChange -= HandleExternalDataChange;
+    }
 
     protected override void OnParametersSet()
     {
-        if (IsOpen)
+        if (IsOpen && !_wasOpen)
         {
-            _ourClubName = !string.IsNullOrEmpty(TeamService.GetClubSettings().ShortName) 
-                ? TeamService.GetClubSettings().ShortName 
+            _wasOpen = true;
+            _draftByRound.Clear();
+            _originalSnapshots.Clear();
+            _addedMatchIds.Clear();
+
+            _ourClubName = !string.IsNullOrEmpty(TeamService.GetClubSettings().ShortName)
+                ? TeamService.GetClubSettings().ShortName
                 : TeamService.GetClubSettings().ClubName;
 
             LoadRoundMatches();
             _savedSuccess = false;
+            _saveError = "";
             _addError = "";
+        }
+        else if (!IsOpen && _wasOpen)
+        {
+            _wasOpen = false;
+            _draftByRound.Clear();
+            _originalSnapshots.Clear();
+            _addedMatchIds.Clear();
         }
     }
 
     private void LoadRoundMatches()
     {
+        if (_draftByRound.TryGetValue(_currentRound, out var cached))
+        {
+            _roundMatches = cached;
+            return;
+        }
+
         var all = TeamService.GetMatches();
         // "Cargar Jornada" es solo para la liga; la copa se carga partido a partido desde el acta.
-        _roundMatches = all.Where(m => m.Round == _currentRound && m.Kind == MatchKind.Liga).ToList();
+        var clones = all
+            .Where(m => m.Round == _currentRound && m.Kind == MatchKind.Liga)
+            .Select(m =>
+            {
+                _originalSnapshots[m.Id] = (m.HomeScore, m.AwayScore);
+                return m.Clone();
+            })
+            .ToList();
+
+        _draftByRound[_currentRound] = clones;
+        _roundMatches = clones;
+    }
+
+    private bool IsDirty(Match m) =>
+        _originalSnapshots.TryGetValue(m.Id, out var snap)
+        && (m.HomeScore != snap.HomeScore || m.AwayScore != snap.AwayScore);
+
+    private void HandleExternalDataChange()
+    {
+        if (!IsOpen) return;
+
+        // Refresca solo los partidos no tocados por el usuario (ej. tras cargar un acta), preservando los cambios sin guardar.
+        var byId = TeamService.GetMatches().Where(m => m.Kind == MatchKind.Liga).ToDictionary(m => m.Id);
+        foreach (var list in _draftByRound.Values)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                var m = list[i];
+                if (_addedMatchIds.Contains(m.Id) || IsDirty(m)) continue;
+                if (byId.TryGetValue(m.Id, out var fresh))
+                {
+                    list[i] = fresh.Clone();
+                    _originalSnapshots[m.Id] = (fresh.HomeScore, fresh.AwayScore);
+                }
+            }
+        }
+        if (_draftByRound.TryGetValue(_currentRound, out var current))
+        {
+            _roundMatches = current;
+        }
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnRoundChanged()
     {
         LoadRoundMatches();
         _addError = "";
+        _saveError = "";
     }
 
     private void PrevRound()
@@ -239,6 +324,7 @@
             _currentRound--;
             LoadRoundMatches();
             _addError = "";
+            _saveError = "";
         }
     }
 
@@ -249,12 +335,17 @@
             _currentRound++;
             LoadRoundMatches();
             _addError = "";
+            _saveError = "";
         }
     }
 
+    private bool IsOurTeamName(string teamName) =>
+        string.Equals(teamName, _ourClubName, StringComparison.OrdinalIgnoreCase)
+        || teamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase);
+
     private string GetTeamPrimaryColor(string? teamId, string teamName)
     {
-        if (teamId == "apn" || teamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase))
+        if (teamId == "apn" || IsOurTeamName(teamName))
         {
             return TeamService.GetClubSettings().PrimaryColorHex;
         }
@@ -266,6 +357,7 @@
     private void AddMatchToRound()
     {
         _addError = "";
+        _saveError = "";
         if (string.IsNullOrWhiteSpace(_newHomeTeamName) || string.IsNullOrWhiteSpace(_newAwayTeamName))
         {
             _addError = "Debes seleccionar tanto el equipo local como el visitante.";
@@ -279,7 +371,7 @@
         }
 
         // Verificar que no exista ya en esta jornada
-        var exists = _roundMatches.Any(m => 
+        var exists = _roundMatches.Any(m =>
             (string.Equals(m.HomeTeamName, _newHomeTeamName, StringComparison.OrdinalIgnoreCase) && string.Equals(m.AwayTeamName, _newAwayTeamName, StringComparison.OrdinalIgnoreCase)) ||
             (string.Equals(m.HomeTeamName, _newAwayTeamName, StringComparison.OrdinalIgnoreCase) && string.Equals(m.AwayTeamName, _newHomeTeamName, StringComparison.OrdinalIgnoreCase)));
 
@@ -292,19 +384,21 @@
         var rivals = TeamService.GetRivalTeams();
         var homeRival = rivals.FirstOrDefault(r => r.Name.Equals(_newHomeTeamName, StringComparison.OrdinalIgnoreCase));
         var awayRival = rivals.FirstOrDefault(r => r.Name.Equals(_newAwayTeamName, StringComparison.OrdinalIgnoreCase));
+        var defaultDate = _roundMatches.FirstOrDefault()?.MatchDate ?? DateTime.UtcNow;
 
         var m = new Match
         {
             Round = _currentRound,
             HomeTeamName = _newHomeTeamName,
-            HomeTeamId = homeRival?.Id ?? (_newHomeTeamName.Contains("Poblenou") ? "apn" : ""),
+            HomeTeamId = homeRival?.Id ?? (IsOurTeamName(_newHomeTeamName) ? "apn" : ""),
             AwayTeamName = _newAwayTeamName,
-            AwayTeamId = awayRival?.Id ?? (_newAwayTeamName.Contains("Poblenou") ? "apn" : ""),
-            MatchDate = DateTime.UtcNow,
+            AwayTeamId = awayRival?.Id ?? (IsOurTeamName(_newAwayTeamName) ? "apn" : ""),
+            MatchDate = defaultDate,
             Competition = TeamService.GetClubSettings().LeagueName,
             Status = MatchStatus.Upcoming
         };
 
+        _addedMatchIds.Add(m.Id);
         _roundMatches.Add(m);
         _newHomeTeamName = "";
         _newAwayTeamName = "";
@@ -314,9 +408,15 @@
     {
         if (_busy) return;
         _busy = true;
+        _saveError = "";
         try
         {
             _roundMatches.Remove(m);
+            if (_addedMatchIds.Remove(m.Id))
+            {
+                return;
+            }
+            _originalSnapshots.Remove(m.Id);
             await TeamService.DeleteMatchAsync(m.Id);
         }
         finally
@@ -327,16 +427,62 @@
 
     private async Task TriggerDetailedReport(Match m)
     {
-        await OnOpenDetailedReport.InvokeAsync(m);
+        if (_busy) return;
+        // Si es un partido recién añadido en esta sesión, lo guardamos antes para que RecordResultModal lo encuentre en la nube.
+        if (_addedMatchIds.Contains(m.Id))
+        {
+            _busy = true;
+            _saveError = "";
+            try
+            {
+                var ok = await TeamService.AddMatchAsync(m);
+                if (!ok)
+                {
+                    _saveError = "No se pudo guardar el partido en la nube antes de abrir el acta.";
+                    return;
+                }
+                _addedMatchIds.Remove(m.Id);
+                _originalSnapshots[m.Id] = (m.HomeScore, m.AwayScore);
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+        var liveMatch = TeamService.GetMatches().FirstOrDefault(x => x.Id == m.Id) ?? m;
+        await OnOpenDetailedReport.InvokeAsync(liveMatch);
     }
 
     private async Task SaveAllResults()
     {
         if (_busy) return;
         _busy = true;
+        _saveError = "";
+        _savedSuccess = false;
         try
         {
-            await TeamService.SaveBatchRoundResultsAsync(_currentRound, _roundMatches);
+            var toSave = new List<Match>();
+            foreach (var list in _draftByRound.Values)
+            {
+                foreach (var m in list)
+                {
+                    if (_addedMatchIds.Contains(m.Id) || IsDirty(m))
+                    {
+                        toSave.Add(m);
+                    }
+                }
+            }
+
+            if (toSave.Count > 0)
+            {
+                var ok = await TeamService.SaveBatchRoundResultsAsync(_currentRound, toSave);
+                if (!ok)
+                {
+                    _saveError = "No se pudieron guardar los resultados en la nube. Revisa tu conexión e inténtalo de nuevo.";
+                    return;
+                }
+            }
+
             _savedSuccess = true;
             StateHasChanged();
             await Task.Delay(600);

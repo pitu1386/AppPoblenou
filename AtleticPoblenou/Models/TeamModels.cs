@@ -205,6 +205,15 @@ public class Match
         get => HomeTeamId == "apn" || HomeTeamName.Contains("Poblenou", StringComparison.OrdinalIgnoreCase);
         set
         {
+            var wasHome = IsHome;
+            if (value == wasHome && !string.IsNullOrEmpty(HomeTeamName) && !string.IsNullOrEmpty(AwayTeamName))
+            {
+                return;
+            }
+            if (value != wasHome)
+            {
+                (HomeScore, AwayScore) = (AwayScore, HomeScore);
+            }
             if (value)
             {
                 HomeTeamId = "apn";
@@ -223,6 +232,8 @@ public class Match
             }
         }
     }
+
+    public Match Clone() => (Match)MemberwiseClone();
 
     public string Opponent
     {

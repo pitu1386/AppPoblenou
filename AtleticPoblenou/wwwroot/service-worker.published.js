@@ -3,8 +3,7 @@
 
 self.importScripts('./service-worker-assets.js');
 self.addEventListener('install', event => {
-    self.skipWaiting();
-    event.waitUntil(onInstall(event));
+    event.waitUntil(onInstall(event).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
     event.waitUntil(
@@ -75,10 +74,7 @@ async function onActivate(event) {
 
 async function onFetch(event) {
     if (event.request.method === 'GET') {
-        const shouldServeIndexHtml = event.request.mode === 'navigate'
-            && !manifestUrlList.some(url => url === event.request.url);
-
-        if (shouldServeIndexHtml) {
+        if (event.request.mode === 'navigate') {
             try {
                 const networkResponse = await fetch(event.request);
                 if (networkResponse.ok) {

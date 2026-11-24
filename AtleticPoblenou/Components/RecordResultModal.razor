@@ -170,6 +170,13 @@
                 }
             </div>
 
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <div class="p-2.5 rounded-lg bg-clubbg border border-club/40 text-clubtext font-bold text-xs text-center">
+                    ⚠️ @_saveError
+                </div>
+            }
+
             <div class="flex gap-2 pt-2 border-t border-line">
                 <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
@@ -224,6 +231,7 @@
     /// goles del partido y subía su propia lista con IDs nuevos, y si se entrelazaban mal (la segunda
     /// borra después de que la primera ya insertó), los goles quedaban duplicados en la nube.</summary>
     private bool _saving = false;
+    private string _saveError = "";
 
     /// <summary>Total real de goles (no de filas): una fila con cantidad 3 cuenta como 3.</summary>
     private int TotalGoals => _goals.Sum(g => g.IsOwnGoal ? 1 : Math.Max(1, g.Goals));
@@ -252,6 +260,7 @@
         _goals = new();
         _cards = new();
         _mvpPlayerId = "";
+        _saveError = "";
 
         var events = TeamService.GetMatchEvents().Where(e => e.MatchId == TargetMatch.Id).ToList();
         if (events.Count == 0) return;
@@ -410,7 +419,12 @@
             });
         }
 
-        await TeamService.UpdateMatchResultAsync(TargetMatch.Id, _ourScore, _rivalScore, events);
+        var ok = await TeamService.UpdateMatchResultAsync(TargetMatch.Id, _ourScore, _rivalScore, events);
+        if (!ok)
+        {
+            _saveError = "No se pudo guardar el acta en la nube. Revisa tu conexión e inténtalo de nuevo.";
+            return;
+        }
         await Close();
     }
 }

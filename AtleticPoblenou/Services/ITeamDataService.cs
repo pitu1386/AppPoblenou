@@ -79,13 +79,13 @@ public interface ITeamDataService
     // Matches & RSVP
     List<Match> GetMatches();
     Match? GetNextMatch();
-    Task AddMatchAsync(Match match);
-    Task UpdateMatchDetailsAsync(Match match);
-    Task UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events);
+    Task<bool> AddMatchAsync(Match match);
+    Task<bool> UpdateMatchDetailsAsync(Match match);
+    Task<bool> UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events);
     Task DeleteMatchAsync(string matchId);
     Task ClearAllMatchesAsync();
-    Task SaveBatchRoundResultsAsync(int round, List<Match> matches);
-    Task AddLeagueMatchAsync(Match match);
+    Task<bool> SaveBatchRoundResultsAsync(int round, List<Match> matches);
+    Task<bool> AddLeagueMatchAsync(Match match);
     List<Attendance> GetAttendanceForMatch(string matchId);
     Attendance? GetUserAttendance(string matchId, string playerId);
     Task SetAttendanceAsync(string matchId, string playerId, AttendanceStatus status, string? note = null);

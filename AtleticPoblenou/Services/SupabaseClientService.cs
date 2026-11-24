@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AtleticPoblenou.Models;
+using Microsoft.AspNetCore.Components.WebAssembly.Http;
 
 namespace AtleticPoblenou.Services;
 
@@ -46,6 +47,7 @@ public class SupabaseClientService
     private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string url)
     {
         var req = new HttpRequestMessage(method, url);
+        req.SetBrowserRequestCache(BrowserRequestCache.NoStore);
         req.Headers.Add("apikey", AppInfo.SupabaseAnonKey);
         var token = await _auth.GetAccessTokenAsync();
         // Si había sesión pero no se pudo renovar el token, NUNCA seguir como anon: esa clave

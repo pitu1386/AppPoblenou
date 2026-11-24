@@ -192,6 +192,13 @@
                 </div>
             </div>
 
+            @if (!string.IsNullOrEmpty(_saveError))
+            {
+                <div class="p-2.5 rounded-lg bg-clubbg border border-club/40 text-clubtext font-bold text-xs text-center">
+                    ⚠️ @_saveError
+                </div>
+            }
+
             <div class="flex gap-2 pt-2 border-t border-line">
                 <button @onclick="Close" disabled="@_saving" class="flex-1 py-2.5 bg-well2 hover:bg-well2 text-ink2 font-bold rounded-lg text-xs transition disabled:opacity-50">
                     Cancelar
@@ -257,6 +264,8 @@
     /// <summary>Bloquea Guardar/Eliminar/Cerrar mientras hay una escritura en vuelo, para que con mala
     /// señal un doble toque no dispare dos altas o dos borrados en paralelo.</summary>
     private bool _saving = false;
+    private string _loadedKey = "";
+    private string _saveError = "";
 
     private async Task DeleteMatch()
     {
@@ -276,36 +285,49 @@
 
     protected override void OnParametersSet()
     {
-        if (IsOpen)
+        if (!IsOpen)
         {
-            _showDeleteConfirm = false;
-            if (TargetMatch != null)
-            {
-                _opponent = TargetMatch.Opponent;
-                _selectedRivalId = TargetMatch.RivalTeamId;
-                _selectedRival = !string.IsNullOrEmpty(_selectedRivalId) ? TeamService.GetRivalTeamById(_selectedRivalId) : null;
-                _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
-                _kind = TargetMatch.Kind;
-                _round = TargetMatch.Round > 0 ? TargetMatch.Round : 1;
-                _matchDate = TargetMatch.MatchDate.ToLocalTime().Date;
-                _matchTime = TimeOnly.FromDateTime(TargetMatch.MatchDate.ToLocalTime());
-                _locationName = TargetMatch.LocationName;
-                _locationUrl = TargetMatch.LocationUrl ?? "";
-                _competitionName = _kind == MatchKind.Amistoso ? "" : StripRound(TargetMatch.Competition);
-                _isHome = TargetMatch.IsHome;
-                _isTimeConfirmed = TargetMatch.IsTimeConfirmed;
-                _notes = TargetMatch.Notes;
-            }
-            else
-            {
-                var club = TeamService.GetClubSettings();
-                _kind = MatchKind.Liga;
-                _competitionName = !string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga";
-                _locationName = club.HomeVenueName;
-                _locationUrl = club.HomeVenueMapsUrl;
-                _isTimeConfirmed = true;
-                _notes = $"Camiseta {club.KitDescription}. Estar 40 minutos antes.";
-            }
+            _loadedKey = "";
+            return;
+        }
+
+        var key = TargetMatch?.Id ?? "__new__";
+        if (_loadedKey == key) return;
+        _loadedKey = key;
+
+        _showDeleteConfirm = false;
+        _saveError = "";
+        if (TargetMatch != null)
+        {
+            _opponent = TargetMatch.Opponent;
+            _selectedRivalId = TargetMatch.RivalTeamId;
+            _selectedRival = !string.IsNullOrEmpty(_selectedRivalId) ? TeamService.GetRivalTeamById(_selectedRivalId) : null;
+            _rivalKitWarning = KitAdvisor.Recommend(TeamService.GetClubSettings(), _selectedRival);
+            _kind = TargetMatch.Kind;
+            _round = TargetMatch.Round > 0 ? TargetMatch.Round : 1;
+            _matchDate = TargetMatch.MatchDate.ToLocalTime().Date;
+            _matchTime = TimeOnly.FromDateTime(TargetMatch.MatchDate.ToLocalTime());
+            _locationName = TargetMatch.LocationName;
+            _locationUrl = TargetMatch.LocationUrl ?? "";
+            _competitionName = _kind == MatchKind.Amistoso ? "" : StripRound(TargetMatch.Competition);
+            _isHome = TargetMatch.IsHome;
+            _isTimeConfirmed = TargetMatch.IsTimeConfirmed;
+            _notes = TargetMatch.Notes;
+        }
+        else
+        {
+            var club = TeamService.GetClubSettings();
+            _opponent = "";
+            _selectedRivalId = null;
+            _selectedRival = null;
+            _rivalKitWarning = null;
+            _kind = MatchKind.Liga;
+            _competitionName = !string.IsNullOrWhiteSpace(club.LeagueName) ? club.LeagueName : "Liga";
+            _locationName = club.HomeVenueName;
+            _locationUrl = club.HomeVenueMapsUrl;
+            _isHome = true;
+            _isTimeConfirmed = true;
+            _notes = $"Camiseta {club.KitDescription}. Estar 40 minutos antes.";
         }
     }
 
@@ -413,6 +435,7 @@
 
     private async Task SaveMatchCore()
     {
+        _saveError = "";
         DateTime fullDate = _matchDate.Date.Add(_matchTime.ToTimeSpan());
 
         if (string.IsNullOrWhiteSpace(_locationUrl) && !string.IsNullOrWhiteSpace(_locationName))
@@ -428,21 +451,23 @@
             _ => string.IsNullOrWhiteSpace(_competitionName) ? "Liga" : _competitionName.Trim()
         };
 
+        bool ok;
         if (TargetMatch != null)
         {
-            TargetMatch.IsHome = _isHome;   // primero: define a qué lado van nombre y marcador
-            TargetMatch.Opponent = _opponent.Trim();
-            TargetMatch.RivalTeamId = _selectedRivalId;
-            TargetMatch.Kind = _kind;
-            TargetMatch.Round = round;
-            TargetMatch.Competition = competition;
-            TargetMatch.MatchDate = fullDate;
-            TargetMatch.LocationName = _locationName;
-            TargetMatch.LocationUrl = _locationUrl;
-            TargetMatch.IsTimeConfirmed = _isTimeConfirmed;
-            TargetMatch.Notes = _notes;
+            var updated = TargetMatch.Clone();
+            updated.IsHome = _isHome;   // primero: define a qué lado van nombre y marcador
+            updated.Opponent = _opponent.Trim();
+            updated.RivalTeamId = _selectedRivalId;
+            updated.Kind = _kind;
+            updated.Round = round;
+            updated.Competition = competition;
+            updated.MatchDate = fullDate;
+            updated.LocationName = _locationName;
+            updated.LocationUrl = _locationUrl;
+            updated.IsTimeConfirmed = _isTimeConfirmed;
+            updated.Notes = _notes;
 
-            await TeamService.UpdateMatchDetailsAsync(TargetMatch);
+            ok = await TeamService.UpdateMatchDetailsAsync(updated);
         }
         else
         {
@@ -462,7 +487,13 @@
                 Status = MatchStatus.Upcoming
             };
 
-            await TeamService.AddMatchAsync(match);
+            ok = await TeamService.AddMatchAsync(match);
+        }
+
+        if (!ok)
+        {
+            _saveError = "No se pudo guardar en la nube. Revisa tu conexión e inténtalo de nuevo.";
+            return;
         }
 
         await Close();

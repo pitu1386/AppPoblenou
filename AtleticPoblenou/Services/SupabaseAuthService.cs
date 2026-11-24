@@ -18,6 +18,7 @@ public class SupabaseAuthService
     private readonly IJSRuntime _js;
     private AuthSession? _session;
     private bool _loaded;
+    private Task<bool>? _refreshTask;
 
     public event Action? OnSessionChanged;
 
@@ -116,17 +117,33 @@ public class SupabaseAuthService
 
     public async Task<bool> RefreshAsync()
     {
+        if (_refreshTask != null) return await _refreshTask;
+        _refreshTask = RefreshCoreAsync();
+        try
+        {
+            return await _refreshTask;
+        }
+        finally
+        {
+            _refreshTask = null;
+        }
+    }
+
+    private async Task<bool> RefreshCoreAsync()
+    {
         if (_session == null) return false;
+        var refreshTokenUsed = _session.RefreshToken;
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, $"{AuthUrl}/token?grant_type=refresh_token");
             req.Headers.Add("apikey", AppInfo.SupabaseAnonKey);
-            req.Content = JsonContent.Create(new { refresh_token = _session.RefreshToken });
+            req.Content = JsonContent.Create(new { refresh_token = refreshTokenUsed });
             using var resp = await _http.SendAsync(req);
             if (!resp.IsSuccessStatusCode)
             {
                 // Refresh token inválido o revocado: la sesión ya no sirve.
-                if ((int)resp.StatusCode is 400 or 401 or 403)
+                // Solo limpiamos si no fue reemplazado entretanto por otra renovación exitosa.
+                if ((int)resp.StatusCode is 400 or 401 or 403 && _session?.RefreshToken == refreshTokenUsed)
                 {
                     await ClearAsync();
                 }
