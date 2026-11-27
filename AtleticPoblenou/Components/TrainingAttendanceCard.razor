@@ -41,14 +41,17 @@
         {
             var sessionAt = schedule.NextSessionAt(now);
             var sessionDate = DateOnly.FromDateTime(sessionAt);
-            var attendanceList = TeamService.GetTrainingAttendance(schedule.Id, sessionDate);
+            var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
+            var activeIds = allProfiles.Select(p => p.Id).ToHashSet();
+            var attendanceList = TeamService.GetTrainingAttendance(schedule.Id, sessionDate)
+                .Where(a => activeIds.Contains(a.PlayerId))
+                .ToList();
             var goingCount = attendanceList.Count(a => a.Status == AttendanceStatus.Going);
             var notGoingCount = attendanceList.Count(a => a.Status == AttendanceStatus.NotGoing);
             var answered = goingCount + notGoingCount;
             var goingPct = answered == 0 ? 0 : (int)Math.Round(100.0 * goingCount / answered);
             var notGoingPct = answered == 0 ? 0 : 100 - goingPct;
             var myAttendance = TeamService.GetUserTrainingAttendance(schedule.Id, sessionDate, CurrentUser.Id);
-            var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
             var answeredIds = attendanceList.Select(a => a.PlayerId).ToHashSet();
             var unansweredCount = allProfiles.Count(p => !answeredIds.Contains(p.Id));
             var dayName = sessionAt.ToString("dddd", EsCulture).ToLowerInvariant();

@@ -28,6 +28,9 @@ public interface ITeamDataService
 
     UserProfile GetCurrentUser();
     bool IsOwnerAdmin(UserProfile? p);
+    bool CanViewActivityLogs { get; }
+    Task<(bool Success, List<AppLogEntry> Logs, string? Error)> FetchActivityLogsAsync(int limit = 250);
+    Task<(bool Success, int DeletedCount, string? Error)> CleanupOldActivityLogsAsync(int days = 30);
     Task<(bool Success, string ErrorMessage)> LoginAsync(string emailOrNickname, string password);
     Task<(bool Success, string ErrorMessage)> RegisterAsync(RegisterModel model);
     /// <summary>Completa la ficha cuando ya existe la cuenta de Auth pero no el perfil.</summary>

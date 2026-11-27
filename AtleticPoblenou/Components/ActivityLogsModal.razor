@@ -1,0 +1,397 @@
+@inject ITeamDataService TeamService
+
+@if (IsOpen && TeamService.CanViewActivityLogs)
+{
+    var todayLocal = DateTime.Now.Date;
+    var weekCutoffUtc = DateTime.UtcNow.AddDays(-7);
+    var activeTodayCount = _logs
+        .Where(l => IsAccessEvent(l.EventType) && l.CreatedAt.ToLocalTime().Date == todayLocal)
+        .Select(l => string.IsNullOrEmpty(l.ProfileId) ? l.UserEmail : l.ProfileId)
+        .Distinct()
+        .Count();
+    var activeWeekCount = _logs
+        .Where(l => IsAccessEvent(l.EventType) && l.CreatedAt >= weekCutoffUtc)
+        .Select(l => string.IsNullOrEmpty(l.ProfileId) ? l.UserEmail : l.ProfileId)
+        .Distinct()
+        .Count();
+
+    var filteredLogs = _logs
+        .Where(l => _eventFilter switch
+        {
+            "access" => IsAccessEvent(l.EventType),
+            "rsvp" => l.EventType is "match_rsvp" or "training_rsvp" or "poll_vote",
+            "admin" => l.EventType == "admin_action",
+            _ => true
+        })
+        .Where(l => string.IsNullOrWhiteSpace(_search) ||
+                    l.UserName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    l.UserEmail.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    l.Detail.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    l.DeviceInfo.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    var activePlayers = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
+    var playerSummaries = activePlayers
+        .Select(p =>
+        {
+            var playerLogs = _logs
+                .Where(l => (!string.IsNullOrEmpty(l.ProfileId) && l.ProfileId == p.Id)
+                         || (!string.IsNullOrEmpty(p.Email) && string.Equals(l.UserEmail, p.Email, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            var lastAccess = playerLogs.FirstOrDefault(l => IsAccessEvent(l.EventType)) ?? playerLogs.FirstOrDefault();
+            return (Player: p, LastAccess: lastAccess, EventCount: playerLogs.Count);
+        })
+        .Where(x => string.IsNullOrWhiteSpace(_search) ||
+                    x.Player.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    x.Player.Nickname.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    x.Player.Email.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(x => x.LastAccess?.CreatedAt ?? DateTime.MinValue)
+        .ThenBy(x => x.Player.JerseyNumber ?? 99)
+        .ToList();
+
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in">
+        <div class="bg-surface border border-line2 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-line flex items-center justify-between shrink-0 bg-surface">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center text-xl shrink-0">
+                        🕵️
+                    </div>
+                    <div>
+                        <h3 class="font-cond font-extrabold text-ink text-lg tracking-wide m-0">
+                            Logs de Accesos y Actividad
+                        </h3>
+                        <p class="text-xs text-muted m-0">
+                            Visible únicamente para @TeamService.SessionEmail
+                        </p>
+                    </div>
+                </div>
+                <button type="button" @onclick="Close" class="w-8 h-8 rounded-full bg-well border border-line flex items-center justify-center text-muted hover:text-ink hover:bg-well2 transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Metrics Ribbon -->
+            <div class="px-5 py-2.5 bg-well/50 border-b border-line grid grid-cols-3 gap-2 text-center text-xs shrink-0">
+                <div class="py-1">
+                    <span class="text-muted text-[11px] block">Entraron hoy</span>
+                    <span class="font-cond font-bold text-base text-oktext">@activeTodayCount</span>
+                </div>
+                <div class="py-1 border-x border-line">
+                    <span class="text-muted text-[11px] block">Últimos 7 días</span>
+                    <span class="font-cond font-bold text-base text-infotext">@activeWeekCount</span>
+                </div>
+                <div class="py-1">
+                    <span class="text-muted text-[11px] block">Eventos cargados</span>
+                    <span class="font-cond font-bold text-base text-ink">@_logs.Count</span>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="p-4 pb-2 space-y-2.5 shrink-0 bg-surface border-b border-line">
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1 flex items-center">
+                        <svg class="w-4 h-4 text-muted absolute left-3 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input @bind="_search" @bind:event="oninput" type="text"
+                               placeholder="Buscar por jugador, detalle o dispositivo..."
+                               class="w-full bg-well border border-line2 rounded-xl pl-9 pr-8 py-2 text-xs text-ink placeholder-faint focus:border-club focus:outline-none transition" />
+                        @if (!string.IsNullOrEmpty(_search))
+                        {
+                            <button type="button" @onclick='() => _search = ""' class="absolute right-2.5 text-xs text-muted hover:text-ink">✕</button>
+                        }
+                    </div>
+                    <button type="button" @onclick="LoadLogsAsync" disabled="@_loading"
+                            class="px-3 py-2 rounded-xl bg-well hover:bg-well2 border border-line2 text-xs font-bold text-ink transition disabled:opacity-50 shrink-0">
+                        @(_loading ? "Cargando..." : "🔄 Actualizar")
+                    </button>
+                </div>
+
+                <!-- View Tabs -->
+                <div class="flex items-center gap-1.5 p-1 bg-well rounded-xl border border-line text-xs font-bold">
+                    <button type="button" @onclick='() => _viewTab = "timeline"'
+                            class="flex-1 py-1.5 px-2.5 rounded-lg transition @(_viewTab == "timeline" ? "bg-surface text-ink shadow-xs border border-line" : "text-muted hover:text-ink")">
+                        📜 Actividad reciente (@filteredLogs.Count)
+                    </button>
+                    <button type="button" @onclick='() => _viewTab = "players"'
+                            class="flex-1 py-1.5 px-2.5 rounded-lg transition @(_viewTab == "players" ? "bg-surface text-ink shadow-xs border border-line" : "text-muted hover:text-ink")">
+                        👤 Último acceso por jugador (@activePlayers.Count)
+                    </button>
+                </div>
+
+                @if (_viewTab == "timeline")
+                {
+                    <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
+                        <button type="button" @onclick='() => _eventFilter = "all"'
+                                class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_eventFilter == "all" ? "bg-well2 text-ink border-line2" : "bg-surface text-muted border-line")">
+                            Todos
+                        </button>
+                        <button type="button" @onclick='() => _eventFilter = "access"'
+                                class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_eventFilter == "access" ? "bg-ok text-white border-ok" : "bg-surface text-muted border-line")">
+                            Accesos
+                        </button>
+                        <button type="button" @onclick='() => _eventFilter = "rsvp"'
+                                class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_eventFilter == "rsvp" ? "bg-info text-white border-info" : "bg-surface text-muted border-line")">
+                            Asistencias y votos
+                        </button>
+                        <button type="button" @onclick='() => _eventFilter = "admin"'
+                                class="px-2.5 py-1 rounded-lg font-bold border transition shrink-0 @(_eventFilter == "admin" ? "bg-warn text-black border-warn" : "bg-surface text-muted border-line")">
+                            Gestión
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <!-- Body -->
+            <div class="p-4 space-y-2 overflow-y-auto flex-1">
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="p-4 rounded-xl bg-clubbg border border-club/40 text-xs text-clubtext space-y-1">
+                        <div class="font-extrabold">No se pudieron leer los registros</div>
+                        <div class="text-ink2">@_error</div>
+                    </div>
+                }
+                else if (_loading && !_logs.Any())
+                {
+                    <div class="py-12 text-center text-xs text-muted">
+                        Cargando actividad desde la nube...
+                    </div>
+                }
+                else if (_viewTab == "timeline")
+                {
+                    @if (!filteredLogs.Any())
+                    {
+                        <div class="py-12 text-center space-y-2">
+                            <div class="text-3xl">📭</div>
+                            <div class="font-bold text-sm text-ink">No hay registros para mostrar</div>
+                            <p class="text-xs text-muted">A medida que los jugadores entren o interactúen con la app irán apareciendo acá.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var log in filteredLogs)
+                        {
+                            var localTime = log.CreatedAt.ToLocalTime();
+                            <div class="bg-well/70 border border-line rounded-xl p-3 space-y-1.5 text-xs">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold border shrink-0 @GetBadgeClass(log.EventType)">
+                                            @GetEventLabel(log.EventType)
+                                        </span>
+                                        <span class="font-bold text-ink truncate">@log.UserName</span>
+                                    </div>
+                                    <span class="font-cond font-bold text-muted shrink-0" title="@localTime.ToString("dd/MM/yyyy HH:mm:ss")">
+                                        @localTime.ToString("dd/MM HH:mm")
+                                    </span>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(log.Detail))
+                                {
+                                    <div class="text-ink2 leading-snug">@log.Detail</div>
+                                }
+
+                                <div class="flex items-center justify-between text-[11px] text-faint">
+                                    <span class="truncate">@log.UserEmail</span>
+                                    @if (!string.IsNullOrWhiteSpace(log.DeviceInfo))
+                                    {
+                                        <span class="shrink-0 ml-2 px-1.5 py-0.2 rounded bg-surface border border-line">@log.DeviceInfo</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+                else
+                {
+                    @foreach (var row in playerSummaries)
+                    {
+                        <div class="bg-well/70 border border-line rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-8 h-8 rounded-lg bg-surface border border-line2 flex items-center justify-center font-cond font-bold text-ink shrink-0">
+                                    @(row.Player.JerseyNumber?.ToString() ?? "-")
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="font-bold text-ink truncate">@row.Player.FullName <span class="text-muted font-normal">(@row.Player.Nickname)</span></div>
+                                    @if (row.LastAccess != null)
+                                    {
+                                        <div class="text-[11px] text-muted truncate">
+                                            @GetEventLabel(row.LastAccess.EventType) · @row.LastAccess.DeviceInfo
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-[11px] text-faint">Sin entradas registradas en los últimos @_logs.Count eventos</div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="text-right shrink-0">
+                                @if (row.LastAccess != null)
+                                {
+                                    var localTime = row.LastAccess.CreatedAt.ToLocalTime();
+                                    <div class="font-cond font-extrabold text-sm text-oktext">@FormatRelative(row.LastAccess.CreatedAt)</div>
+                                    <div class="text-[11px] text-muted font-cond">@localTime.ToString("dd/MM HH:mm")</div>
+                                }
+                                else
+                                {
+                                    <span class="px-2 py-0.5 rounded bg-surface border border-line text-[10px] font-bold text-faint">Sin datos</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="p-3 border-t border-line bg-surface shrink-0 flex items-center justify-between gap-2">
+                @if (_confirmCleanup)
+                {
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-clubtext font-bold">¿Borrar logs de +30 días?</span>
+                        <button type="button" @onclick="CleanupOldLogs" disabled="@_cleaning"
+                                class="px-2.5 py-1.5 rounded-lg bg-club text-white font-bold text-xs disabled:opacity-50">
+                            @(_cleaning ? "Borrando..." : "Sí, limpiar")
+                        </button>
+                        <button type="button" @onclick="() => _confirmCleanup = false"
+                                class="px-2.5 py-1.5 rounded-lg bg-well2 text-ink font-bold text-xs">
+                            No
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <button type="button" @onclick="() => _confirmCleanup = true"
+                            class="px-3 py-2 rounded-xl bg-well hover:bg-well2 border border-line text-xs font-bold text-muted hover:text-ink transition">
+                        🧹 Limpiar +30 días
+                    </button>
+                }
+
+                @if (!string.IsNullOrEmpty(_cleanupMessage))
+                {
+                    <span class="text-[11px] font-bold text-oktext">@_cleanupMessage</span>
+                }
+
+                <button type="button" @onclick="Close"
+                        class="px-5 py-2 bg-well2 hover:bg-well text-ink font-bold text-xs rounded-xl transition">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool _wasOpen = false;
+    private bool _loading = false;
+    private bool _cleaning = false;
+    private bool _confirmCleanup = false;
+    private string? _error;
+    private string? _cleanupMessage;
+    private string _search = "";
+    private string _viewTab = "timeline";
+    private string _eventFilter = "all";
+    private List<AppLogEntry> _logs = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            _confirmCleanup = false;
+            _cleanupMessage = null;
+            await LoadLogsAsync();
+        }
+        else if (!IsOpen && _wasOpen)
+        {
+            _wasOpen = false;
+        }
+    }
+
+    private async Task LoadLogsAsync()
+    {
+        if (!TeamService.CanViewActivityLogs) return;
+        _loading = true;
+        _error = null;
+        try
+        {
+            var (ok, logs, error) = await TeamService.FetchActivityLogsAsync(250);
+            if (ok) _logs = logs;
+            else _error = error;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CleanupOldLogs()
+    {
+        _cleaning = true;
+        _cleanupMessage = null;
+        try
+        {
+            var (ok, deleted, error) = await TeamService.CleanupOldActivityLogsAsync(30);
+            _confirmCleanup = false;
+            if (ok)
+            {
+                _cleanupMessage = $"Se eliminaron {deleted} registro(s).";
+                await LoadLogsAsync();
+            }
+            else
+            {
+                _error = error;
+            }
+        }
+        finally
+        {
+            _cleaning = false;
+        }
+    }
+
+    private static bool IsAccessEvent(string eventType) =>
+        eventType is "app_open" or "app_resume" or "login" or "register";
+
+    private static string GetEventLabel(string eventType) => eventType switch
+    {
+        "app_open" => "Abrió app",
+        "app_resume" => "Volvió",
+        "login" => "Login",
+        "register" => "Alta",
+        "match_rsvp" => "Partido",
+        "training_rsvp" => "Entreno",
+        "poll_vote" => "Encuesta",
+        "admin_action" => "Gestión",
+        _ => eventType
+    };
+
+    private static string GetBadgeClass(string eventType) => eventType switch
+    {
+        "app_open" or "login" or "register" => "bg-okbg text-oktext border-ok/30",
+        "app_resume" => "bg-well2 text-ink2 border-line2",
+        "match_rsvp" or "training_rsvp" or "poll_vote" => "bg-infobg text-infotext border-info/30",
+        "admin_action" => "bg-warnbg text-warntext border-warn/30",
+        _ => "bg-surface text-muted border-line"
+    };
+
+    private static string FormatRelative(DateTime utcTime)
+    {
+        var diff = DateTime.UtcNow - utcTime;
+        if (diff.TotalMinutes < 1) return "Ahora";
+        if (diff.TotalMinutes < 60) return $"hace {(int)diff.TotalMinutes} min";
+        if (diff.TotalHours < 24) return $"hace {(int)diff.TotalHours} h";
+        return $"hace {(int)diff.TotalDays} d";
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

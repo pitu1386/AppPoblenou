@@ -138,6 +138,23 @@
             remove: (key) => { try { localStorage.removeItem(key); } catch (e) { } }
         };
 
+        window.apnDeviceInfo = () => {
+            try {
+                const ua = navigator.userAgent || '';
+                const os = /iPhone|iPad|iPod/i.test(ua) ? 'iOS'
+                    : /Android/i.test(ua) ? 'Android'
+                    : /Windows/i.test(ua) ? 'Windows'
+                    : /Mac/i.test(ua) ? 'Mac' : 'Otro';
+                const isPwa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                    || window.navigator.standalone === true;
+                const browser = /Edg/i.test(ua) ? 'Edge'
+                    : /CriOS|Chrome/i.test(ua) ? 'Chrome'
+                    : /Safari/i.test(ua) ? 'Safari'
+                    : /Firefox/i.test(ua) ? 'Firefox' : 'Web';
+                return `${os} · ${isPwa ? 'PWA' : browser}`;
+            } catch (e) { return ''; }
+        };
+
         // Puente de notificaciones push (Web Push). En iPhone requiere la app instalada en pantalla de inicio.
         function apnUrlB64ToUint8Array(base64String) {
             const padding = '='.repeat((4 - base64String.length % 4) % 4);

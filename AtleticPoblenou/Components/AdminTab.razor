@@ -238,6 +238,29 @@
                     <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
                 </button>
             }
+
+            <!-- Registro de Actividad y Accesos (solo pitu1386@gmail.com) -->
+            @if (TeamService.CanViewActivityLogs)
+            {
+                <button type="button" @onclick="() => _showLogsModal = true"
+                        class="w-full p-4 bg-surface hover:bg-well border border-purple-500/30 rounded-xl flex items-center justify-between text-left transition group shadow-xs">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition">
+                            🕵️
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm text-ink flex items-center gap-2">
+                                <span>Logs de Accesos y Actividad</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                                    Privado
+                                </span>
+                            </div>
+                            <div class="text-xs text-muted">Quién entra a la app, cuándo y qué acciones realiza</div>
+                        </div>
+                    </div>
+                    <span class="text-faint text-lg font-bold group-hover:translate-x-0.5 transition">›</span>
+                </button>
+            }
         </div>
     }
 
@@ -321,6 +344,10 @@
     <TrainingSchedulesModal @bind-IsOpen="_showTrainingModal" />
     <PlayerHistoryModal @bind-IsOpen="_showPlayerHistoryModal" OnOpenPlayerSheet="OnOpenPlayerSheet" />
     <AnnouncementHistoryModal @bind-IsOpen="_showAnnouncementHistoryModal" />
+    @if (TeamService.CanViewActivityLogs)
+    {
+        <ActivityLogsModal @bind-IsOpen="_showLogsModal" />
+    }
 
 </div>
 
@@ -342,6 +369,7 @@
     private bool _showTrainingModal = false;
     private bool _showPlayerHistoryModal = false;
     private bool _showAnnouncementHistoryModal = false;
+    private bool _showLogsModal = false;
 
     private static string TrainingDayLabel(DayOfWeek d) => d switch
     {

@@ -21,7 +21,11 @@
 
         @if (NextMatch != null)
         {
-            var attendanceList = TeamService.GetAttendanceForMatch(NextMatch.Id);
+            var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
+            var activeIds = allProfiles.Select(p => p.Id).ToHashSet();
+            var attendanceList = TeamService.GetAttendanceForMatch(NextMatch.Id)
+                .Where(a => activeIds.Contains(a.PlayerId))
+                .ToList();
             var goingCount = attendanceList.Count(a => a.Status == AttendanceStatus.Going);
             var maybeCount = attendanceList.Count(a => a.Status == AttendanceStatus.Maybe);
             var notGoingCount = attendanceList.Count(a => a.Status == AttendanceStatus.NotGoing);
@@ -33,7 +37,6 @@
             var maybePct = answered == 0 ? 0 : (int)Math.Round(100.0 * maybeCount / answered);
             var notGoingPct = answered == 0 ? 0 : 100 - goingPct - maybePct;
             var dayName = NextMatch.MatchDate.ToString("dddd", EsCulture).ToLowerInvariant();
-            var allProfiles = TeamService.GetProfiles();
             var answeredPlayerIds = attendanceList.Select(a => a.PlayerId).ToHashSet();
             var unansweredPlayers = allProfiles.Where(p => !answeredPlayerIds.Contains(p.Id)).ToList();
             // Camiseta que llevamos: la marcada a mano en el fixture o, si no, la que sugiere el asesor por colores.
@@ -1096,7 +1099,7 @@
         var rival = TeamService.GetRivalTeams().FirstOrDefault(r => r.Id == NextMatch.RivalTeamId);
         var rivalName = !string.IsNullOrEmpty(NextMatch.Opponent) ? NextMatch.Opponent : (rival?.Name ?? "Rival");
         var attList = TeamService.GetAttendanceForMatch(NextMatch.Id);
-        var allProfiles = TeamService.GetProfiles();
+        var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive).ToList();
 
         var goingPlayers = attList.Where(a => a.Status == AttendanceStatus.Going)
             .Select(a => allProfiles.FirstOrDefault(p => p.Id == a.PlayerId))

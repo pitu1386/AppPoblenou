@@ -36,7 +36,7 @@
                 </div>
 
                 <div class="p-3 bg-well rounded-lg border border-line text-xs text-muted">
-                     Esto generará automáticamente un cobro pendiente de <strong class="text-ink">@_amount:N2 €</strong>para cada uno de los <strong class="text-ink">@TeamService.GetProfiles().Count jugadores</strong>del plantel.
+                     Esto generará automáticamente un cobro pendiente de <strong class="text-ink">@_amount:N2 €</strong>para cada uno de los <strong class="text-ink">@TeamService.GetProfiles().Count(p => p.IsActive) jugadores</strong>del plantel.
                 </div>
             </div>
 

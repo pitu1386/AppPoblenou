@@ -309,7 +309,7 @@
 
         // El cuerpo técnico no juega, y quien no confirmó asistencia (o dijo que no va / está en duda)
         // tampoco entra en la pizarra: ni como titular automático ni como candidato del banquillo.
-        var allProfiles = TeamService.GetProfiles().Where(p => p.Position != Position.CuerpoTecnico).ToList();
+        var allProfiles = TeamService.GetProfiles().Where(p => p.IsActive && p.Position != Position.CuerpoTecnico).ToList();
         var attendanceList = TeamService.GetAttendanceForMatch(Match.Id);
         var confirmedIds = attendanceList.Where(a => a.Status == AttendanceStatus.Going).Select(a => a.PlayerId).ToHashSet();
         var pool = allProfiles.Where(p => confirmedIds.Contains(p.Id)).ToList();

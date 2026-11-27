@@ -12,6 +12,7 @@ namespace AtleticPoblenou.Services;
 public class TeamDataService : ITeamDataService, IDisposable
 {
     private const string OwnerAdminId = "user-1";
+    private const string LogsOwnerEmail = "pitu1386@gmail.com";
     private const string CachePrefix = "apn2_";
     private const string CacheVersion = "2";
     private const string PendingProfileKey = "apn2_pending_profile";
@@ -30,6 +31,8 @@ public class TeamDataService : ITeamDataService, IDisposable
     private bool _profilesLoaded;
     private Task? _refreshAllTask;
     private Timer? _keepAliveTimer;
+    private DateTime _lastResumeLogUtc = DateTime.MinValue;
+    private string? _cachedDeviceInfo;
 
     public event Action? OnChange;
     public event Action<string>? OnError;
@@ -100,6 +103,83 @@ public class TeamDataService : ITeamDataService, IDisposable
 
     public bool IsOwnerAdmin(UserProfile? p) => p?.Id == OwnerAdminId;
 
+    public bool CanViewActivityLogs =>
+        _auth.IsSignedIn
+        && (string.Equals(_auth.Email, LogsOwnerEmail, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(CurrentProfile?.Email, LogsOwnerEmail, StringComparison.OrdinalIgnoreCase));
+
+    public async Task<(bool Success, List<AppLogEntry> Logs, string? Error)> FetchActivityLogsAsync(int limit = 250)
+    {
+        if (!CanViewActivityLogs) return (false, new(), "No autorizado.");
+        try
+        {
+            var logs = await _supabase.FetchAppLogsAsync(limit);
+            return (true, logs, null);
+        }
+        catch (SupabaseException ex)
+        {
+            var msg = ex.StatusCode == System.Net.HttpStatusCode.NotFound
+                ? "Todavía no está creada la tabla de registros en Supabase. Ejecutá el archivo logs_setup.sql en el SQL Editor."
+                : ex.Message;
+            return (false, new(), msg);
+        }
+        catch (Exception ex)
+        {
+            return (false, new(), ex.Message);
+        }
+    }
+
+    public async Task<(bool Success, int DeletedCount, string? Error)> CleanupOldActivityLogsAsync(int days = 30)
+    {
+        if (!CanViewActivityLogs) return (false, 0, "No autorizado.");
+        try
+        {
+            var deleted = await _supabase.CleanupOldAppLogsAsync(days);
+            return (true, deleted, null);
+        }
+        catch (SupabaseException ex)
+        {
+            return (false, 0, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return (false, 0, ex.Message);
+        }
+    }
+
+    private async Task<string> GetDeviceInfoAsync()
+    {
+        if (_cachedDeviceInfo != null) return _cachedDeviceInfo;
+        try
+        {
+            _cachedDeviceInfo = await _js.InvokeAsync<string?>("apnDeviceInfo") ?? "";
+        }
+        catch
+        {
+            _cachedDeviceInfo = "";
+        }
+        return _cachedDeviceInfo;
+    }
+
+    private void TrackActivity(string eventType, string detail)
+    {
+        if (!_auth.IsSignedIn) return;
+        _ = LogActivitySafeAsync(eventType, detail);
+    }
+
+    private async Task LogActivitySafeAsync(string eventType, string detail)
+    {
+        try
+        {
+            var device = await GetDeviceInfoAsync();
+            await _supabase.LogAppEventAsync(eventType, detail, device);
+        }
+        catch
+        {
+            // El registro de actividad nunca debe interrumpir ni mostrar error al usuario.
+        }
+    }
+
     // ==========================================
     // ARRANQUE Y SINCRONIZACIÓN
     // ==========================================
@@ -117,6 +197,11 @@ public class TeamDataService : ITeamDataService, IDisposable
             NotifyStateChanged();
             await RefreshFromCloudAsync();
             await StartRealtimeAsync();
+            if (IsAuthenticated)
+            {
+                _lastResumeLogUtc = DateTime.UtcNow;
+                TrackActivity("app_open", $"Abrió la app (v{AppInfo.Version})");
+            }
         }
 
         NotifyStateChanged();
@@ -345,6 +430,11 @@ public class TeamDataService : ITeamDataService, IDisposable
         {
             await StartRealtimeAsync();
         }
+        if (IsAuthenticated && DateTime.UtcNow - _lastResumeLogUtc >= TimeSpan.FromMinutes(15))
+        {
+            _lastResumeLogUtc = DateTime.UtcNow;
+            TrackActivity("app_resume", $"Volvió a la app (v{AppInfo.Version})");
+        }
     }
 
     // ---------- Caché local ----------
@@ -513,6 +603,8 @@ public class TeamDataService : ITeamDataService, IDisposable
         NotifyStateChanged();
 
         if (IsDeactivated) return (false, "DEACTIVATED_NEEDS_CODE");
+        _lastResumeLogUtc = DateTime.UtcNow;
+        TrackActivity("login", $"Inició sesión (v{AppInfo.Version})");
         return (true, "");
     }
 
@@ -582,7 +674,13 @@ public class TeamDataService : ITeamDataService, IDisposable
 
         await ClearPendingProfileAsync();
         await RefreshFromCloudAsync();
-        return CurrentProfile != null ? (true, "") : (false, "La ficha se creó pero no se pudo cargar. Recarga la app.");
+        if (CurrentProfile != null)
+        {
+            _lastResumeLogUtc = DateTime.UtcNow;
+            TrackActivity("register", $"Completó su alta (v{AppInfo.Version})");
+            return (true, "");
+        }
+        return (false, "La ficha se creó pero no se pudo cargar. Recarga la app.");
     }
 
     public async Task<(bool Success, string ErrorMessage)> ReactivateWithCodeAsync(string securityCode)
@@ -734,7 +832,8 @@ public class TeamDataService : ITeamDataService, IDisposable
         if (idx >= 0) _profiles[idx] = profile; else _profiles.Add(profile);
         NotifyStateChanged();
 
-        await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(profile), "profiles");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(profile), "profiles");
+        if (ok) TrackActivity("admin_action", $"Editó ficha de {profile.Nickname} ({profile.FullName})");
     }
 
     public async Task DeleteProfileAsync(string profileId)
@@ -744,7 +843,8 @@ public class TeamDataService : ITeamDataService, IDisposable
 
         _profiles.RemoveAll(p => p.Id == profileId);
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("profiles", profileId), "profiles");
+        var ok = await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("profiles", profileId), "profiles");
+        if (ok) TrackActivity("admin_action", $"Eliminó ficha de {target.FullName}");
     }
 
     public async Task DeactivatePlayerAsync(string playerId)
@@ -755,6 +855,7 @@ public class TeamDataService : ITeamDataService, IDisposable
         player.IsActive = false;
         NotifyStateChanged();
         var ok = await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(player), "profiles");
+        if (ok) TrackActivity("admin_action", $"Dio de baja a {player.FullName}");
 
         if (ok && CurrentProfile?.Id == playerId)
         {
@@ -769,7 +870,8 @@ public class TeamDataService : ITeamDataService, IDisposable
 
         player.IsActive = true;
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(player), "profiles");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertProfileAsync(player), "profiles");
+        if (ok) TrackActivity("admin_action", $"Reactivó a {player.FullName}");
     }
 
     // ==========================================
@@ -950,7 +1052,8 @@ public class TeamDataService : ITeamDataService, IDisposable
     {
         _announcements.Insert(0, announcement);
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertAnnouncementAsync(announcement), "announcements");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertAnnouncementAsync(announcement), "announcements");
+        if (ok) TrackActivity("admin_action", $"Publicó comunicado: {announcement.Title}");
     }
 
     public async Task VoteAnnouncementPollAsync(string announcementId, string playerId, int optionIndex)
@@ -960,7 +1063,12 @@ public class TeamDataService : ITeamDataService, IDisposable
 
         ann.Votes[playerId] = optionIndex;
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.RpcAsync("vote_poll", new { p_announcement_id = announcementId, p_option = optionIndex }), "announcements");
+        var ok = await WriteAndRefreshAsync(() => _supabase.RpcAsync("vote_poll", new { p_announcement_id = announcementId, p_option = optionIndex }), "announcements");
+        if (ok)
+        {
+            var opt = optionIndex >= 0 && optionIndex < ann.PollOptions.Count ? ann.PollOptions[optionIndex] : optionIndex.ToString();
+            TrackActivity("poll_vote", $"Votó \"{opt}\" en {ann.Title}");
+        }
     }
 
     public Task ArchiveAnnouncementAsync(string announcementId) => SetAnnouncementActiveAsync(announcementId, false);
@@ -1009,7 +1117,9 @@ public class TeamDataService : ITeamDataService, IDisposable
     {
         _matches.Add(match);
         NotifyStateChanged();
-        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        if (ok) TrackActivity("admin_action", $"Creó partido J{match.Round}: {match.HomeTeamName} vs {match.AwayTeamName}");
+        return ok;
     }
 
     public Task<bool> AddLeagueMatchAsync(Match match)
@@ -1024,7 +1134,9 @@ public class TeamDataService : ITeamDataService, IDisposable
         if (idx < 0) return false;
         _matches[idx] = match;
         NotifyStateChanged();
-        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertMatchAsync(match), "matches");
+        if (ok) TrackActivity("admin_action", $"Editó partido J{match.Round}: {match.HomeTeamName} vs {match.AwayTeamName}");
+        return ok;
     }
 
     public async Task<bool> UpdateMatchResultAsync(string matchId, int ourScore, int rivalScore, List<MatchEvent> events)
@@ -1046,7 +1158,11 @@ public class TeamDataService : ITeamDataService, IDisposable
             await _supabase.UpsertMatchEventsAsync(events);
         }, "matches", "match_events");
 
-        if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+        if (ok)
+        {
+            TrackActivity("admin_action", $"Guardó acta J{match.Round} vs {match.Opponent}: {ourScore}-{rivalScore}");
+            try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { }
+        }
         return ok;
     }
 
@@ -1075,17 +1191,21 @@ public class TeamDataService : ITeamDataService, IDisposable
         }
         if (changed.Count == 0) return true;
         NotifyStateChanged();
-        return await WriteAndRefreshAsync(() => _supabase.UpsertMatchesAsync(changed), "matches");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertMatchesAsync(changed), "matches");
+        if (ok) TrackActivity("admin_action", $"Guardó resultados rápidos de Jornada {round} ({changed.Count} partido(s))");
+        return ok;
     }
 
     public async Task DeleteMatchAsync(string matchId)
     {
+        var target = _matches.FirstOrDefault(m => m.Id == matchId);
         _matches.RemoveAll(m => m.Id == matchId);
         _attendance.RemoveAll(a => a.MatchId == matchId);
         _matchEvents.RemoveAll(e => e.MatchId == matchId);
         NotifyStateChanged();
         // Asistencias y eventos caen en cascada por la clave foránea.
-        await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("matches", matchId), "matches", "attendance", "match_events");
+        var ok = await WriteAndRefreshAsync(() => _supabase.DeleteByIdAsync("matches", matchId), "matches", "attendance", "match_events");
+        if (ok && target != null) TrackActivity("admin_action", $"Eliminó partido J{target.Round}: {target.HomeTeamName} vs {target.AwayTeamName}");
     }
 
     public async Task ClearAllMatchesAsync()
@@ -1123,7 +1243,14 @@ public class TeamDataService : ITeamDataService, IDisposable
             () => _supabase.UpsertRowAsync("attendance?on_conflict=match_id,player_id", SupabaseMappers.ToDto(att)),
             "attendance");
 
-        if (ok && status == AttendanceStatus.Going) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+        if (ok)
+        {
+            var match = _matches.FirstOrDefault(m => m.Id == matchId);
+            var statusLabel = status switch { AttendanceStatus.Going => "Voy", AttendanceStatus.Maybe => "Duda", _ => "No voy" };
+            var target = match != null ? $"J{match.Round} vs {match.Opponent}" : matchId;
+            TrackActivity("match_rsvp", $"Marcó \"{statusLabel}\" para {target}");
+            if (status == AttendanceStatus.Going) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+        }
     }
 
     // ==========================================
@@ -1170,7 +1297,12 @@ public class TeamDataService : ITeamDataService, IDisposable
         }
         NotifyStateChanged();
 
-        await WriteAndRefreshAsync(() => _supabase.UpsertTrainingAttendanceAsync(att), "training_attendance");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertTrainingAttendanceAsync(att), "training_attendance");
+        if (ok)
+        {
+            var statusLabel = status == AttendanceStatus.Going ? "Voy" : "No voy";
+            TrackActivity("training_rsvp", $"Marcó \"{statusLabel}\" en entreno {sessionDate:dd/MM/yyyy}");
+        }
     }
 
     // ==========================================
@@ -1199,7 +1331,11 @@ public class TeamDataService : ITeamDataService, IDisposable
         NotifyStateChanged();
 
         var ok = await WriteAndRefreshAsync(() => _supabase.UpsertPaymentAsync(payment), "payments");
-        if (ok) { try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { } }
+        if (ok)
+        {
+            TrackActivity("admin_action", $"Registró cobro \"{concept}\" ({amount:0.##} €)");
+            try { await _js.InvokeVoidAsync("triggerConfetti"); } catch { }
+        }
     }
 
     public async Task AddBatchFeeAsync(string concept, decimal amount, DateTime dueDate)
@@ -1266,7 +1402,8 @@ public class TeamDataService : ITeamDataService, IDisposable
     {
         _expenses.Insert(0, expense);
         NotifyStateChanged();
-        await WriteAndRefreshAsync(() => _supabase.UpsertExpenseAsync(expense), "team_expenses");
+        var ok = await WriteAndRefreshAsync(() => _supabase.UpsertExpenseAsync(expense), "team_expenses");
+        if (ok) TrackActivity("admin_action", $"Registró gasto \"{expense.Concept}\" ({expense.Amount:0.##} €)");
     }
 
     public async Task UpdateExpenseAsync(TeamExpense expense)

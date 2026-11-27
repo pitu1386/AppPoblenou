@@ -32,6 +32,10 @@ public static class AppInfo
     /// </summary>
     public static readonly IReadOnlyList<(string Version, string[] Changes)> ReleaseNotes = new (string, string[])[]
     {
+        ("2.19.0", new[]
+        {
+            "📋 Arreglado: los jugadores dados de baja ya no aparecen en las convocatorias de partido, entrenamientos ni pizarra.",
+        }),
         ("2.18.2", new[]
         {
             "🔄 Arreglado: la app ahora sincroniza mejor al volver de segundo plano, renueva la sesión sin fallos paralelos y reconecta el tiempo real automáticamente.",

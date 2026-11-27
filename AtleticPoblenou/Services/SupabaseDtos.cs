@@ -175,6 +175,18 @@ public class SupabaseExpenseBudgetDto
     public Dictionary<string, decimal>? budget { get; set; }
 }
 
+public class SupabaseAppLogDto
+{
+    public string id { get; set; } = "";
+    public DateTime created_at { get; set; }
+    public string? profile_id { get; set; }
+    public string? user_name { get; set; }
+    public string? user_email { get; set; }
+    public string event_type { get; set; } = "";
+    public string? detail { get; set; }
+    public string? device_info { get; set; }
+}
+
 // ==========================================
 // MAPEADORES modelo <-> DTO
 // ==========================================
@@ -547,5 +559,17 @@ public static class SupabaseMappers
         TeamSecretCode = d.team_secret_code ?? "",
         ShowDemoShortcuts = false,
         SeasonHistory = d.season_history ?? new()
+    };
+
+    public static AppLogEntry FromDto(SupabaseAppLogDto d) => new()
+    {
+        Id = d.id,
+        CreatedAt = d.created_at,
+        ProfileId = d.profile_id ?? "",
+        UserName = d.user_name ?? "",
+        UserEmail = d.user_email ?? "",
+        EventType = d.event_type,
+        Detail = d.detail ?? "",
+        DeviceInfo = d.device_info ?? ""
     };
 }

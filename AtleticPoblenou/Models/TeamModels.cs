@@ -447,3 +447,15 @@ public class MatchWeatherInfo
     public string LocationName { get; set; } = string.Empty;
     public bool IsOptimal { get; set; }
 }
+
+public class AppLogEntry
+{
+    public string Id { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string ProfileId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string UserEmail { get; set; } = string.Empty;
+    public string EventType { get; set; } = string.Empty;
+    public string Detail { get; set; } = string.Empty;
+    public string DeviceInfo { get; set; } = string.Empty;
+}

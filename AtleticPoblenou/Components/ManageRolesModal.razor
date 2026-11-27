@@ -59,6 +59,7 @@
                 @{
                     var currentUserId = TeamService.GetCurrentUser().Id;
                     var filteredPlayers = TeamService.GetProfiles()
+                        .Where(p => p.IsActive)
                         .Where(p => string.IsNullOrWhiteSpace(_searchQuery) ||
                                     p.FullName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
                                     p.Nickname.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||

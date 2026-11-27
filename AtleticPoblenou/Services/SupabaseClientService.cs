@@ -201,4 +201,18 @@ public class SupabaseClientService
 
     public Task DeleteByIdAsync(string table, string id) => DeleteAsync(table, $"id=eq.{Uri.EscapeDataString(id)}");
     public Task DeleteWhereAsync(string table, string column, string value) => DeleteAsync(table, $"{column}=eq.{Uri.EscapeDataString(value)}");
+
+    // ==========================================
+    // REGISTROS DE ACTIVIDAD (LOGS)
+    // ==========================================
+    public async Task<List<AppLogEntry>> FetchAppLogsAsync(int limit = 250) =>
+        (await GetAsync<SupabaseAppLogDto>("app_logs", $"select=*&order=created_at.desc&limit={limit}"))
+        .Select(SupabaseMappers.FromDto)
+        .ToList();
+
+    public Task LogAppEventAsync(string eventType, string detail, string deviceInfo) =>
+        RpcAsync("log_app_event", new { p_event_type = eventType, p_detail = detail, p_device_info = deviceInfo });
+
+    public Task<int> CleanupOldAppLogsAsync(int days = 30) =>
+        RpcAsync<int>("cleanup_old_app_logs", new { p_days = days });
 }
